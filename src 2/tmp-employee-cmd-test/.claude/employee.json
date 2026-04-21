@@ -1,0 +1,22 @@
+{
+  "role": "engineering-lead",
+  "goals": [
+    "Keep CI green",
+    "Triage bugs"
+  ],
+  "defaultAutonomy": "full-operator",
+  "delegationMode": "team",
+  "verificationRequired": true,
+  "recurringDuties": [
+    {
+      "id": "abd23b7b",
+      "title": "Morning CI",
+      "prompt": "Review CI and summarize blockers",
+      "cron": "0 9 * * 1-5",
+      "enabled": true,
+      "autoCommit": false,
+      "targetAgent": "engineering-lead",
+      "cronTaskId": "79e17f0e"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "role": "engineering-lead",
+  "goals": [
+    "Keep CI green",
+    "Triage flaky builds"
+  ],
+  "defaultAutonomy": "full-operator",
+  "delegationMode": "team",
+  "verificationRequired": true,
+  "recurringDuties": []
+}
