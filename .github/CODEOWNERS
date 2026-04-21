@@ -1,0 +1,21 @@
+# Trunk files: every PR that touches these must be reviewed by the owner.
+# Pair with branch protection on `main` requiring CODEOWNERS review.
+
+/src\ 2/QueryEngine.ts  @gagan114662
+/src\ 2/Task.ts         @gagan114662
+/src\ 2/Tool.ts         @gagan114662
+/src\ 2/query.ts        @gagan114662
+/src\ 2/context.ts      @gagan114662
+/src\ 2/tools.ts        @gagan114662
+/src\ 2/commands.ts     @gagan114662
+/src\ 2/entrypoints/    @gagan114662
+/src\ 2/query/          @gagan114662
+/src\ 2/context/        @gagan114662
+/src\ 2/state/          @gagan114662
+/src\ 2/hooks/          @gagan114662
+/src\ 2/migrations/     @gagan114662
+/src\ 2/schemas/        @gagan114662
+/src\ 2/types/          @gagan114662
+
+/.github/CODEOWNERS              @gagan114662
+/.github/workflows/trunk-guard.yml @gagan114662
