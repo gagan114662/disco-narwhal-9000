@@ -1,0 +1,62 @@
+name: trunk-guard
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  block-trunk-changes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect trunk file changes
+        id: detect
+        run: |
+          set -euo pipefail
+          BASE="${{ github.event.pull_request.base.sha }}"
+          HEAD="${{ github.event.pull_request.head.sha }}"
+          git diff --name-only "$BASE" "$HEAD" > /tmp/changed.txt
+          echo "Changed files:"
+          cat /tmp/changed.txt
+
+          PATTERNS='^src 2/QueryEngine\.ts$
+          ^src 2/Task\.ts$
+          ^src 2/Tool\.ts$
+          ^src 2/query\.ts$
+          ^src 2/context\.ts$
+          ^src 2/tools\.ts$
+          ^src 2/commands\.ts$
+          ^src 2/entrypoints/
+          ^src 2/query/
+          ^src 2/context/
+          ^src 2/state/
+          ^src 2/hooks/
+          ^src 2/migrations/
+          ^src 2/schemas/
+          ^src 2/types/'
+
+          HITS=$(grep -Ef <(echo "$PATTERNS") /tmp/changed.txt || true)
+          if [ -n "$HITS" ]; then
+            echo "trunk_hits<<EOF" >> "$GITHUB_OUTPUT"
+            echo "$HITS" >> "$GITHUB_OUTPUT"
+            echo "EOF" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check for override label
+        id: label
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const labels = context.payload.pull_request.labels.map(l => l.name);
+            core.setOutput('approved', labels.includes('trunk-change-approved'));
+
+      - name: Fail if trunk touched without approval
+        if: steps.detect.outputs.trunk_hits != '' && steps.label.outputs.approved != 'true'
+        run: |
+          echo "::error::This PR modifies trunk files. Apply label 'trunk-change-approved' to allow."
+          echo "Trunk files changed:"
+          echo "${{ steps.detect.outputs.trunk_hits }}"
+          exit 1
