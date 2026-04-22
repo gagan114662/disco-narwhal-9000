@@ -1,4 +1,5 @@
 import { appendFile, mkdir, readFile, writeFile } from 'fs/promises'
+import { randomUUID } from 'crypto'
 import type { Writable } from 'stream'
 import type {
   ChildLauncher,
@@ -9,6 +10,11 @@ import {
   createSdkChildLauncher,
   runChild,
 } from './childRunner.js'
+import {
+  enqueueSkillDistillation,
+  SKILL_DISTILLATION_KIND,
+} from '../../services/skillLearning/enqueueSkillDistillation.js'
+import { createRunSkillUseObserver } from '../../services/skillLearning/skillUseObserver.js'
 import {
   createCostTracker,
   type CapHit,
@@ -297,6 +303,29 @@ export function makeRunFiredTask(options: RunFiredTaskOptions) {
 
     const allowedTools = computeEffectiveAllowedTools(defaultAllowedTools, task)
 
+    // Distillation tasks MUST NOT re-trigger their own distillation loop.
+    // We discriminate on the structural `kind` field (set only by the
+    // daemon's enqueueSkillDistillation) rather than sniffing the prompt,
+    // so a user-authored cron whose prompt happens to begin with the
+    // skill-learning HTML comment can never be mistaken for one of ours.
+    // If such a distillation child itself invoked `Skill`, we'd silently
+    // skip the observer — that's fine: the distillation prompt forbids
+    // tool use beyond Read/Glob/Grep, and re-entering the loop is worse
+    // than losing a theoretical observation.
+    const isDistillationTask = task.kind === SKILL_DISTILLATION_KIND
+
+    const runId = randomUUID()
+    const skillObserver = isDistillationTask
+      ? null
+      : createRunSkillUseObserver(task.id, runId, {
+          onEvent: event =>
+            stateWriter.appendProjectEvent(projectDir, {
+              ...event,
+              source,
+              taskId: task.id,
+            }),
+        })
+
     const result = await runChild(
       {
         taskId: task.id,
@@ -305,16 +334,19 @@ export function makeRunFiredTask(options: RunFiredTaskOptions) {
         allowedTools,
         maxTurns,
         timeoutMs,
+        runId,
       },
       {
         launcher,
         now,
-        onEvent: event =>
-          stateWriter.appendProjectEvent(projectDir, {
-            ...event,
-            source,
-            taskId: task.id,
-          }),
+        onEvent:
+          skillObserver?.onEvent ??
+          (event =>
+            stateWriter.appendProjectEvent(projectDir, {
+              ...event,
+              source,
+              taskId: task.id,
+            })),
       },
     )
 
@@ -341,6 +373,39 @@ export function makeRunFiredTask(options: RunFiredTaskOptions) {
       if (capHit) {
         await handleCapHit({ capHit, projectDir, task })
         paused = true
+      }
+    }
+
+    // After accounting runs, persist the skill-use marker and enqueue a
+    // distillation cron task if any skill was invoked in a successful run.
+    // Failures short-circuit so we never distill from broken transcripts.
+    if (
+      skillObserver &&
+      result.ok &&
+      !paused &&
+      skillObserver.hasSkillUse()
+    ) {
+      try {
+        await skillObserver.finalize(projectDir)
+        await enqueueSkillDistillation({
+          projectDir,
+          runResult: result,
+          skillsUsed: {
+            runId: result.runId,
+            taskId: task.id,
+            skills: skillObserver.getSkills(),
+          },
+          now,
+        })
+      } catch (error) {
+        await stateWriter.appendProjectEvent(projectDir, {
+          kind: 'skill_learning_error',
+          t: now().toISOString(),
+          runId: result.runId,
+          taskId: task.id,
+          errorMessage:
+            error instanceof Error ? error.message : String(error),
+        })
       }
     }
 

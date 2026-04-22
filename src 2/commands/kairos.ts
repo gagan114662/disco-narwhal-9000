@@ -10,7 +10,13 @@
 
 import { readFile } from 'fs/promises'
 import { getProjectRoot } from '../bootstrap/state.js'
-import type { Command, LocalCommandCall } from '../types/command.js'
+import type { Command } from '../types/command.js'
+import {
+  runKairosMemoryCommand,
+  runKairosMemoryProposalsCommand,
+} from './kairos-memory-proposals.js'
+import { runKairosSkillsInteropCommand } from './kairos-skills-interop.js'
+import { runSkillImprovementsCommand } from './kairos-skill-improvements.js'
 import {
   enqueueDemoTask,
   optInProject,
@@ -49,7 +55,13 @@ const HELP_TEXT = `Usage:
 /kairos gateway telegram setup <bot-token>
 /kairos gateway telegram pair
 /kairos gateway telegram status
-/kairos gateway telegram unpair [chatId|all]`
+/kairos gateway telegram unpair [chatId|all]
+/kairos skills lint <path|skill-name|manifest-json>
+/kairos skills import <url|path|manifest-json> [--yes] [--overwrite]
+/kairos skills export <path|skill-name> [--publish]
+/kairos skill-improvements list|diff|accept|reject [id]
+/kairos memory-proposals list|diff|accept|reject
+/kairos memory wipe --confirm`
 
 type Subcommand =
   | 'status'
@@ -62,6 +74,10 @@ type Subcommand =
   | 'dashboard'
   | 'logs'
   | 'gateway'
+  | 'skills'
+  | 'skill-improvements'
+  | 'memory-proposals'
+  | 'memory'
 
 const SUBCOMMANDS = new Set<Subcommand>([
   'status',
@@ -74,6 +90,10 @@ const SUBCOMMANDS = new Set<Subcommand>([
   'dashboard',
   'logs',
   'gateway',
+  'skills',
+  'skill-improvements',
+  'memory-proposals',
+  'memory',
 ])
 
 function parseArgs(args: string): { sub: Subcommand | null; rest: string[] } {
@@ -299,26 +319,26 @@ export async function runKairosCommand(args: string): Promise<string> {
       }
       return handleLogs(undefined, first)
     }
-  }
-}
-
-const call: LocalCommandCall = async args => {
-  try {
-    const value = await runKairosCommand(args)
-    return { type: 'text', value }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    return { type: 'text', value: `kairos: ${message}` }
+    case 'skills':
+      return runKairosSkillsInteropCommand(
+        args.trim().slice('skills'.length).trim(),
+      )
+    case 'skill-improvements':
+      return runSkillImprovementsCommand(rest)
+    case 'memory-proposals':
+      return runKairosMemoryProposalsCommand(rest)
+    case 'memory':
+      return runKairosMemoryCommand(rest)
   }
 }
 
 const kairos = {
-  type: 'local',
+  type: 'local-jsx',
   name: 'kairos',
   description: 'Inspect and control the KAIROS background daemon',
-  argumentHint: 'status|list|opt-in|opt-out|demo|pause|resume|dashboard|logs',
-  supportsNonInteractive: true,
-  load: () => Promise.resolve({ call }),
+  argumentHint:
+    'status|list|opt-in|opt-out|demo|pause|resume|dashboard|logs|gateway|skills|skill-improvements|memory-proposals|memory',
+  load: () => import('./kairos-ui.js'),
 } satisfies Command
 
 export default kairos

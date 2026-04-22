@@ -43,6 +43,7 @@ import {
   recordConsolidation,
 } from './consolidationLock.js'
 import { scheduleKairosDreamTask } from './kairosDreamTask.js'
+import { scheduleKairosSessionMemoryTask } from '../memory/sessionSummaryTask.js'
 import {
   registerDreamTask,
   addDreamTurn,
@@ -180,11 +181,20 @@ export function initAutoDream(): void {
     // scheduleKairosDreamTask handles the inner loop; the lock stamp
     // handles restart cases after the daemon has fired + deleted the task.
     if (getKairosActive()) {
+      const sessionMemoryResult = await scheduleKairosSessionMemoryTask({
+        transcriptDir: getProjectDir(getOriginalCwd()),
+        sessionIds,
+      })
       const result = await scheduleKairosDreamTask({
         memoryRoot: getAutoMemPath(),
         transcriptDir: getProjectDir(getOriginalCwd()),
         sessionIds,
       })
+      if (sessionMemoryResult.scheduled) {
+        logEvent('tengu_session_memory_scheduled_kairos', {
+          sessions_since: sessionIds.length,
+        })
+      }
       if (result.scheduled) {
         logEvent('tengu_auto_dream_scheduled_kairos', {
           sessions_since: sessionIds.length,
