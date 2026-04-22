@@ -7,6 +7,7 @@ import { getKairosStateDir, getKairosStatusPath, getKairosStdoutLogPath } from '
 import { runKairosWorker } from './worker.js'
 
 const TEMP_DIRS: string[] = []
+const DAEMON_MAIN_URL = new URL('../main.ts', import.meta.url).href
 
 afterEach(() => {
   delete process.env.CLAUDE_CONFIG_DIR
@@ -79,12 +80,11 @@ describe('Kairos daemon worker', () => {
 
   test('daemon main exits with code 0 on SIGTERM', async () => {
     const configDir = makeTempConfigDir()
-    const daemonRoot = join(process.cwd(), 'daemon')
     const child = spawn(
       process.execPath,
       [
         '--eval',
-        'import { daemonMain } from "./daemon/main.ts"; await daemonMain(["kairos"]);',
+        `import { daemonMain } from ${JSON.stringify(DAEMON_MAIN_URL)}; await daemonMain(["kairos"], { dashboard: { port: 0 } });`,
       ],
       {
         cwd: process.cwd(),

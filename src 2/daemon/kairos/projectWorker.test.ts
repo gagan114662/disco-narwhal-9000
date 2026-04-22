@@ -33,6 +33,18 @@ function makeTask(id: string): CronTask {
   }
 }
 
+async function waitFor(
+  predicate: () => boolean,
+  timeoutMs = 3_000,
+): Promise<void> {
+  const started = Date.now()
+  while (Date.now() - started < timeoutMs) {
+    if (predicate()) return
+    await Bun.sleep(25)
+  }
+  throw new Error(`Timed out after ${timeoutMs}ms waiting for condition`)
+}
+
 describe('Kairos project worker', () => {
   test('project registry reads, writes, and diffs projects.json', async () => {
     const configDir = makeTempConfigDir('kairos-registry-')
@@ -49,9 +61,8 @@ describe('Kairos project worker', () => {
       changes.push({ added: change.added, removed: change.removed })
     })
 
-    await Bun.sleep(50)
     await registry.write(['/repo/b', '/repo/c'])
-    await Bun.sleep(400)
+    await waitFor(() => changes.length > 0)
     await stop()
 
     expect(changes).toEqual([

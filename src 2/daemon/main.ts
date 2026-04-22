@@ -1,4 +1,8 @@
 import { runKairosWorker } from './kairos/worker.js'
+import {
+  startKairosDashboardServer,
+  type KairosDashboardServerOptions,
+} from './dashboard/server.js'
 
 type SignalHandler = () => void
 
@@ -6,6 +10,7 @@ export type DaemonMainOptions = {
   registerSignalHandlers?: (
     handler: SignalHandler,
   ) => (() => void) | Promise<() => void>
+  dashboard?: KairosDashboardServerOptions
 }
 
 async function defaultRegisterSignalHandlers(
@@ -34,11 +39,13 @@ export async function daemonMain(
   const register =
     options.registerSignalHandlers ?? defaultRegisterSignalHandlers
   const unregister = await register(() => controller.abort())
+  const dashboard = await startKairosDashboardServer(options.dashboard)
 
   try {
     const exitCode = await runKairosWorker({ signal: controller.signal })
     process.exitCode = exitCode
   } finally {
+    await dashboard.stop()
     unregister()
   }
 }
