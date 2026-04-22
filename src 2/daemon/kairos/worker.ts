@@ -20,6 +20,7 @@ import {
   getKairosStdoutLogPath,
 } from './paths.js'
 import { createStateWriter, type StateWriter } from './stateWriter.js'
+import { createTier3Controller, type Tier3Controller } from './tier3.js'
 
 type KairosStatus = {
   kind: 'kairos'
@@ -256,8 +257,9 @@ export async function runKairosWorker(
     string,
     ReturnType<typeof createProjectWorker>
   >()
+  const tier3Controllers = new Map<string, Tier3Controller>()
 
-  const enableChildRuns = options.enableChildRuns ?? !!options.childLauncher
+  const enableChildRuns = options.enableChildRuns ?? true
   const launcher: ChildLauncher | null = enableChildRuns
     ? options.childLauncher ?? createSdkChildLauncher()
     : null
@@ -322,6 +324,32 @@ export async function runKairosWorker(
       checkPaused,
     })
     activeWorkers.set(projectDir, worker)
+    if (launcher) {
+      const tier3 = createTier3Controller({
+        projectDir,
+        stateWriter,
+        launcher,
+        costTracker,
+        defaultAllowedTools,
+        maxTurns,
+        timeoutMs,
+        handleCapHit,
+        now,
+        checkPaused,
+        onSurface: async ({ projectDir, message }) => {
+          await logLine(
+            `[tier3] project=${projectDir} surfaced=${JSON.stringify(message)}`,
+            {
+              stdout: options.stdout,
+              now: now(),
+              pid,
+            },
+          )
+        },
+      })
+      tier3Controllers.set(projectDir, tier3)
+      tier3.start()
+    }
     await stateWriter.appendGlobalEvent({
       kind: 'project_registered',
       t: now().toISOString(),
@@ -335,6 +363,9 @@ export async function runKairosWorker(
     const worker = activeWorkers.get(projectDir)
     if (!worker) return
     activeWorkers.delete(projectDir)
+    const tier3 = tier3Controllers.get(projectDir)
+    tier3Controllers.delete(projectDir)
+    await tier3?.stop()
     await worker.stop()
     await stateWriter.appendGlobalEvent({
       kind: 'project_unregistered',

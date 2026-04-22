@@ -42,6 +42,35 @@ export type ProjectLogEvent =
       source: 'daemon'
       projectDir?: string
     }
+  | {
+      kind: 'tier3_reflection'
+      t: string
+      windowKey: string
+      outcome:
+        | 'skipped_hourly_cap'
+        | 'skipped_paused'
+        | 'noop'
+        | 'surface'
+        | 'invalid_output'
+        | 'child_error'
+      runId?: string
+      enabled: true
+      allowedTools?: string[]
+      costUSD?: number
+      numTurns?: number
+      durationMs?: number
+      message?: string
+      errorMessage?: string
+      paused?: boolean
+    }
+  | {
+      kind: 'tier3_surface'
+      t: string
+      projectDir: string
+      runId: string
+      message: string
+      source: 'daemon'
+    }
 
 export type GlobalStatus = {
   kind: 'kairos'
