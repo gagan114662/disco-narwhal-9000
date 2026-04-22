@@ -7,9 +7,9 @@
 //
 // Returning a tagged result (`ok: true | false`) instead of throwing lets
 // every non-trunk caller render a confirmation or error without needing to
-// know about `ReminderValidationError`. The scheduler core still throws on
-// I/O failure; those are programmer-visible bugs, not user-visible errors,
-// so we deliberately let them propagate.
+// know about `ReminderValidationError`. Validation and project/config write
+// failures are converted into user-facing messages; unexpected programmer bugs
+// should still be fixed at the source.
 
 import {
   type ScheduleReminderResult,

@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   parseReminderCommandArgs,
-  runRemindCommand,
-} from './remind.js'
+  runReminderCommand,
+} from './reminderCommand.js'
 
 const TEMP_DIRS: string[] = []
 
@@ -34,7 +34,7 @@ function readScheduledTasks(projectDir: string): {
   )
 }
 
-describe('/remind', () => {
+describe('runReminderCommand', () => {
   test('parses the time and text segments around |', () => {
     expect(parseReminderCommandArgs('tomorrow 9am | Drink water.')).toEqual({
       at: 'tomorrow 9am',
@@ -43,7 +43,7 @@ describe('/remind', () => {
   })
 
   test('returns help text when the separator is missing', async () => {
-    expect(await runRemindCommand('tomorrow 9am')).toContain(
+    expect(await runReminderCommand('tomorrow 9am')).toContain(
       '/remind <time> | <text>',
     )
   })
@@ -52,7 +52,7 @@ describe('/remind', () => {
     const projectDir = makeProjectDir()
     const now = new Date('2026-05-15T14:00:00.000Z')
 
-    const message = await runRemindCommand(
+    const message = await runReminderCommand(
       '2026-05-15T14:02:00.000Z | Drink water.',
       {
         projectDir,

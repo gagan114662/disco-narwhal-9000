@@ -1,13 +1,10 @@
-import { feature } from 'bun:bundle'
-import type { Command } from '../commands.js'
-import { getProjectRoot } from '../bootstrap/state.js'
+import { getProjectRoot } from '../../bootstrap/state.js'
 import {
   createReminderFromUserRequest,
   type CreateReminderDeps,
-} from '../services/reminders/createReminderFromUserRequest.js'
-import type { LocalJSXCommandContext, LocalJSXCommandOnDone } from '../types/command.js'
+} from './createReminderFromUserRequest.js'
 
-const HELP_TEXT = `Usage:
+export const REMINDER_COMMAND_HELP_TEXT = `Usage:
 /remind <time> | <text>
 
 Examples:
@@ -33,13 +30,13 @@ export function parseReminderCommandArgs(
   return { at, text }
 }
 
-export async function runRemindCommand(
+export async function runReminderCommand(
   args: string,
   deps: CreateReminderDeps & { projectDir?: string } = {},
 ): Promise<string> {
   const parsed = parseReminderCommandArgs(args)
   if (!parsed) {
-    return HELP_TEXT
+    return REMINDER_COMMAND_HELP_TEXT
   }
 
   const result = await createReminderFromUserRequest(
@@ -53,23 +50,3 @@ export async function runRemindCommand(
 
   return result.message
 }
-
-export async function call(
-  onDone: LocalJSXCommandOnDone,
-  _context: LocalJSXCommandContext,
-  args: string,
-): Promise<undefined> {
-  onDone(await runRemindCommand(args), { display: 'system' })
-}
-
-const remind = {
-  type: 'local-jsx',
-  name: 'remind',
-  aliases: ['reminder'],
-  description: 'Create a durable reminder for this project',
-  argumentHint: '<time> | <text>',
-  isEnabled: () => (feature('KAIROS') ? true : false),
-  load: () => Promise.resolve({ call }),
-} satisfies Command
-
-export default remind
