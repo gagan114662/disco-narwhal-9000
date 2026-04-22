@@ -9,6 +9,7 @@
 // Trunk registration is Phase 5B (see epic #11).
 
 import { readFile } from 'fs/promises'
+import { resolve } from 'path'
 import { getProjectRoot } from '../bootstrap/state.js'
 import type { Command } from '../types/command.js'
 import {
@@ -36,6 +37,12 @@ import {
   startPairing,
   unpairTelegram,
 } from '../daemon/gateway/telegram/cli.js'
+import {
+  applyKairosCloudStateBundle,
+  buildKairosCloudStateBundle,
+  type ApplyKairosCloudStateBundleResult,
+  type KairosCloudStateBundle,
+} from '../daemon/kairos/cloudSync.js'
 import { safeParseJSON } from '../utils/json.js'
 import type { GlobalStatus, PauseState } from '../daemon/kairos/stateWriter.js'
 
@@ -52,6 +59,7 @@ const HELP_TEXT = `Usage:
 /kairos resume
 /kairos dashboard
 /kairos logs [projectDir] [lines]
+/kairos cloud-sync <runtimeRoot>
 /kairos gateway telegram setup <bot-token>
 /kairos gateway telegram pair
 /kairos gateway telegram status
@@ -73,6 +81,7 @@ type Subcommand =
   | 'resume'
   | 'dashboard'
   | 'logs'
+  | 'cloud-sync'
   | 'gateway'
   | 'skills'
   | 'skill-improvements'
@@ -89,6 +98,7 @@ const SUBCOMMANDS = new Set<Subcommand>([
   'resume',
   'dashboard',
   'logs',
+  'cloud-sync',
   'gateway',
   'skills',
   'skill-improvements',
@@ -284,6 +294,57 @@ async function handleGateway(rest: string[]): Promise<string> {
   return 'Usage: /kairos gateway telegram <setup|pair|status|unpair> [...]'
 }
 
+type KairosCloudSyncDeps = {
+  buildBundle: () => Promise<KairosCloudStateBundle>
+  applyBundle: (
+    bundle: KairosCloudStateBundle,
+    options: { runtimeRoot: string },
+  ) => Promise<ApplyKairosCloudStateBundleResult>
+}
+
+let kairosCloudSyncDeps: KairosCloudSyncDeps = {
+  buildBundle: () => buildKairosCloudStateBundle(),
+  applyBundle: (bundle, options) =>
+    applyKairosCloudStateBundle(bundle, options),
+}
+
+export function __setKairosCloudSyncDepsForTesting(
+  deps: KairosCloudSyncDeps,
+): void {
+  kairosCloudSyncDeps = deps
+}
+
+export function __resetKairosCloudSyncDepsForTesting(): void {
+  kairosCloudSyncDeps = {
+    buildBundle: () => buildKairosCloudStateBundle(),
+    applyBundle: (bundle, options) =>
+      applyKairosCloudStateBundle(bundle, options),
+  }
+}
+
+async function handleCloudSync(runtimeRootArg: string | undefined): Promise<string> {
+  if (!runtimeRootArg || runtimeRootArg.trim().length === 0) {
+    return 'Usage: /kairos cloud-sync <runtimeRoot>'
+  }
+
+  const runtimeRoot = resolve(runtimeRootArg)
+  try {
+    const bundle = await kairosCloudSyncDeps.buildBundle()
+    const result = await kairosCloudSyncDeps.applyBundle(bundle, { runtimeRoot })
+    return [
+      `Cloud sync applied: ${bundle.files.length} file(s), ${bundle.projects.length} project(s)`,
+      `runtime root: ${runtimeRoot}`,
+      `source: ${result.sourceDir}`,
+      `overlay: ${result.overlayDir}`,
+      `manifest: ${result.manifestPath}`,
+      `registry: ${result.registryPath}`,
+    ].join('\n')
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    return `Cloud sync failed: ${message}`
+  }
+}
+
 export async function runKairosCommand(args: string): Promise<string> {
   const { sub, rest } = parseArgs(args)
   if (sub === null) {
@@ -306,6 +367,8 @@ export async function runKairosCommand(args: string): Promise<string> {
       return handleResume()
     case 'dashboard':
       return handleDashboard()
+    case 'cloud-sync':
+      return handleCloudSync(rest.join(' ').trim() || undefined)
     case 'gateway':
       return handleGateway(rest)
     case 'logs': {
@@ -337,7 +400,7 @@ const kairos = {
   name: 'kairos',
   description: 'Inspect and control the KAIROS background daemon',
   argumentHint:
-    'status|list|opt-in|opt-out|demo|pause|resume|dashboard|logs|gateway|skills|skill-improvements|memory-proposals|memory',
+    'status|list|opt-in|opt-out|demo|pause|resume|dashboard|logs|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
   load: () => import('./kairos-ui.js'),
 } satisfies Command
 
