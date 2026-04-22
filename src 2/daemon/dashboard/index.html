@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>KAIROS Dashboard</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="layout">
+      <section class="hero">
+        <p class="eyebrow">Loopback Only</p>
+        <h1>KAIROS Dashboard</h1>
+        <p class="lede">
+          Live daemon health, project activity, costs, and controls without
+          leaving the browser.
+        </p>
+        <div class="hero-actions">
+          <button id="pause-button" class="button warning">Pause</button>
+          <button id="resume-button" class="button">Resume</button>
+          <span id="connection-pill" class="pill muted">Connecting...</span>
+        </div>
+      </section>
+
+      <section class="panel controls">
+        <div class="panel-header">
+          <h2>Projects</h2>
+          <span id="project-count" class="panel-meta">0 opted in</span>
+        </div>
+        <div class="project-inputs">
+          <input
+            id="project-dir-input"
+            type="text"
+            placeholder="/absolute/path/to/project"
+            spellcheck="false"
+          />
+          <button id="opt-in-button" class="button accent">Opt In</button>
+          <button id="opt-out-button" class="button subtle">Opt Out</button>
+        </div>
+        <div class="selector-row">
+          <label for="project-select">Selected project</label>
+          <select id="project-select"></select>
+          <button id="demo-button" class="button accent">Queue Demo Task</button>
+        </div>
+        <p id="flash" class="flash"></p>
+      </section>
+
+      <section class="grid">
+        <article class="panel">
+          <div class="panel-header">
+            <h2>Global State</h2>
+            <span id="generated-at" class="panel-meta"></span>
+          </div>
+          <div id="global-summary" class="summary-grid"></div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-header">
+            <h2>Per-Project State</h2>
+            <span id="selected-project-label" class="panel-meta">No project selected</span>
+          </div>
+          <div id="project-summary" class="summary-grid empty-state"></div>
+        </article>
+      </section>
+
+      <section class="grid">
+        <article class="panel">
+          <div class="panel-header">
+            <h2>Global Events</h2>
+          </div>
+          <pre id="global-events" class="code-block"></pre>
+        </article>
+
+        <article class="panel">
+          <div class="panel-header">
+            <h2>Daemon Output</h2>
+          </div>
+          <pre id="daemon-log" class="code-block"></pre>
+        </article>
+      </section>
+
+      <section class="grid">
+        <article class="panel">
+          <div class="panel-header">
+            <h2>Project Logs</h2>
+          </div>
+          <pre id="project-log" class="code-block"></pre>
+        </article>
+
+        <article class="panel">
+          <div class="panel-header">
+            <h2>Project Events</h2>
+          </div>
+          <pre id="project-events" class="code-block"></pre>
+        </article>
+      </section>
+    </main>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
