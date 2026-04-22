@@ -4,6 +4,7 @@ import { join } from 'path'
 import { tmpdir } from 'os'
 import type { CronScheduler } from '../../utils/cronScheduler.js'
 import type { CronTask } from '../../utils/cronTasks.js'
+import type { ChildRunResult } from './childRunner.js'
 import { createProjectRegistry } from './projectRegistry.js'
 import { createProjectWorker } from './projectWorker.js'
 import { createStateWriter } from './stateWriter.js'
@@ -124,5 +125,107 @@ describe('Kairos project worker', () => {
       'utf8',
     )
     expect(scheduledTasks).toContain('"tasks": []')
+  })
+
+  test('invokes runFiredTask with fired task and stops draining on pause', async () => {
+    const configDir = makeTempConfigDir('kairos-worker-child-')
+    const projectDir = makeTempConfigDir('kairos-project-child-')
+    process.env.CLAUDE_CONFIG_DIR = configDir
+
+    let fireTask: ((task: CronTask) => void) | undefined
+    const scheduler: CronScheduler = {
+      start() {},
+      stop() {},
+      getNextFireTime() {
+        return null
+      },
+    }
+
+    const stateWriter = await createStateWriter()
+    const fakeResult: ChildRunResult = {
+      runId: 'r1',
+      ok: true,
+      exitReason: 'completed',
+      costUSD: 0.01,
+      numTurns: 1,
+      durationMs: 10,
+      allowedTools: ['Read'],
+    }
+
+    const calls: Array<{ taskId: string; source: 'event' | 'catchup' }> = []
+    let firesBeforePause = 0
+    const runFiredTask = mock(
+      async (task: CronTask, source: 'event' | 'catchup') => {
+        calls.push({ taskId: task.id, source })
+        firesBeforePause += 1
+        const paused = firesBeforePause >= 1
+        return { ok: true, paused, result: fakeResult }
+      },
+    )
+
+    const worker = createProjectWorker(projectDir, {
+      stateWriter,
+      createScheduler(options) {
+        fireTask = options.onFireTask
+        return scheduler
+      },
+      runFiredTask,
+    })
+
+    worker.start()
+    fireTask?.(makeTask('t1'))
+    fireTask?.(makeTask('t2'))
+
+    await Bun.sleep(150)
+
+    expect(calls.length).toBe(1)
+    expect(calls[0]).toEqual({ taskId: 't1', source: 'event' })
+  })
+
+  test('skips work while paused and records skipped_paused in per-project log', async () => {
+    const configDir = makeTempConfigDir('kairos-worker-paused-')
+    const projectDir = makeTempConfigDir('kairos-project-paused-')
+    process.env.CLAUDE_CONFIG_DIR = configDir
+
+    let fireTask: ((task: CronTask) => void) | undefined
+    const scheduler: CronScheduler = {
+      start() {},
+      stop() {},
+      getNextFireTime() {
+        return null
+      },
+    }
+
+    const stateWriter = await createStateWriter()
+    const runFiredTask = mock(
+      async (_task: CronTask, _source: 'event' | 'catchup') => ({
+        ok: true,
+        paused: false,
+      }),
+    )
+
+    const worker = createProjectWorker(projectDir, {
+      stateWriter,
+      createScheduler(options) {
+        fireTask = options.onFireTask
+        return scheduler
+      },
+      runFiredTask,
+      checkPaused: async () => true,
+    })
+
+    worker.start()
+    fireTask?.(makeTask('tp1'))
+
+    await Bun.sleep(100)
+
+    expect(runFiredTask).not.toHaveBeenCalled()
+
+    const log = readFileSync(
+      join(projectDir, '.claude', 'kairos', 'log.jsonl'),
+      'utf8',
+    )
+    expect(log).toContain('"kind":"skipped_paused"')
+    expect(log).toContain('"reason":"global_pause"')
   })
 })

@@ -2,7 +2,14 @@ import { randomUUID } from 'crypto'
 import { createCronScheduler, type CronScheduler } from '../../utils/cronScheduler.js'
 import { readCronTasks, writeCronTasks } from '../../utils/cronTasks.js'
 import type { CronTask } from '../../utils/cronTasks.js'
+import type { ChildRunResult } from './childRunner.js'
 import type { ProjectStatus } from './stateWriter.js'
+
+export type RunFiredTaskResult = {
+  ok: boolean
+  paused: boolean
+  result?: ChildRunResult
+}
 
 export type ProjectWorkerDeps = {
   stateWriter: {
@@ -14,6 +21,19 @@ export type ProjectWorkerDeps = {
   }
   createScheduler?: (options: ConstructorParameters<typeof createCronScheduler>[0]) => CronScheduler
   now?: () => Date
+  /**
+   * Handles the actual child Claude run when a task fires. Injected by the
+   * daemon so the worker stays transport-agnostic. Returns whether the run
+   * completed cleanly and whether the global pause state flipped on during
+   * the run (cap hit) — the worker uses `paused` to stop scheduling more
+   * catch-ups for this drain.
+   */
+  runFiredTask?: (
+    task: CronTask,
+    source: 'event' | 'catchup',
+  ) => Promise<RunFiredTaskResult>
+  /** Returns true if the global pause flag is set. */
+  checkPaused?: () => Promise<boolean>
 }
 
 export type ProjectWorker = {
@@ -42,6 +62,7 @@ export function createProjectWorker(
   let pendingCount = 0
   let stopped = false
   let currentRun: Promise<void> | null = null
+  let pendingTask: CronTask | null = null
   const completedOneShots = new Set<string>()
   let cleanupTimer: ReturnType<typeof setTimeout> | null = null
   let cleanupRun: Promise<void> | null = null
@@ -82,7 +103,10 @@ export function createProjectWorker(
     })
   }
 
-  const runCycle = async (source: 'event' | 'catchup'): Promise<void> => {
+  const runCycle = async (
+    source: 'event' | 'catchup',
+    task: CronTask | null,
+  ): Promise<{ paused: boolean }> => {
     if (source === 'catchup') {
       await deps.stateWriter.appendProjectLog(projectDir, {
         kind: 'catchup_started',
@@ -90,12 +114,31 @@ export function createProjectWorker(
       })
     }
     await writeStatus(source === 'catchup' ? 'catchup_started' : 'fired')
+
+    if (deps.checkPaused && (await deps.checkPaused())) {
+      await deps.stateWriter.appendProjectLog(projectDir, {
+        kind: 'skipped_paused',
+        t: now().toISOString(),
+        taskId: task?.id ?? '(unknown)',
+        reason: 'global_pause',
+      })
+      await writeStatus('skipped_paused')
+      return { paused: true }
+    }
+
+    let paused = false
+    if (deps.runFiredTask && task) {
+      const outcome = await deps.runFiredTask(task, source)
+      paused = outcome.paused
+    }
+
     await deps.stateWriter.appendProjectLog(projectDir, {
       kind: 'finished',
       source,
       t: now().toISOString(),
     })
     await writeStatus('finished')
+    return { paused }
   }
 
   const drain = async (): Promise<void> => {
@@ -103,11 +146,25 @@ export function createProjectWorker(
     running = true
     currentRun = (async () => {
       try {
-        await runCycle('event')
+        const firstTask = pendingTask
+        pendingTask = null
+        const first = await runCycle('event', firstTask)
+        if (first.paused) {
+          dirty = false
+          pendingTask = null
+          return
+        }
         while (dirty && !stopped) {
           dirty = false
           pendingCount = 1
-          await runCycle('catchup')
+          const catchupTask = pendingTask
+          pendingTask = null
+          const outcome = await runCycle('catchup', catchupTask)
+          if (outcome.paused) {
+            dirty = false
+            pendingTask = null
+            break
+          }
         }
       } finally {
         running = false
@@ -172,6 +229,7 @@ export function createProjectWorker(
       if (running) {
         dirty = true
         pendingCount = 1
+        pendingTask = task
         void deps.stateWriter.appendProjectLog(projectDir, {
           kind: 'overlap_coalesced',
           t: now().toISOString(),
@@ -181,6 +239,7 @@ export function createProjectWorker(
         return
       }
       pendingCount = 1
+      pendingTask = task
       void drain()
     },
     onMissed(tasks) {
