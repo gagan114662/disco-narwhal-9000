@@ -216,7 +216,7 @@ describe('Kairos Tier 3 reflection', () => {
     expect(log).toContain('"outcome":"noop"')
   })
 
-  test('skips the run when no safe Tier 3 tools remain after filtering', async () => {
+  test('skips the run when no safe Tier 3 tools remain after filtering and still consumes the window', async () => {
     const configDir = makeTempDir('kairos-tier3-no-tools-config-')
     const projectDir = makeTempDir('kairos-tier3-no-tools-project-')
     process.env.CLAUDE_CONFIG_DIR = configDir
@@ -238,7 +238,8 @@ describe('Kairos Tier 3 reflection', () => {
       },
     ])
 
-    const result = await runTier3Reflection({
+    const now = () => new Date('2026-04-22T13:30:00.000Z')
+    const first = await runTier3Reflection({
       projectDir,
       stateWriter,
       launcher,
@@ -247,10 +248,22 @@ describe('Kairos Tier 3 reflection', () => {
       maxTurns: 3,
       timeoutMs: 5_000,
       handleCapHit: async () => {},
-      now: () => new Date('2026-04-22T13:30:00.000Z'),
+      now,
+    })
+    const second = await runTier3Reflection({
+      projectDir,
+      stateWriter,
+      launcher,
+      costTracker: null,
+      defaultAllowedTools: ['Read'],
+      maxTurns: 3,
+      timeoutMs: 5_000,
+      handleCapHit: async () => {},
+      now,
     })
 
-    expect(result.outcome).toBe('skipped_no_allowed_tools')
+    expect(first.outcome).toBe('skipped_no_allowed_tools')
+    expect(second.outcome).toBe('skipped_hourly_cap')
     expect(calls).toHaveLength(0)
 
     const log = readFileSync(
@@ -258,6 +271,7 @@ describe('Kairos Tier 3 reflection', () => {
       'utf8',
     )
     expect(log).toContain('"outcome":"skipped_no_allowed_tools"')
+    expect(log).toContain('"outcome":"skipped_hourly_cap"')
   })
 
   test('surface=true writes visible message events and filters unsafe tools', async () => {

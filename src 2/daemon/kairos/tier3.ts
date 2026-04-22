@@ -6,6 +6,7 @@ import {
   unlink,
   writeFile,
 } from 'fs/promises'
+import { randomUUID } from 'crypto'
 import { dirname, join } from 'path'
 import { z } from 'zod/v4'
 import type { CronTask } from '../../utils/cronTasks.js'
@@ -103,6 +104,12 @@ export type RunTier3ReflectionOptions = {
 export type Tier3Controller = {
   start(): void
   stop(): Promise<void>
+}
+
+type Tier3ClaimLockPayload = {
+  pid: number
+  token: string
+  claimedAt: string
 }
 
 function getTier3StatePath(projectDir: string): string {
@@ -207,6 +214,40 @@ function sleep(ms: number): Promise<void> {
   })
 }
 
+async function readTier3ClaimLockPayload(
+  lockPath: string,
+): Promise<Tier3ClaimLockPayload | null> {
+  try {
+    const raw = await readFile(lockPath, 'utf8')
+    const parsed = JSON.parse(raw) as Partial<Tier3ClaimLockPayload>
+    if (
+      typeof parsed.pid !== 'number' ||
+      typeof parsed.token !== 'string' ||
+      typeof parsed.claimedAt !== 'string'
+    ) {
+      return null
+    }
+    return {
+      pid: parsed.pid,
+      token: parsed.token,
+      claimedAt: parsed.claimedAt,
+    }
+  } catch {
+    return null
+  }
+}
+
+async function releaseTier3ClaimLock(
+  lockPath: string,
+  token: string,
+): Promise<void> {
+  const payload = await readTier3ClaimLockPayload(lockPath)
+  if (!payload || payload.token !== token) {
+    return
+  }
+  await unlink(lockPath).catch(() => {})
+}
+
 async function withTier3ClaimLock<T>(
   projectDir: string,
   now: Date,
@@ -214,6 +255,7 @@ async function withTier3ClaimLock<T>(
 ): Promise<T> {
   const lockPath = getTier3ClaimLockPath(projectDir)
   const deadlineMs = Date.now() + TIER3_CLAIM_LOCK_TIMEOUT_MS
+  const token = randomUUID()
 
   await mkdir(dirname(lockPath), { recursive: true })
 
@@ -221,7 +263,11 @@ async function withTier3ClaimLock<T>(
     try {
       await writeFile(
         lockPath,
-        `${JSON.stringify({ pid: process.pid, claimedAt: now.toISOString() })}\n`,
+        `${JSON.stringify({
+          pid: process.pid,
+          token,
+          claimedAt: now.toISOString(),
+        })}\n`,
         { flag: 'wx' },
       )
       break
@@ -252,7 +298,7 @@ async function withTier3ClaimLock<T>(
   try {
     return await fn()
   } finally {
-    await unlink(lockPath).catch(() => {})
+    await releaseTier3ClaimLock(lockPath, token)
   }
 }
 
@@ -360,23 +406,6 @@ export async function runTier3Reflection(
     return { outcome: 'skipped_paused' }
   }
 
-  if (allowedTools.length === 0) {
-    await appendReflectionLog(options.stateWriter, options.projectDir, {
-      kind: 'tier3_reflection',
-      t: startedAt.toISOString(),
-      windowKey,
-      outcome: 'skipped_no_allowed_tools',
-      enabled: true,
-      allowedTools,
-      errorMessage: 'no safe Tier 3 tools available after filtering',
-    })
-    await writeTier3State(options.projectDir, {
-      lastRunAt: startedAt.toISOString(),
-      lastOutcome: 'skipped_no_allowed_tools',
-    })
-    return { outcome: 'skipped_no_allowed_tools' }
-  }
-
   let claimedWindow: boolean
   try {
     claimedWindow = await claimTier3Window(
@@ -412,6 +441,24 @@ export async function runTier3Reflection(
       enabled: true,
     })
     return { outcome: 'skipped_hourly_cap' }
+  }
+
+  if (allowedTools.length === 0) {
+    await appendReflectionLog(options.stateWriter, options.projectDir, {
+      kind: 'tier3_reflection',
+      t: startedAt.toISOString(),
+      windowKey,
+      outcome: 'skipped_no_allowed_tools',
+      enabled: true,
+      allowedTools,
+      errorMessage: 'no safe Tier 3 tools available after filtering',
+    })
+    await writeTier3State(options.projectDir, {
+      lastWindowKey: windowKey,
+      lastRunAt: startedAt.toISOString(),
+      lastOutcome: 'skipped_no_allowed_tools',
+    })
+    return { outcome: 'skipped_no_allowed_tools' }
   }
 
   const runResult = await runChild(
