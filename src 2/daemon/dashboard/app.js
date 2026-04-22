@@ -28,6 +28,17 @@ function formatValue(value) {
   return String(value)
 }
 
+const DAEMON_STATE_LABELS = {
+  starting: 'Starting',
+  idle: 'Ready',
+  stopped: 'Stopped',
+}
+
+function formatDaemonState(value) {
+  if (!value) return '—'
+  return DAEMON_STATE_LABELS[value] ?? String(value)
+}
+
 function renderCards(target, entries, emptyText) {
   if (entries.length === 0) {
     target.classList.add('empty-state')
@@ -87,7 +98,7 @@ function renderSnapshot(nextSnapshot) {
   renderCards(
     elements.globalSummary,
     [
-      ['Daemon state', snapshot.global.status?.state],
+      ['Daemon state', formatDaemonState(snapshot.global.status?.state)],
       ['PID', snapshot.global.status?.pid],
       ['Projects', snapshot.global.projects.length],
       ['Paused', snapshot.global.pause?.paused ?? false],
@@ -112,7 +123,7 @@ function renderSnapshot(nextSnapshot) {
       elements.projectSummary,
       [
         ['Worker running', project.status?.running],
-        ['Dirty', project.status?.dirty],
+        ['Overlap pending', project.status?.dirty],
         ['Pending count', project.status?.pendingCount],
         ['Last event', project.status?.lastEvent],
         ['Project cost', project.costs?.totalUSD?.toFixed?.(4)],
