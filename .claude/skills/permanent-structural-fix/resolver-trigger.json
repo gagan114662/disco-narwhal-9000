@@ -1,0 +1,37 @@
+{
+  "skill": "permanent-structural-fix",
+  "description": "Routes failure-hardening requests to the permanent structural fix skill.",
+  "rules": [
+    {
+      "id": "permanent-fix-phrases",
+      "anyPhrases": [
+        "turn this into a permanent fix",
+        "turn this failure into a permanent fix",
+        "permanent structural fix",
+        "codify this failure",
+        "make sure this never happens again"
+      ]
+    },
+    {
+      "id": "skill-plus-hardening-assets",
+      "pattern": "\\b(write|add|create)\\b[\\s\\S]{0,120}\\bskill\\b[\\s\\S]{0,120}\\b(unit tests?|evals?|resolver)\\b"
+    },
+    {
+      "id": "repeat-workaround",
+      "anyPhrases": [
+        "repeated manual workaround",
+        "repeated manual fix",
+        "one-off work"
+      ]
+    },
+    {
+      "id": "incident-hardening-checklist",
+      "allTerms": [
+        "failure",
+        "unit tests",
+        "evals",
+        "resolver trigger"
+      ]
+    }
+  ]
+}

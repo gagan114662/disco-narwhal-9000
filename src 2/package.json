@@ -10,6 +10,9 @@
   "scripts": {
     "dev": "bun ./entrypoints/cli.tsx",
     "test": "bun test",
+    "structural-fix:resolver-eval": "bun ./scripts/structuralFixResolverEval.ts",
+    "structural-fix:smoke": "bun ./scripts/structuralFixSmoke.ts",
+    "structural-fix:daily": "bun test ./services/structuralFix/structuralFix.test.ts ./utils/skills/repoSkillResolver.test.ts ./utils/skills/repoSkillAutoload.test.ts ./utils/processUserInput/processUserInput.test.ts && bun run structural-fix:resolver-eval && bun run structural-fix:smoke",
     "typecheck": "tsc --noEmit --allowJs false --skipLibCheck ./types/employee.ts",
     "lint": "eslint ./types/employee.ts ./utils/employeeConfig.ts ./tools/AgentTool/builtInAgents.ts ./tools/AgentTool/built-in/engineeringLeadAgent.ts ./commands/employee/index.ts ./commands/employee/employee.tsx ./services/reminders/*.ts ./scripts/employeeSmoke.ts ./entrypoints/cli.tsx ./daemon/**/*.ts --no-error-on-unmatched-pattern",
     "build": "bun build ./entrypoints/cli.tsx --outfile ./dist/cli.js --target bun --format esm --define MACRO='{\"VERSION\":\"0.0.0-rebuilt\",\"BUILD_TIME\":\"2026-03-31T00:00:00.000Z\",\"FEEDBACK_CHANNEL\":\"#claude-code\",\"ISSUES_EXPLAINER\":\"open an issue\",\"PACKAGE_URL\":\"@anthropic-ai/claude-code\",\"NATIVE_PACKAGE_URL\":\"@anthropic-ai/claude-code-native\",\"VERSION_CHANGELOG\":\"\"}' --external @ant/computer-use-mcp --external @ant/computer-use-mcp/types --external @ant/computer-use-mcp/sentinelApps --external @ant/claude-for-chrome-mcp --external @ant/computer-use-swift --external @ant/computer-use-input --external @anthropic-ai/mcpb --external @anthropic-ai/sandbox-runtime --external audio-capture-napi --external color-diff-napi --external image-processor-napi --external url-handler-napi",
