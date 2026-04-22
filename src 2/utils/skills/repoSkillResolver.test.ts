@@ -101,4 +101,40 @@ describe('findRepoResolverMatches', () => {
       },
     ])
   })
+
+  test('orders equal-score matches deterministically', async () => {
+    const projectDir = makeProjectDir()
+    const alphaDir = join(projectDir, '.claude', 'skills', 'alpha-skill')
+    const betaDir = join(projectDir, '.claude', 'skills', 'beta-skill')
+    mkdirSync(alphaDir, { recursive: true })
+    mkdirSync(betaDir, { recursive: true })
+    writeFileSync(
+      join(alphaDir, 'resolver-trigger.json'),
+      JSON.stringify({
+        skill: 'alpha-skill',
+        rules: [{ id: 'alpha-rule', anyPhrases: ['same request'] }],
+      }),
+    )
+    writeFileSync(
+      join(betaDir, 'resolver-trigger.json'),
+      JSON.stringify({
+        skill: 'beta-skill',
+        rules: [{ id: 'beta-rule', anyPhrases: ['same request'] }],
+      }),
+    )
+
+    const matches = await findRepoResolverMatches(
+      'Please handle the same request now.',
+      [
+        createPromptCommand('beta-skill', 'Beta skill.'),
+        createPromptCommand('alpha-skill', 'Alpha skill.'),
+      ],
+      projectDir,
+    )
+
+    expect(matches.map(match => match.name)).toEqual([
+      'alpha-skill',
+      'beta-skill',
+    ])
+  })
 })

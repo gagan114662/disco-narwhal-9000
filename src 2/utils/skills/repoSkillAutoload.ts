@@ -34,6 +34,13 @@ export async function resolveRepoSkillAutoload(
       continue
     }
 
+    // Auto-loading a forked skill from a plain prompt would implicitly execute
+    // a sub-agent or background task before the main model has reasoned about
+    // the request. Keep forked skills on the advisory resolver path instead.
+    if (command.context === 'fork') {
+      continue
+    }
+
     return {
       commandName: command.name,
       displayName: getCommandName(command),

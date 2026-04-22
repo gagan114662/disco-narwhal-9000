@@ -75,6 +75,7 @@ async function readResolverConfigs(
   const configs = await Promise.all(
     entries
       .filter(entry => entry.isDirectory())
+      .sort((left, right) => left.name.localeCompare(right.name))
       .map(async entry => {
         try {
           const raw = await readFile(
@@ -167,5 +168,14 @@ export async function findRepoResolverMatches(
     }
   }
 
-  return matches.sort((left, right) => right.score - left.score)
+  return matches.sort((left, right) => {
+    if (right.score !== left.score) {
+      return right.score - left.score
+    }
+    const nameCmp = left.name.localeCompare(right.name)
+    if (nameCmp !== 0) {
+      return nameCmp
+    }
+    return left.ruleId.localeCompare(right.ruleId)
+  })
 }

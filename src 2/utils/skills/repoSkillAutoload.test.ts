@@ -76,7 +76,7 @@ describe('resolveRepoSkillAutoload', () => {
     expect(decision).toBeNull()
   })
 
-  test('selects forked skills too', async () => {
+  test('skips forked skills during auto-load resolution', async () => {
     const projectDir = makeProjectDir()
     const skillDir = join(projectDir, '.claude', 'skills', 'ship-it')
     mkdirSync(skillDir, { recursive: true })
@@ -100,9 +100,6 @@ describe('resolveRepoSkillAutoload', () => {
       projectDir,
     )
 
-    expect(decision).toMatchObject({
-      commandName: 'ship-it',
-      displayName: 'ship-it',
-    })
+    expect(decision).toBeNull()
   })
 })
