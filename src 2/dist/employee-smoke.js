@@ -34814,11 +34814,11 @@ var init_types = () => {};
 var exports_dist_es2 = {};
 __export(exports_dist_es2, {
   providerConfigFromInit: () => providerConfigFromInit,
-  httpRequest: () => httpRequest2,
-  getInstanceMetadataEndpoint: () => getInstanceMetadataEndpoint2,
+  httpRequest: () => httpRequest,
+  getInstanceMetadataEndpoint: () => getInstanceMetadataEndpoint,
   fromInstanceMetadata: () => fromInstanceMetadata,
   fromContainerMetadata: () => fromContainerMetadata,
-  Endpoint: () => Endpoint2,
+  Endpoint: () => Endpoint,
   ENV_CMDS_RELATIVE_URI: () => ENV_CMDS_RELATIVE_URI,
   ENV_CMDS_FULL_URI: () => ENV_CMDS_FULL_URI,
   ENV_CMDS_AUTH_TOKEN: () => ENV_CMDS_AUTH_TOKEN,
@@ -34826,6 +34826,9 @@ __export(exports_dist_es2, {
   DEFAULT_MAX_RETRIES: () => DEFAULT_MAX_RETRIES
 });
 var init_dist_es2 = __esm(() => {
+  init_httpRequest();
+  init_getInstanceMetadataEndpoint();
+  init_Endpoint();
   init_fromContainerMetadata();
   init_fromInstanceMetadata();
   init_types();
@@ -41826,7 +41829,7 @@ var require_dist_cjs37 = __commonJS((exports) => {
   }
 
   class HttpApiKeyAuthSigner {
-    async sign(httpRequest4, identity6, signingProperties) {
+    async sign(httpRequest3, identity6, signingProperties) {
       if (!signingProperties) {
         throw new Error("request could not be signed with `apiKey` since the `name` and `in` signer properties are missing");
       }
@@ -41839,7 +41842,7 @@ var require_dist_cjs37 = __commonJS((exports) => {
       if (!identity6.apiKey) {
         throw new Error("request could not be signed with `apiKey` since the `apiKey` is not defined");
       }
-      const clonedRequest = protocolHttp.HttpRequest.clone(httpRequest4);
+      const clonedRequest = protocolHttp.HttpRequest.clone(httpRequest3);
       if (signingProperties.in === types3.HttpApiKeyAuthLocation.QUERY) {
         clonedRequest.query[signingProperties.name] = identity6.apiKey;
       } else if (signingProperties.in === types3.HttpApiKeyAuthLocation.HEADER) {
@@ -41852,8 +41855,8 @@ var require_dist_cjs37 = __commonJS((exports) => {
   }
 
   class HttpBearerAuthSigner {
-    async sign(httpRequest4, identity6, signingProperties) {
-      const clonedRequest = protocolHttp.HttpRequest.clone(httpRequest4);
+    async sign(httpRequest3, identity6, signingProperties) {
+      const clonedRequest = protocolHttp.HttpRequest.clone(httpRequest3);
       if (!identity6.token) {
         throw new Error("request could not be signed with `token` since the `token` is not defined");
       }
@@ -41863,8 +41866,8 @@ var require_dist_cjs37 = __commonJS((exports) => {
   }
 
   class NoAuthSigner {
-    async sign(httpRequest4, identity6, signingProperties) {
-      return httpRequest4;
+    async sign(httpRequest3, identity6, signingProperties) {
+      return httpRequest3;
     }
   }
   var createIsIdentityExpiredFunction = (expirationMs) => function isIdentityExpired2(identity6) {
@@ -42564,8 +42567,8 @@ var require_httpAuthSchemes = __commonJS((exports) => {
   };
 
   class AwsSdkSigV4Signer {
-    async sign(httpRequest4, identity6, signingProperties) {
-      if (!protocolHttp.HttpRequest.isInstance(httpRequest4)) {
+    async sign(httpRequest3, identity6, signingProperties) {
+      if (!protocolHttp.HttpRequest.isInstance(httpRequest3)) {
         throw new Error("The request is not an instance of `HttpRequest` and cannot be signed");
       }
       const validatedProps = await validateSigningProperties(signingProperties);
@@ -42579,7 +42582,7 @@ var require_httpAuthSchemes = __commonJS((exports) => {
           signingName = second?.signingName ?? signingName;
         }
       }
-      const signedRequest = await signer.sign(httpRequest4, {
+      const signedRequest = await signer.sign(httpRequest3, {
         signingDate: getSkewCorrectedDate(config3.systemClockOffset),
         signingRegion,
         signingService: signingName
@@ -42612,14 +42615,14 @@ var require_httpAuthSchemes = __commonJS((exports) => {
   var AWSSDKSigV4Signer = AwsSdkSigV4Signer;
 
   class AwsSdkSigV4ASigner extends AwsSdkSigV4Signer {
-    async sign(httpRequest4, identity6, signingProperties) {
-      if (!protocolHttp.HttpRequest.isInstance(httpRequest4)) {
+    async sign(httpRequest3, identity6, signingProperties) {
+      if (!protocolHttp.HttpRequest.isInstance(httpRequest3)) {
         throw new Error("The request is not an instance of `HttpRequest` and cannot be signed");
       }
       const { config: config3, signer, signingRegion, signingRegionSet, signingName } = await validateSigningProperties(signingProperties);
       const configResolvedSigningRegionSet = await config3.sigv4aSigningRegionSet?.();
       const multiRegionOverride = (configResolvedSigningRegionSet ?? signingRegionSet ?? [signingRegion]).join(",");
-      const signedRequest = await signer.sign(httpRequest4, {
+      const signedRequest = await signer.sign(httpRequest3, {
         signingDate: getSkewCorrectedDate(config3.systemClockOffset),
         signingRegion: multiRegionOverride,
         signingService: signingName
@@ -48463,7 +48466,7 @@ var require_package = __commonJS((exports, module) => {
 
 // node_modules/@aws-sdk/util-user-agent-node/dist-cjs/index.js
 var require_dist_cjs72 = __commonJS((exports) => {
-  var __dirname = "/Users/gaganarora/Downloads/src 2/node_modules/@aws-sdk/util-user-agent-node/dist-cjs";
+  var __dirname = "/Users/gaganarora/conductor/workspaces/again/cayenne/src 2/node_modules/@aws-sdk/util-user-agent-node/dist-cjs";
   var node_os = __require("os");
   var node_process = __require("process");
   var utilConfigProvider = require_dist_cjs57();
@@ -48786,9 +48789,9 @@ var require_dist_cjs77 = __commonJS((exports) => {
     }
     if (!process.env[ENV_IMDS_DISABLED2]) {
       try {
-        const { getInstanceMetadataEndpoint: getInstanceMetadataEndpoint3, httpRequest: httpRequest4 } = await Promise.resolve().then(() => (init_dist_es2(), exports_dist_es2));
-        const endpoint2 = await getInstanceMetadataEndpoint3();
-        return (await httpRequest4({ ...endpoint2, path: IMDS_REGION_PATH })).toString();
+        const { getInstanceMetadataEndpoint: getInstanceMetadataEndpoint2, httpRequest: httpRequest3 } = await Promise.resolve().then(() => (init_dist_es2(), exports_dist_es2));
+        const endpoint2 = await getInstanceMetadataEndpoint2();
+        return (await httpRequest3({ ...endpoint2, path: IMDS_REGION_PATH })).toString();
       } catch (e) {}
     }
   };
@@ -101833,7 +101836,7 @@ async function runAwsAuthRefresh() {
   if (isAwsAuthRefreshFromProjectSettings()) {
     const hasTrust = checkHasTrustDialogAccepted();
     if (!hasTrust && !getIsNonInteractiveSession()) {
-      const error49 = new Error(`Security: awsAuthRefresh executed before workspace trust is confirmed. If you see this message, post in ${MACRO.FEEDBACK_CHANNEL}.`);
+      const error49 = new Error(`Security: awsAuthRefresh executed before workspace trust is confirmed. If you see this message, post in ${{ VERSION: "0.0.0-rebuilt", BUILD_TIME: "2026-03-31T00:00:00.000Z", FEEDBACK_CHANNEL: "#claude-code", ISSUES_EXPLAINER: "open an issue", PACKAGE_URL: "@anthropic-ai/claude-code", NATIVE_PACKAGE_URL: "@anthropic-ai/claude-code-native", VERSION_CHANGELOG: "" }.FEEDBACK_CHANNEL}.`);
       logAntError("awsAuthRefresh invoked before trust check", error49);
       logEvent("tengu_awsAuthRefresh_missing_trust", {});
       return false;
@@ -101894,7 +101897,7 @@ async function getAwsCredsFromCredentialExport() {
   if (isAwsCredentialExportFromProjectSettings()) {
     const hasTrust = checkHasTrustDialogAccepted();
     if (!hasTrust && !getIsNonInteractiveSession()) {
-      const error49 = new Error(`Security: awsCredentialExport executed before workspace trust is confirmed. If you see this message, post in ${MACRO.FEEDBACK_CHANNEL}.`);
+      const error49 = new Error(`Security: awsCredentialExport executed before workspace trust is confirmed. If you see this message, post in ${{ VERSION: "0.0.0-rebuilt", BUILD_TIME: "2026-03-31T00:00:00.000Z", FEEDBACK_CHANNEL: "#claude-code", ISSUES_EXPLAINER: "open an issue", PACKAGE_URL: "@anthropic-ai/claude-code", NATIVE_PACKAGE_URL: "@anthropic-ai/claude-code-native", VERSION_CHANGELOG: "" }.FEEDBACK_CHANNEL}.`);
       logAntError("awsCredentialExport invoked before trust check", error49);
       logEvent("tengu_awsCredentialExport_missing_trust", {});
       return null;
@@ -101986,7 +101989,7 @@ async function runGcpAuthRefresh() {
   if (isGcpAuthRefreshFromProjectSettings()) {
     const hasTrust = checkHasTrustDialogAccepted();
     if (!hasTrust && !getIsNonInteractiveSession()) {
-      const error49 = new Error(`Security: gcpAuthRefresh executed before workspace trust is confirmed. If you see this message, post in ${MACRO.FEEDBACK_CHANNEL}.`);
+      const error49 = new Error(`Security: gcpAuthRefresh executed before workspace trust is confirmed. If you see this message, post in ${{ VERSION: "0.0.0-rebuilt", BUILD_TIME: "2026-03-31T00:00:00.000Z", FEEDBACK_CHANNEL: "#claude-code", ISSUES_EXPLAINER: "open an issue", PACKAGE_URL: "@anthropic-ai/claude-code", NATIVE_PACKAGE_URL: "@anthropic-ai/claude-code-native", VERSION_CHANGELOG: "" }.FEEDBACK_CHANNEL}.`);
       logAntError("gcpAuthRefresh invoked before trust check", error49);
       logEvent("tengu_gcpAuthRefresh_missing_trust", {});
       return false;
@@ -102210,7 +102213,7 @@ var getCoreUserData = memoize_default((includeAnalyticsMetadata) => {
     deviceId,
     sessionId: getSessionId(),
     email: getEmail(),
-    appVersion: MACRO.VERSION,
+    appVersion: { VERSION: "0.0.0-rebuilt", BUILD_TIME: "2026-03-31T00:00:00.000Z", FEEDBACK_CHANNEL: "#claude-code", ISSUES_EXPLAINER: "open an issue", PACKAGE_URL: "@anthropic-ai/claude-code", NATIVE_PACKAGE_URL: "@anthropic-ai/claude-code-native", VERSION_CHANGELOG: "" }.VERSION,
     platform: getHostPlatformForAnalytics(),
     organizationUuid,
     accountUuid,
@@ -102460,7 +102463,7 @@ var FILE_COMMANDS = new Set([
   "sed"
 ]);
 var getVersionBase = memoize_default(() => {
-  const match = MACRO.VERSION.match(/^\d+\.\d+\.\d+(?:-[a-z]+)?/);
+  const match = { VERSION: "0.0.0-rebuilt", BUILD_TIME: "2026-03-31T00:00:00.000Z", FEEDBACK_CHANNEL: "#claude-code", ISSUES_EXPLAINER: "open an issue", PACKAGE_URL: "@anthropic-ai/claude-code", NATIVE_PACKAGE_URL: "@anthropic-ai/claude-code-native", VERSION_CHANGELOG: "" }.VERSION.match(/^\d+\.\d+\.\d+(?:-[a-z]+)?/);
   return match ? match[0] : undefined;
 });
 var buildEnvContext = memoize_default(async () => {
@@ -102500,9 +102503,9 @@ var buildEnvContext = memoize_default(async () => {
     isGithubAction: isEnvTruthy(process.env.GITHUB_ACTIONS),
     isClaudeCodeAction: isEnvTruthy(process.env.CLAUDE_CODE_ACTION),
     isClaudeAiAuth: isClaudeAISubscriber(),
-    version: MACRO.VERSION,
+    version: { VERSION: "0.0.0-rebuilt", BUILD_TIME: "2026-03-31T00:00:00.000Z", FEEDBACK_CHANNEL: "#claude-code", ISSUES_EXPLAINER: "open an issue", PACKAGE_URL: "@anthropic-ai/claude-code", NATIVE_PACKAGE_URL: "@anthropic-ai/claude-code-native", VERSION_CHANGELOG: "" }.VERSION,
     versionBase: getVersionBase(),
-    buildTime: MACRO.BUILD_TIME,
+    buildTime: { VERSION: "0.0.0-rebuilt", BUILD_TIME: "2026-03-31T00:00:00.000Z", FEEDBACK_CHANNEL: "#claude-code", ISSUES_EXPLAINER: "open an issue", PACKAGE_URL: "@anthropic-ai/claude-code", NATIVE_PACKAGE_URL: "@anthropic-ai/claude-code-native", VERSION_CHANGELOG: "" }.BUILD_TIME,
     deploymentEnvironment: env3.detectDeploymentEnvironment(),
     ...isEnvTruthy(process.env.GITHUB_ACTIONS) && {
       githubEventName: process.env.GITHUB_EVENT_NAME,
@@ -103074,7 +103077,8 @@ Complete the user's request by providing accurate, documentation-based guidance.
 }
 function getFeedbackGuideline() {
   if (isUsing3PServices()) {
-    return `- When you cannot find an answer or the feature doesn't exist, direct the user to ${MACRO.ISSUES_EXPLAINER}`;
+    const macro = globalThis.MACRO;
+    return `- When you cannot find an answer or the feature doesn't exist, direct the user to ${macro?.ISSUES_EXPLAINER ?? "use /feedback to report a feature request or bug"}`;
   }
   return "- When you cannot find an answer or the feature doesn't exist, direct the user to use /feedback to report a feature request or bug";
 }
