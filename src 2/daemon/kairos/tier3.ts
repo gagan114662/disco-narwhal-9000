@@ -12,7 +12,7 @@ import { z } from 'zod/v4'
 import type { CronTask } from '../../utils/cronTasks.js'
 import { getClaudeConfigHomeDir } from '../../utils/envUtils.js'
 import { parseSettingsFile } from '../../utils/settings/settings.js'
-import { resetSettingsCache } from '../../utils/settings/settingsCache.js'
+import { clearCachedParsedFile } from '../../utils/settings/settingsCache.js'
 import type { ChildLauncher, ChildRunResult } from './childRunner.js'
 import { runChild } from './childRunner.js'
 import type { CapHit, CostTracker } from './costTracker.js'
@@ -134,7 +134,7 @@ function parsePositiveNumber(value: unknown): number | undefined {
     : undefined
 }
 
-function readTier3ConfigPartial(settings: unknown): Pick<Tier3Config, 'enabled'> | {} {
+function readTier3ConfigPartial(settings: unknown): Partial<Tier3Config> {
   if (!settings || typeof settings !== 'object') return {}
   const kairos = (settings as Record<string, unknown>).kairos
   if (!kairos || typeof kairos !== 'object') return {}
@@ -142,10 +142,11 @@ function readTier3ConfigPartial(settings: unknown): Pick<Tier3Config, 'enabled'>
   if (!tier3 || typeof tier3 !== 'object') return {}
 
   const record = tier3 as Record<string, unknown>
-  return {
-    enabled:
-      typeof record.enabled === 'boolean' ? record.enabled : undefined,
+  const partial: Partial<Tier3Config> = {}
+  if (typeof record.enabled === 'boolean') {
+    partial.enabled = record.enabled
   }
+  return partial
 }
 
 export function getTier3WindowKey(now: Date, intervalMs: number): string {
@@ -165,10 +166,9 @@ export function computeTier3AllowedTools(
 }
 
 async function readTier3Config(projectDir: string): Promise<Tier3Config & { intervalMs: number }> {
-  resetSettingsCache()
-
   const merged: Partial<Tier3Config> = {}
   for (const path of getProjectSettingsPaths(projectDir)) {
+    clearCachedParsedFile(path)
     const { settings } = parseSettingsFile(path)
     const partial = readTier3ConfigPartial(settings)
     if (partial.enabled !== undefined) {
@@ -328,12 +328,53 @@ function truncateForLog(value: string | undefined, max = 160): string | undefine
 }
 
 function normalizeStructuredOutput(raw: string): string {
-  return raw
-    .trim()
-    .replace(/^```json\s*/i, '')
-    .replace(/^```\s*/i, '')
-    .replace(/\s*```$/, '')
-    .trim()
+  const trimmed = raw.trim()
+  const fencedJson = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)?.[1]?.trim()
+  const candidate = fencedJson ?? trimmed
+
+  const objectStart = candidate.indexOf('{')
+  if (objectStart === -1) {
+    return candidate
+  }
+
+  let depth = 0
+  let inString = false
+  let escaped = false
+
+  for (let index = objectStart; index < candidate.length; index += 1) {
+    const char = candidate[index]
+    if (!char) continue
+
+    if (inString) {
+      if (escaped) {
+        escaped = false
+      } else if (char === '\\') {
+        escaped = true
+      } else if (char === '"') {
+        inString = false
+      }
+      continue
+    }
+
+    if (char === '"') {
+      inString = true
+      continue
+    }
+
+    if (char === '{') {
+      depth += 1
+      continue
+    }
+
+    if (char === '}') {
+      depth -= 1
+      if (depth === 0) {
+        return candidate.slice(objectStart, index + 1)
+      }
+    }
+  }
+
+  return candidate
 }
 
 export function parseTier3Decision(raw: string): Tier3Decision {
