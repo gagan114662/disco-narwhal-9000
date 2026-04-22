@@ -1,0 +1,45 @@
+{
+  "skill": "permanent-structural-fix",
+  "cases": [
+    {
+      "id": "positive-permanent-fix",
+      "input": "This failure happened again. Turn this into a permanent fix with a skill, tests, evals, and a resolver trigger.",
+      "expectedSkill": "permanent-structural-fix"
+    },
+    {
+      "id": "positive-repeated-workaround",
+      "input": "We keep applying the same repeated manual workaround after every release. Codify this failure so it never happens again.",
+      "expectedSkill": "permanent-structural-fix"
+    },
+    {
+      "id": "positive-hardening-checklist",
+      "input": "Write a skill, deterministic code, unit tests, LLM evals, and a resolver trigger for this failure.",
+      "expectedSkill": "permanent-structural-fix"
+    },
+    {
+      "id": "positive-one-off-rule",
+      "input": "We are not allowed to do one-off work here. Make this a permanent structural fix.",
+      "expectedSkill": "permanent-structural-fix"
+    },
+    {
+      "id": "negative-feature-build",
+      "input": "Add a new remind command that schedules a one-shot cron task.",
+      "expectedSkill": null
+    },
+    {
+      "id": "negative-plain-bugfix",
+      "input": "Fix the duplicate cron bug in the reminder command.",
+      "expectedSkill": null
+    },
+    {
+      "id": "negative-docs-only",
+      "input": "Document how reminders work in the README.",
+      "expectedSkill": null
+    },
+    {
+      "id": "negative-skill-without-hardening",
+      "input": "Write a skill for code review.",
+      "expectedSkill": null
+    }
+  ]
+}

@@ -122,7 +122,16 @@ export function AttachmentMessage({
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/switch-exhaustiveness-check -- teammate_mailbox/skill_discovery handled before switch
+  if (attachment.type === 'repo_skill_resolver') {
+    if (attachment.skills.length === 0) return null;
+    const names = attachment.skills.map(s => s.name).join(', ');
+    return <Line>
+        Repo resolver matched <Text bold>{attachment.skills.length}</Text>{' '}
+        {plural(attachment.skills.length, 'skill')}: {names}
+      </Line>;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/switch-exhaustiveness-check -- teammate_mailbox/skill_discovery/repo_skill_resolver handled before switch
   switch (attachment.type) {
     case 'directory':
       return <Line>
@@ -348,10 +357,10 @@ export function AttachmentMessage({
       // a case) or render nothing (add to the array). Messages.tsx pre-filters
       // these so this branch is defense-in-depth for other render paths.
       //
-      // skill_discovery and teammate_mailbox are handled BEFORE the switch in
+      // skill_discovery, repo_skill_resolver, and teammate_mailbox are handled BEFORE the switch in
       // runtime-gated blocks (feature() / isAgentSwarmsEnabled()) that TS can't
       // narrow through — excluded here via type union (compile-time only, no emit).
-      attachment.type satisfies NullRenderingAttachmentType | 'skill_discovery' | 'teammate_mailbox';
+      attachment.type satisfies NullRenderingAttachmentType | 'skill_discovery' | 'repo_skill_resolver' | 'teammate_mailbox';
       return null;
   }
 }

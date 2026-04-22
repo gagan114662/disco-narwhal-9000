@@ -79,13 +79,18 @@ import {
   getDefaultOpusModel,
 } from './model/model.js'
 import type { ReadResourceResult } from '@modelcontextprotocol/sdk/types.js'
-import { getSkillToolCommands, getMcpSkillCommands } from '../commands.js'
+import {
+  getMcpSkillCommands,
+  getSkillToolCommands,
+  getSlashCommandToolSkills,
+} from '../commands.js'
 import type { Command } from '../types/command.js'
 import uniqBy from 'lodash-es/uniqBy.js'
 import { getProjectRoot } from '../bootstrap/state.js'
 import { formatCommandsWithinBudget } from '../tools/SkillTool/prompt.js'
 import { getContextWindowForModel } from './context.js'
 import type { DiscoverySignal } from '../services/skillSearch/signals.js'
+import { findRepoResolverMatches } from './skills/repoSkillResolver.js'
 // Conditional require for DCE. All skill-search string literals that would
 // otherwise leak into external builds live inside these modules. The only
 // surfaces in THIS file are: the maybe() call (gated via spread below) and
@@ -541,6 +546,10 @@ export type Attachment =
       source: 'native' | 'aki' | 'both'
     }
   | {
+      type: 'repo_skill_resolver'
+      skills: { name: string; description: string; ruleId: string }[]
+    }
+  | {
       type: 'queued_command'
       prompt: string | Array<ContentBlockParam>
       source_uuid?: UUID
@@ -808,6 +817,13 @@ export async function getAttachments(
                   messages ?? [],
                   context,
                 ),
+              ),
+            ]
+          : []),
+        ...(!options?.skipSkillDiscovery
+          ? [
+              maybe('repo_skill_resolver', () =>
+                getRepoSkillResolverAttachments(input, context),
               ),
             ]
           : []),
@@ -2746,6 +2762,36 @@ async function getSkillListingAttachments(
       content,
       skillCount: newSkills.length,
       isInitial,
+    },
+  ]
+}
+
+async function getRepoSkillResolverAttachments(
+  input: string,
+  toolUseContext: ToolUseContext,
+): Promise<Attachment[]> {
+  if (
+    !toolUseContext.options.tools.some(t => toolMatchesName(t, SKILL_TOOL_NAME))
+  ) {
+    return []
+  }
+
+  const cwd = getProjectRoot()
+  const commands = await getSlashCommandToolSkills(cwd)
+  const matches = await findRepoResolverMatches(input, commands, cwd)
+
+  if (matches.length === 0) {
+    return []
+  }
+
+  return [
+    {
+      type: 'repo_skill_resolver',
+      skills: matches.slice(0, 5).map(match => ({
+        name: match.name,
+        description: match.description,
+        ruleId: match.ruleId,
+      })),
     },
   ]
 }

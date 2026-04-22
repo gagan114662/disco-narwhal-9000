@@ -1,0 +1,50 @@
+{
+  "skill": "permanent-structural-fix",
+  "cases": [
+    {
+      "id": "repeat-fix-becomes-asset",
+      "context": "The repo keeps hand-patching the same reminder scheduling regression after every refactor. The bug is understood, but nobody has turned it into a reusable workflow.",
+      "task": "Turn this failure into a permanent structural fix.",
+      "requiredArtifacts": [
+        "skill",
+        "deterministic_code",
+        "unit_tests",
+        "llm_evals",
+        "resolver_trigger",
+        "resolver_eval",
+        "duplicate_audit",
+        "smoke_test",
+        "daily_enforcement"
+      ],
+      "judgeQuestions": [
+        "Did the response create or update a repo-local skill instead of stopping at a one-off patch?",
+        "Did it move the stable logic into deterministic code rather than leaving everything in prompt text?",
+        "Did it add automated tests and eval fixtures that would fail on regression?",
+        "Did it add a resolver trigger and then evaluate the resolver on concrete cases?",
+        "Did it install a recurring enforcement path so the fix keeps running after the incident is forgotten?"
+      ]
+    },
+    {
+      "id": "postmortem-to-loop",
+      "context": "A postmortem says the team repeatedly forgot to add smoke coverage and duplicate audits whenever a new slash command was introduced.",
+      "task": "Convert this postmortem item into a permanent repo capability.",
+      "requiredArtifacts": [
+        "skill",
+        "deterministic_code",
+        "unit_tests",
+        "llm_evals",
+        "resolver_trigger",
+        "resolver_eval",
+        "duplicate_audit",
+        "smoke_test",
+        "daily_enforcement"
+      ],
+      "judgeQuestions": [
+        "Did the response encode the workflow as a reusable skill with explicit trigger conditions?",
+        "Did it cover both structural assertions and semantic LLM-judge style eval prompts?",
+        "Did it include duplicate detection so the new mechanism does not create overlapping triggers or fixture ids?",
+        "Did it make the repo self-check this behavior daily?"
+      ]
+    }
+  ]
+}

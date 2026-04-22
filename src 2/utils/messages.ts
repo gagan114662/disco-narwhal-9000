@@ -3519,8 +3519,24 @@ Read the team config to discover your teammates' names. Check the task list peri
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/switch-exhaustiveness-check -- teammate_mailbox/team_context/skill_discovery/bagel_console handled above
-  // biome-ignore lint/nursery/useExhaustiveSwitchCases: teammate_mailbox/team_context/max_turns_reached/skill_discovery/bagel_console handled above, can't add case for dead code elimination
+  if (attachment.type === 'repo_skill_resolver') {
+    if (attachment.skills.length === 0) return []
+    const lines = attachment.skills.map(
+      skill => `- ${skill.name}: ${skill.description} (rule: ${skill.ruleId})`,
+    )
+    return wrapMessagesInSystemReminder([
+      createUserMessage({
+        content:
+          `Project resolver matched these skills for the user's latest request:\n\n${lines.join('\n')}\n\n` +
+          `These matches come from repo-local resolver rules in .claude/skills. ` +
+          `Invoke the matching skill via Skill("<name>") before doing one-off work if it fits the task.`,
+        isMeta: true,
+      }),
+    ])
+  }
+
+  // eslint-disable-next-line @typescript-eslint/switch-exhaustiveness-check -- teammate_mailbox/team_context/skill_discovery/repo_skill_resolver/bagel_console handled above
+  // biome-ignore lint/nursery/useExhaustiveSwitchCases: teammate_mailbox/team_context/max_turns_reached/skill_discovery/repo_skill_resolver/bagel_console handled above, can't add case for dead code elimination
   switch (attachment.type) {
     case 'directory': {
       return wrapMessagesInSystemReminder([

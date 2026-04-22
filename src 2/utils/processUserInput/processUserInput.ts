@@ -8,6 +8,7 @@ import { randomUUID } from 'crypto'
 import type { QuerySource } from 'src/constants/querySource.js'
 import { logEvent } from 'src/services/analytics/index.js'
 import { getContentText } from 'src/utils/messages.js'
+import { getProjectRoot, getInvokedSkillsForAgent } from '../../bootstrap/state.js'
 import {
   findCommand,
   getCommandName,
@@ -16,7 +17,11 @@ import {
 } from '../../commands.js'
 import type { CanUseToolFn } from '../../hooks/useCanUseTool.js'
 import type { IDESelection } from '../../hooks/useIdeSelection.js'
-import type { SetToolJSXFn, ToolUseContext } from '../../Tool.js'
+import {
+  toolMatchesName,
+  type SetToolJSXFn,
+  type ToolUseContext,
+} from '../../Tool.js'
 import type {
   AssistantMessage,
   AttachmentMessage,
@@ -38,6 +43,7 @@ import {
 import type { PastedContent } from '../config.js'
 import type { EffortValue } from '../effort.js'
 import { toArray } from '../generators.js'
+import { getAgentContext } from '../agentContext.js'
 import {
   executeUserPromptSubmitHooks,
   getUserPromptSubmitHookBlockingMessage,
@@ -58,6 +64,8 @@ import {
   hasUltraplanKeyword,
   replaceUltraplanKeyword,
 } from '../ultraplan/keyword.js'
+import { SKILL_TOOL_NAME } from '../../tools/SkillTool/constants.js'
+import { resolveRepoSkillAutoload } from '../skills/repoSkillAutoload.js'
 import { processTextPrompt } from './processTextPrompt.js'
 export type ProcessUserInputContext = ToolUseContext & LocalJSXCommandContext
 
@@ -573,17 +581,74 @@ async function processUserInputBase(
     }
   }
 
+  let userPromptAttachments = attachmentMessages
+  let autoLoadedSkillMessages: ProcessUserInputBaseResult | null = null
+
+  if (
+    inputString !== null &&
+    mode === 'prompt' &&
+    !effectiveSkipSlash &&
+    !inputString.startsWith('/') &&
+    context.options.tools.some(tool => toolMatchesName(tool, SKILL_TOOL_NAME))
+  ) {
+    const projectRoot = getProjectRoot()
+    const currentAgentId = getAgentContext()?.agentId ?? null
+    const alreadyLoadedSkillNames = new Set(
+      [...getInvokedSkillsForAgent(currentAgentId).values()].map(
+        skill => skill.skillName,
+      ),
+    )
+    const decision = await resolveRepoSkillAutoload(
+      inputString,
+      context.options.commands,
+      projectRoot,
+      { alreadyLoadedSkillNames },
+    )
+
+    if (decision) {
+      const { processSlashCommand } = await import(
+        './processSlashCommand.js'
+      )
+      autoLoadedSkillMessages = await processSlashCommand(
+        `/${decision.commandName}`,
+        [],
+        [],
+        [],
+        context,
+        setToolJSX,
+        undefined,
+        isAlreadyProcessing,
+        canUseTool,
+      )
+      userPromptAttachments = attachmentMessages.filter(
+        message => message.attachment.type !== 'repo_skill_resolver',
+      )
+    }
+  }
+
   // Regular user prompt
+  const promptResult = processTextPrompt(
+    normalizedInput,
+    imageContentBlocks,
+    imagePasteIds,
+    userPromptAttachments,
+    uuid,
+    permissionMode,
+    isMeta,
+  )
+
+  if (!autoLoadedSkillMessages) {
+    return addImageMetadataMessage(promptResult, imageMetadataTexts)
+  }
+
   return addImageMetadataMessage(
-    processTextPrompt(
-      normalizedInput,
-      imageContentBlocks,
-      imagePasteIds,
-      attachmentMessages,
-      uuid,
-      permissionMode,
-      isMeta,
-    ),
+    {
+      messages: [...autoLoadedSkillMessages.messages, ...promptResult.messages],
+      shouldQuery: true,
+      allowedTools: autoLoadedSkillMessages.allowedTools,
+      model: autoLoadedSkillMessages.model,
+      effort: autoLoadedSkillMessages.effort,
+    },
     imageMetadataTexts,
   )
 }
