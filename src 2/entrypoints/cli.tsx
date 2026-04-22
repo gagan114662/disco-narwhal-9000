@@ -1,5 +1,27 @@
 import { feature } from 'bun:bundle';
 
+const DEFAULT_MACRO = {
+  VERSION: '0.0.0-rebuilt',
+  BUILD_TIME: '2026-03-31T00:00:00.000Z',
+  FEEDBACK_CHANNEL: '#claude-code',
+  ISSUES_EXPLAINER: 'open an issue',
+  PACKAGE_URL: '@anthropic-ai/claude-code',
+  NATIVE_PACKAGE_URL: '@anthropic-ai/claude-code-native',
+  VERSION_CHANGELOG: ''
+} as const;
+
+type MacroShape = typeof DEFAULT_MACRO;
+
+const globalWithMacro = globalThis as typeof globalThis & {
+  MACRO?: MacroShape;
+};
+
+// Source execution via `bun ./entrypoints/cli.tsx` does not apply the build's
+// `--define MACRO=...` injection. Provide the same default metadata early so
+// modules that read the global `MACRO` binding can still run in dev mode.
+// Built bundles still inline their own values, so this only affects source runs.
+globalWithMacro.MACRO ??= DEFAULT_MACRO;
+
 const CLI_VERSION =
   typeof MACRO !== 'undefined' && typeof MACRO.VERSION === 'string'
     ? MACRO.VERSION
