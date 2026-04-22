@@ -123,6 +123,14 @@ describe('skill-learning integration via makeRunFiredTask', () => {
     expect(scheduled.tasks[0].prompt.startsWith(SKILL_LEARNING_MARKER)).toBe(
       true,
     )
+    // Per-skill sentinel — not just the generic marker — so dedupe by skill
+    // is actually observable on disk.
+    expect(scheduled.tasks[0].prompt).toContain(
+      `${SKILL_LEARNING_MARKER} skill=investigate`,
+    )
+    // Structural discriminator — worker skips observer on `kind`, not the
+    // prompt prefix.
+    expect(scheduled.tasks[0].kind).toBe('skill_distillation')
   })
 
   test('distillation tasks do not re-trigger skill-learning', async () => {
@@ -143,8 +151,14 @@ describe('skill-learning integration via makeRunFiredTask', () => {
       now,
     })
 
+    // Discriminator is the structural `kind` field, not the prompt prefix.
+    // A distillation cron task is one the daemon itself stamped with
+    // `kind: 'skill_distillation'`.
     const outcome = await runFiredTask(
-      makeTask({ prompt: `${SKILL_LEARNING_MARKER} distill me` }),
+      makeTask({
+        prompt: 'distill me',
+        kind: 'skill_distillation',
+      }),
       'event',
     )
     expect(outcome.ok).toBe(true)
@@ -152,6 +166,42 @@ describe('skill-learning integration via makeRunFiredTask', () => {
     expect(
       existsSync(join(projectDir, '.claude', 'scheduled_tasks.json')),
     ).toBe(false)
+  })
+
+  test('user-authored prompt whose text begins with the sentinel still observes skills', async () => {
+    // Regression test for review feedback: the old prompt-prefix check
+    // could mistake a user-authored task (no `kind`) for a daemon task.
+    // Under the structural-kind discriminator it must NOT be skipped.
+    const { projectDir } = setupEnv(true)
+    const stateWriter = await createStateWriter()
+    await stateWriter.ensureProjectDir(projectDir)
+    const now = () => new Date('2026-04-22T12:00:00.000Z')
+
+    const runFiredTask = makeRunFiredTask({
+      projectDir,
+      stateWriter,
+      costTracker: null,
+      launcher: skillInvokingLauncher(),
+      defaultAllowedTools: ['Read', 'Skill'],
+      maxTurns: 1,
+      timeoutMs: 5000,
+      handleCapHit: makeCapHitHandler(stateWriter, now),
+      now,
+    })
+
+    // User prompt that happens to lead with the reserved HTML comment
+    // (e.g. someone copy-pasted from docs). No `kind` field → observer
+    // fires, skill is recorded, distillation is enqueued.
+    const outcome = await runFiredTask(
+      makeTask({ prompt: `${SKILL_LEARNING_MARKER} legit user task` }),
+      'event',
+    )
+    expect(outcome.ok).toBe(true)
+    const scheduled = JSON.parse(
+      readFileSync(join(projectDir, '.claude', 'scheduled_tasks.json'), 'utf-8'),
+    )
+    expect(scheduled.tasks).toHaveLength(1)
+    expect(scheduled.tasks[0].kind).toBe('skill_distillation')
   })
 
   test('feature-flag off: no marker, no scheduled task', async () => {

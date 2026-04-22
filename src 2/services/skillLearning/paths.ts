@@ -4,6 +4,8 @@
 //   <id>.json              — patch awaiting review
 //   applied/<id>.json      — accepted; backup of live skill is in backups/
 //   rejected/<id>.json     — rejected; kept for audit
+//   archive/<id>.json      — accepted long ago; kept for audit but excluded
+//                            from rate-limit reads so the hot path stays O(1)
 //   backups/<skill>-<ts>.md — snapshot of the live skill file pre-apply
 
 import { join } from 'path'
@@ -29,6 +31,14 @@ export function getRejectedDir(): string {
 
 export function getBackupsDir(): string {
   return join(getPendingImprovementsDir(), 'backups')
+}
+
+export function getArchiveDir(): string {
+  return join(getPendingImprovementsDir(), 'archive')
+}
+
+export function getArchivePatchPath(id: string): string {
+  return join(getArchiveDir(), `${id}.json`)
 }
 
 export function getPendingPatchPath(id: string): string {

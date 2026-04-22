@@ -5,11 +5,13 @@
 // the user is away. Rejected patches DO NOT count (the skill effectively
 // had no learning this cycle, so we can try again).
 
-import { readdir, readFile } from 'fs/promises'
+import { mkdir, readdir, readFile, rename } from 'fs/promises'
 import { join } from 'path'
 import { isFsInaccessible } from '../../utils/errors.js'
 import {
   getAppliedDir,
+  getArchiveDir,
+  getArchivePatchPath,
   getPendingImprovementsDir,
 } from './paths.js'
 import { SkillPatchSchema } from './patchSchema.js'
@@ -82,6 +84,47 @@ export async function listActivePatches(): Promise<StoredPatchMeta[]> {
     listMetaIn(getAppliedDir(), 'applied'),
   ])
   return [...pending, ...applied]
+}
+
+/**
+ * Move applied patches older than `cutoffMs` (epoch) into `archive/` so the
+ * rate-limit read path stays O(recent-applied) instead of O(all-time
+ * applied). Archived patches are still on disk for audit — they're just
+ * invisible to `listActivePatches`. Callers typically pass
+ * `nowMs - rateLimitMs * 2` as the cutoff so anything too old to affect
+ * rate limits anyway gets moved out.
+ *
+ * Best-effort — silently skips individual failures (missing files, race
+ * with another caller, fs errors on rename). The rate limiter's correctness
+ * does not depend on archiving succeeding.
+ */
+export async function archiveOldAppliedPatches(cutoffMs: number): Promise<number> {
+  const entries = await readDirSafe(getAppliedDir())
+  if (entries.length === 0) return 0
+  let moved = 0
+  let ensuredDir = false
+  for (const name of entries) {
+    if (!name.endsWith('.json')) continue
+    const src = join(getAppliedDir(), name)
+    const meta = await readPatchMeta(src, 'applied')
+    if (!meta || meta.createdAt >= cutoffMs) continue
+    if (!ensuredDir) {
+      try {
+        await mkdir(getArchiveDir(), { recursive: true })
+        ensuredDir = true
+      } catch {
+        return moved
+      }
+    }
+    const id = name.slice(0, -5)
+    try {
+      await rename(src, getArchivePatchPath(id))
+      moved += 1
+    } catch {
+      // Another caller raced us or the file vanished — fine, skip.
+    }
+  }
+  return moved
 }
 
 export type RateLimitCheck =

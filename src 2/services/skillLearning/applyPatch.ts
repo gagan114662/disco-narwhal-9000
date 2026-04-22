@@ -11,7 +11,7 @@
 // immediately after the first line matching the anchor; without an anchor
 // it falls back to append. Nothing is ever removed.
 
-import { copyFile, mkdir, readFile, writeFile } from 'fs/promises'
+import { copyFile, mkdir, readFile, realpath, writeFile } from 'fs/promises'
 import { resolve, sep } from 'path'
 import { isFsInaccessible } from '../../utils/errors.js'
 import {
@@ -37,10 +37,28 @@ function isInsideSkillsRoot(path: string): boolean {
   return resolved === resolve(getSkillsRoot()) || resolved.startsWith(root)
 }
 
-function countLineDelta(before: string, after: string): number {
-  // Deletion lines = max(0, beforeLines - afterLines). Additive-only applies
-  // always yield a non-negative delta; this function still exists so that a
-  // buggy apply step that *did* remove text would be caught before write.
+/**
+ * Post-read defense-in-depth check: realpath both the root and the target
+ * so a symlinked skill directory (e.g. `investigate/` → `/etc/`) is
+ * detected even though the literal path `~/.claude/skills/investigate/SKILL.md`
+ * passes the string-based `isInsideSkillsRoot` guard. Must only be called
+ * after the target file has been opened for read, since `realpath` throws
+ * on missing paths.
+ */
+async function realpathInsideSkillsRoot(path: string): Promise<boolean> {
+  const rootReal = await realpath(getSkillsRoot())
+  const targetReal = await realpath(path)
+  return (
+    targetReal === rootReal || targetReal.startsWith(rootReal + sep)
+  )
+}
+
+function countNetLineDelta(before: string, after: string): number {
+  // Net shrinkage in line count. Additive-only edits produce `afterLines
+  // >= beforeLines`, so the expected value is 0. A non-zero return means
+  // the apply step collapsed existing content — a bug symptom, not a
+  // precise count of deleted lines. Catches net removal only: a rewrite
+  // that deletes N lines and adds N new ones still returns 0.
   const beforeLines = before.split('\n').length
   const afterLines = after.split('\n').length
   return Math.max(0, beforeLines - afterLines)
@@ -112,6 +130,14 @@ export async function applySkillPatch(
     throw e
   }
 
+  // Target exists → realpath can't throw. Belt-and-suspenders against a
+  // symlinked skill directory that would escape the literal-path check.
+  if (!(await realpathInsideSkillsRoot(skillPath))) {
+    throw new SkillPatchApplyError(
+      `refusing to apply: realpath of skill escapes skills root (${skillPath})`,
+    )
+  }
+
   const backupPath = getBackupPath(patch.skill, now.toISOString())
   await mkdir(getBackupsDir(), { recursive: true })
   await copyFile(skillPath, backupPath)
@@ -121,7 +147,7 @@ export async function applySkillPatch(
     next = applyOneEdit(next, edit)
   }
 
-  const delta = countLineDelta(original, next)
+  const delta = countNetLineDelta(original, next)
   if (delta > MAX_DELETION_LINES) {
     throw new SkillPatchApplyError(
       `refusing to apply: patch would remove ${delta} lines (> ${MAX_DELETION_LINES})`,

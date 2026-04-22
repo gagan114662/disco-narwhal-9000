@@ -123,4 +123,33 @@ describe('enqueueSkillDistillation', () => {
     })
     expect(res.status).toBe('duplicate')
   })
+
+  test('concurrent calls on the same project+skill enqueue exactly one task', async () => {
+    // Regression for the check-then-write race: without the per-project
+    // lock, two in-flight enqueues can both pass the pending/rate-limit
+    // checks and both call addCronTask, producing two identical tasks.
+    const { projectDir } = setup()
+    const [a, b] = await Promise.all([
+      enqueueSkillDistillation({
+        projectDir,
+        runResult: { runId: 'rA', ok: true },
+        skillsUsed: marker(['investigate']),
+      }),
+      enqueueSkillDistillation({
+        projectDir,
+        runResult: { runId: 'rB', ok: true },
+        skillsUsed: marker(['investigate']),
+      }),
+    ])
+    const statuses = [a.status, b.status].sort()
+    expect(statuses).toEqual(['duplicate', 'enqueued'])
+    const body = JSON.parse(
+      readFileSync(
+        join(projectDir, '.claude', 'scheduled_tasks.json'),
+        'utf-8',
+      ),
+    )
+    expect(body.tasks).toHaveLength(1)
+    expect(body.tasks[0].kind).toBe('skill_distillation')
+  })
 })

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { parseSkillPatch, SkillPatchSchema } from './patchSchema.js'
+import { SkillPatchSchema } from './patchSchema.js'
 
 describe('SkillPatchSchema', () => {
   test('accepts minimal valid patch', () => {
@@ -51,31 +51,5 @@ describe('SkillPatchSchema', () => {
         edits: [{ type: 'add_note', content: big }],
       }),
     ).toThrow()
-  })
-})
-
-describe('parseSkillPatch', () => {
-  test('parses raw JSON', () => {
-    const patch = parseSkillPatch(
-      '{"skill":"x","edits":[{"type":"add_note","content":"y"}]}',
-    )
-    expect(patch.skill).toBe('x')
-  })
-
-  test('strips fenced json', () => {
-    const raw = '```json\n{"skill":"x","edits":[{"type":"add_note","content":"y"}]}\n```'
-    const patch = parseSkillPatch(raw)
-    expect(patch.skill).toBe('x')
-  })
-
-  test('handles leading commentary before the json object', () => {
-    const raw =
-      'Here is the patch:\n{"skill":"x","edits":[{"type":"add_note","content":"y"}]}'
-    const patch = parseSkillPatch(raw)
-    expect(patch.skill).toBe('x')
-  })
-
-  test('throws on malformed JSON', () => {
-    expect(() => parseSkillPatch('not json at all')).toThrow()
   })
 })

@@ -10,8 +10,10 @@ import {
   createSdkChildLauncher,
   runChild,
 } from './childRunner.js'
-import { SKILL_LEARNING_MARKER } from '../../services/skillLearning/distillationPrompt.js'
-import { enqueueSkillDistillation } from '../../services/skillLearning/enqueueSkillDistillation.js'
+import {
+  enqueueSkillDistillation,
+  SKILL_DISTILLATION_KIND,
+} from '../../services/skillLearning/enqueueSkillDistillation.js'
 import { createRunSkillUseObserver } from '../../services/skillLearning/skillUseObserver.js'
 import {
   createCostTracker,
@@ -295,7 +297,15 @@ export function makeRunFiredTask(options: RunFiredTaskOptions) {
     const allowedTools = computeEffectiveAllowedTools(defaultAllowedTools, task)
 
     // Distillation tasks MUST NOT re-trigger their own distillation loop.
-    const isDistillationTask = task.prompt.startsWith(SKILL_LEARNING_MARKER)
+    // We discriminate on the structural `kind` field (set only by the
+    // daemon's enqueueSkillDistillation) rather than sniffing the prompt,
+    // so a user-authored cron whose prompt happens to begin with the
+    // skill-learning HTML comment can never be mistaken for one of ours.
+    // If such a distillation child itself invoked `Skill`, we'd silently
+    // skip the observer — that's fine: the distillation prompt forbids
+    // tool use beyond Read/Glob/Grep, and re-entering the loop is worse
+    // than losing a theoretical observation.
+    const isDistillationTask = task.kind === SKILL_DISTILLATION_KIND
 
     const runId = randomUUID()
     const skillObserver = isDistillationTask

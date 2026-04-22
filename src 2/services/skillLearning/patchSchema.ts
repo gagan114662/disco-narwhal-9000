@@ -41,21 +41,3 @@ export const SkillPatchSchema = z
   .strict()
 
 export type SkillPatch = z.infer<typeof SkillPatchSchema>
-
-/**
- * Parse a raw child output into a validated patch, or throw. Accepts a
- * single JSON object; the distillation prompt tells the child to emit
- * exactly that. Fenced-json wrappers are stripped.
- */
-export function parseSkillPatch(raw: string): SkillPatch {
-  const trimmed = raw.trim()
-  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)?.[1]?.trim()
-  const candidate = fenced ?? trimmed
-  const start = candidate.indexOf('{')
-  const end = candidate.lastIndexOf('}')
-  const jsonSlice =
-    start !== -1 && end !== -1 && end > start
-      ? candidate.slice(start, end + 1)
-      : candidate
-  return SkillPatchSchema.parse(JSON.parse(jsonSlice))
-}
