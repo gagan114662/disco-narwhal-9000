@@ -40,7 +40,9 @@ import {
   listSessionsTouchedSince,
   tryAcquireConsolidationLock,
   rollbackConsolidationLock,
+  recordConsolidation,
 } from './consolidationLock.js'
+import { scheduleKairosDreamTask } from './kairosDreamTask.js'
 import {
   registerDreamTask,
   addDreamTurn,
@@ -93,7 +95,8 @@ function getConfig(): AutoDreamConfig {
 }
 
 function isGateOpen(): boolean {
-  if (getKairosActive()) return false // KAIROS mode uses disk-skill dream
+  // KAIROS mode no longer short-circuits here — it takes the scheduling
+  // branch below instead of the in-process fork.
   if (getIsRemoteMode()) return false
   if (!isAutoMemoryEnabled()) return false
   return isAutoDreamEnabled()
@@ -167,6 +170,28 @@ export function initAutoDream(): void {
       logForDebugging(
         `[autoDream] skip — ${sessionIds.length} sessions since last consolidation, need ${cfg.minSessions}`,
       )
+      return
+    }
+
+    // --- KAIROS branch ---
+    // Hand the job to the daemon via a durable one-shot cron task instead
+    // of running the fork in-process. Stamp the lock on success so the
+    // time-gate bails for minHours — duplicate suppression in
+    // scheduleKairosDreamTask handles the inner loop; the lock stamp
+    // handles restart cases after the daemon has fired + deleted the task.
+    if (getKairosActive()) {
+      const result = await scheduleKairosDreamTask({
+        memoryRoot: getAutoMemPath(),
+        transcriptDir: getProjectDir(getOriginalCwd()),
+        sessionIds,
+      })
+      if (result.scheduled) {
+        logEvent('tengu_auto_dream_scheduled_kairos', {
+          sessions_since: sessionIds.length,
+          hours_since: Math.round(hoursSince),
+        })
+        await recordConsolidation()
+      }
       return
     }
 
