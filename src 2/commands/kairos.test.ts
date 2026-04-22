@@ -7,7 +7,11 @@ import {
   getProjectRoot,
   setProjectRoot,
 } from '../bootstrap/state.js'
-import { runKairosCommand } from './kairos.js'
+import {
+  __resetKairosCloudSyncDepsForTesting,
+  __setKairosCloudSyncDepsForTesting,
+  runKairosCommand,
+} from './kairos.js'
 
 const TEMP_DIRS: string[] = []
 let originalProjectRoot: string
@@ -35,6 +39,7 @@ beforeEach(() => {
 
 afterEach(() => {
   setProjectRoot(originalProjectRoot)
+  __resetKairosCloudSyncDepsForTesting()
   delete process.env.CLAUDE_CONFIG_DIR
   delete process.env.KAIROS_DASHBOARD_URL
   for (const dir of TEMP_DIRS.splice(0, TEMP_DIRS.length)) {
@@ -48,6 +53,7 @@ describe('/kairos command', () => {
     expect(out).toContain('/kairos status')
     expect(out).toContain('/kairos opt-in')
     expect(out).toContain('/kairos demo')
+    expect(out).toContain('/kairos cloud-sync')
   })
 
   test('prints help for unknown subcommands', async () => {
@@ -236,6 +242,83 @@ describe('/kairos command', () => {
 
     const out = await runKairosCommand('logs 3')
     expect(out).toBe(['b', 'c', 'd'].join('\n'))
+  })
+
+  test('cloud-sync requires an explicit runtime root', async () => {
+    const out = await runKairosCommand('cloud-sync')
+    expect(out).toBe('Usage: /kairos cloud-sync <runtimeRoot>')
+  })
+
+  test('cloud-sync builds and applies a bundle to the requested runtime root', async () => {
+    const runtimeRoot = makeProjectDir()
+    let receivedRuntimeRoot: string | null = null
+    __setKairosCloudSyncDepsForTesting({
+      async buildBundle() {
+        return {
+          version: 1,
+          createdAt: '2026-04-22T12:00:00.000Z',
+          files: [
+            {
+              relativePath: 'config/.claude/skills/demo/SKILL.md',
+              sizeBytes: 4,
+              sha256: 'abcd',
+              contentBase64: Buffer.from('demo', 'utf8').toString('base64'),
+            },
+          ],
+          projects: [
+            {
+              id: 'proj1234abcd',
+              remoteUrl: 'https://github.com/example/repo.git',
+              normalizedRemoteUrl: 'github.com/example/repo',
+              headRef: 'main',
+              headCommit: 'deadbeef',
+            },
+          ],
+        }
+      },
+      async applyBundle(_bundle, options) {
+        receivedRuntimeRoot = options.runtimeRoot
+        return {
+          sourceDir: join(options.runtimeRoot, 'source'),
+          overlayDir: join(options.runtimeRoot, 'overlay'),
+          manifestPath: join(options.runtimeRoot, 'source', 'manifest.json'),
+          registryPath: join(
+            options.runtimeRoot,
+            'source',
+            'registry',
+            'projects.json',
+          ),
+          managedPaths: [
+            'config/.claude/skills/demo/SKILL.md',
+            'manifest.json',
+            'registry/projects.json',
+          ],
+        }
+      },
+    })
+
+    const out = await runKairosCommand(`cloud-sync ${runtimeRoot}`)
+    expect(receivedRuntimeRoot).toBe(runtimeRoot)
+    expect(out).toContain('Cloud sync applied: 1 file(s), 1 project(s)')
+    expect(out).toContain(`runtime root: ${runtimeRoot}`)
+    expect(out).toContain(join(runtimeRoot, 'source'))
+    expect(out).toContain(join(runtimeRoot, 'overlay'))
+  })
+
+  test('cloud-sync surfaces build or apply failures as user-facing errors', async () => {
+    __setKairosCloudSyncDepsForTesting({
+      async buildBundle() {
+        throw new Error('Project /tmp/missing has no reachable git remote')
+      },
+      async applyBundle() {
+        throw new Error('unreachable')
+      },
+    })
+
+    const out = await runKairosCommand('cloud-sync ./runtime-root')
+    expect(out).toBe(
+      'Cloud sync failed: Project /tmp/missing has no reachable git remote',
+    )
   })
 
   test('skills export emits a self-contained manifest', async () => {
