@@ -33,6 +33,8 @@ import {
 } from './paths.js'
 import { createStateWriter, type StateWriter } from './stateWriter.js'
 import { createTier3Controller, type Tier3Controller } from './tier3.js'
+import { getKairosRpcConfig } from '../../services/rpc/config.js'
+import { startToolsSocketServer } from '../../services/rpc/toolsSocketServer.js'
 import { readTelegramConfig } from '../gateway/telegram/config.js'
 import { createGateway, type Gateway } from '../gateway/telegram/gateway.js'
 import { createDispatcher } from '../gateway/telegram/commands.js'
@@ -428,6 +430,10 @@ export async function runKairosWorker(
     ReturnType<typeof createProjectWorker>
   >()
   const tier3Controllers = new Map<string, Tier3Controller>()
+  const rpcConfig = getKairosRpcConfig()
+  const rpcServer = rpcConfig.enabled
+    ? await startToolsSocketServer(rpcConfig.socketPath)
+    : null
 
   const enableChildRuns = options.enableChildRuns ?? true
   const launcher: ChildLauncher | null = enableChildRuns
@@ -646,6 +652,7 @@ export async function runKairosWorker(
   for (const projectDir of [...activeWorkers.keys()]) {
     await removeProject(projectDir)
   }
+  await rpcServer?.stop()
 
   const stoppedAt = now().toISOString()
   await logLine('shutdown requested; exiting cleanly', {

@@ -13,6 +13,10 @@ export function getKairosStdoutLogPath(): string {
   return join(getKairosStateDir(), 'daemon.out.log')
 }
 
+export function getKairosToolsSocketPath(): string {
+  return join(getKairosStateDir(), 'tools.sock')
+}
+
 export function getKairosGlobalEventsPath(): string {
   return join(getKairosStateDir(), 'events.jsonl')
 }

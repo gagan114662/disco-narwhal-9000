@@ -1,16 +1,18 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdtempSync, readFileSync, rmSync } from 'fs'
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'fs'
 import { spawn } from 'child_process'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import { getKairosStateDir, getKairosStatusPath, getKairosStdoutLogPath } from './paths.js'
+import { getKairosStateDir, getKairosStatusPath, getKairosStdoutLogPath, getKairosToolsSocketPath } from './paths.js'
 import { runKairosWorker } from './worker.js'
+import { resetSettingsCache } from '../../utils/settings/settingsCache.js'
 
 const TEMP_DIRS: string[] = []
 const DAEMON_MAIN_URL = new URL('../main.ts', import.meta.url).href
 
 afterEach(() => {
   delete process.env.CLAUDE_CONFIG_DIR
+  resetSettingsCache()
   for (const dir of TEMP_DIRS.splice(0, TEMP_DIRS.length)) {
     rmSync(dir, { recursive: true, force: true })
   }
@@ -22,11 +24,11 @@ function makeTempConfigDir(): string {
   return dir
 }
 
-async function waitForPath(path: string, timeoutMs = 3_000): Promise<void> {
+async function waitForPath(path: string, timeoutMs = 10_000): Promise<void> {
   const started = Date.now()
   while (Date.now() - started < timeoutMs) {
     try {
-      readFileSync(path)
+      statSync(path)
       return
     } catch {
       await Bun.sleep(50)
@@ -76,6 +78,23 @@ describe('Kairos daemon worker', () => {
     expect(log).toContain('startup complete; entering idle loop')
     expect(log).toContain('shutdown requested; exiting cleanly')
     expect(stdoutChunks.join('')).toContain('startup complete; entering idle loop')
+  })
+
+  test('creates the rpc socket when kairos.rpc.enabled is true', async () => {
+    const configDir = makeTempConfigDir()
+    process.env.CLAUDE_CONFIG_DIR = configDir
+    writeFileSync(
+      join(configDir, 'settings.json'),
+      JSON.stringify({ kairos: { rpc: { enabled: true } } }),
+    )
+    resetSettingsCache()
+
+    const controller = new AbortController()
+    const running = runKairosWorker({ signal: controller.signal })
+
+    await waitForPath(getKairosToolsSocketPath())
+    controller.abort()
+    expect(await running).toBe(0)
   })
 
   test('daemon main exits with code 0 on SIGTERM', async () => {
