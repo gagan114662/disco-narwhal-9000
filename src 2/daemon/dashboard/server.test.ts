@@ -6,7 +6,11 @@ import { writeCronTasks } from '../../utils/cronTasks.js'
 import { createProjectRegistry } from '../kairos/projectRegistry.js'
 import { getKairosPausePath } from '../kairos/paths.js'
 import { createStateWriter } from '../kairos/stateWriter.js'
-import { startKairosDashboardServer } from './server.js'
+import {
+  getSnapshotSignature,
+  seedBroadcastSignatureOnConnect,
+  startKairosDashboardServer,
+} from './server.js'
 
 const TEMP_DIRS: string[] = []
 
@@ -121,6 +125,68 @@ async function readSseUntil(
 }
 
 describe('KAIROS dashboard server', () => {
+  test('snapshot signature ignores generatedAt churn', async () => {
+    const configDir = makeTempDir('kairos-dashboard-signature-config-')
+    const projectDir = makeTempDir('kairos-dashboard-signature-project-')
+    process.env.CLAUDE_CONFIG_DIR = configDir
+    await seedState(projectDir)
+
+    const snapshotA = await (async () => {
+      const server = await startKairosDashboardServer({ port: 0 })
+      try {
+        const response = await fetch(`${server.url}/api/state`)
+        return await response.json()
+      } finally {
+        await server.stop()
+      }
+    })()
+
+    const snapshotB = {
+      ...snapshotA,
+      generatedAt: '2030-01-01T00:00:00.000Z',
+    }
+
+    expect(getSnapshotSignature(snapshotA)).toBe(getSnapshotSignature(snapshotB))
+  })
+
+  test('secondary SSE connections do not overwrite the broadcast signature', async () => {
+    const configDir = makeTempDir('kairos-dashboard-connect-signature-config-')
+    const projectDir = makeTempDir('kairos-dashboard-connect-signature-project-')
+    process.env.CLAUDE_CONFIG_DIR = configDir
+    await seedState(projectDir)
+
+    const server = await startKairosDashboardServer({ port: 0 })
+
+    try {
+      const snapshot = await (async () => {
+        const response = await fetch(`${server.url}/api/state`)
+        return await response.json()
+      })()
+
+      const idleSignature = getSnapshotSignature(snapshot)
+      const changedSnapshot = {
+        ...snapshot,
+        global: {
+          ...snapshot.global,
+          pause: {
+            paused: true,
+            source: 'user',
+            scope: 'global',
+          },
+        },
+      }
+
+      expect(
+        seedBroadcastSignatureOnConnect(null, 1, snapshot),
+      ).toBe(idleSignature)
+      expect(
+        seedBroadcastSignatureOnConnect(idleSignature, 2, changedSnapshot),
+      ).toBe(idleSignature)
+    } finally {
+      await server.stop()
+    }
+  })
+
   test('serves snapshot and control endpoints', async () => {
     const configDir = makeTempDir('kairos-dashboard-config-')
     const projectDir = makeTempDir('kairos-dashboard-project-')
@@ -233,4 +299,5 @@ describe('KAIROS dashboard server', () => {
       }
     },
   )
+
 })

@@ -38,6 +38,20 @@ export type KairosDashboardServer = {
   stop(): Promise<void>
 }
 
+export function getSnapshotSignature(snapshot: DashboardSnapshot): string {
+  const { generatedAt: _generatedAt, ...rest } = snapshot
+  return JSON.stringify(rest)
+}
+
+export function seedBroadcastSignatureOnConnect(
+  currentSignature: string | null,
+  clientCount: number,
+  snapshot: DashboardSnapshot,
+): string | null {
+  if (clientCount !== 1) return currentSignature
+  return getSnapshotSignature(snapshot)
+}
+
 function sendJson(
   res: ServerResponse,
   statusCode: number,
@@ -90,7 +104,7 @@ export async function startKairosDashboardServer(
   let keepAlive: ReturnType<typeof setInterval> | null = null
   let snapshotPoll: ReturnType<typeof setInterval> | null = null
   let broadcastTimer: ReturnType<typeof setTimeout> | null = null
-  let lastSnapshotJson: string | null = null
+  let lastBroadcastSignature: string | null = null
 
   const [indexHtml, appJs, stylesCss] = await Promise.all([
     loadStaticAsset('index.html', 'text/html; charset=utf-8'),
@@ -108,11 +122,11 @@ export async function startKairosDashboardServer(
     if (clients.size === 0) return
     try {
       const snapshot = await readDashboardSnapshot(now)
-      const nextJson = JSON.stringify(snapshot)
-      if (nextJson === lastSnapshotJson) {
+      const nextSignature = getSnapshotSignature(snapshot)
+      if (nextSignature === lastBroadcastSignature) {
         return
       }
-      lastSnapshotJson = nextJson
+      lastBroadcastSignature = nextSignature
       for (const client of clients) {
         writeSse(client, 'snapshot', snapshot)
       }
@@ -170,10 +184,17 @@ export async function startKairosDashboardServer(
         res.write(': connected\n\n')
         clients.add(res)
         const snapshot = await readDashboardSnapshot(now)
-        lastSnapshotJson = JSON.stringify(snapshot)
+        lastBroadcastSignature = seedBroadcastSignatureOnConnect(
+          lastBroadcastSignature,
+          clients.size,
+          snapshot,
+        )
         writeSse(res, 'snapshot', snapshot)
         req.on('close', () => {
           clients.delete(res)
+          if (clients.size === 0) {
+            lastBroadcastSignature = null
+          }
           res.end()
         })
         return
