@@ -101,6 +101,7 @@ import { getActiveAgentsFromList, getAgentDefinitionsWithOverrides, isBuiltInAge
 import type { LogOption } from './types/logs.js';
 import type { Message as MessageType } from './types/message.js';
 import { assertMinVersion } from './utils/autoUpdater.js';
+import { BROWSER_HARNESS_SKILL_HINT, shouldEnableBrowserHarness } from './utils/browserHarness.js';
 import { CLAUDE_IN_CHROME_SKILL_HINT, CLAUDE_IN_CHROME_SKILL_HINT_WITH_WEBBROWSER } from './utils/claudeInChrome/prompt.js';
 import { setupClaudeInChrome, shouldAutoEnableClaudeInChrome, shouldEnableClaudeInChrome } from './utils/claudeInChrome/setup.js';
 import { getContextWindowForModel } from './utils/context.js';
@@ -1575,6 +1576,9 @@ async function run(): Promise<CommanderCommand> {
         // Silently skip any errors for the auto-enable
         logForDebugging(`[Claude in Chrome] Error (auto-enable): ${error}`);
       }
+    }
+    if (shouldEnableBrowserHarness()) {
+      appendSystemPrompt = appendSystemPrompt ? `${appendSystemPrompt}\n\n${BROWSER_HARNESS_SKILL_HINT}` : BROWSER_HARNESS_SKILL_HINT;
     }
 
     // Extract strict MCP config flag

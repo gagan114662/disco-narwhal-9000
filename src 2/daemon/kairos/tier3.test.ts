@@ -16,13 +16,19 @@ import type {
 } from './childRunner.js'
 import { getKairosGlobalEventsPath, getProjectKairosEventsPath } from './paths.js'
 import { createStateWriter } from './stateWriter.js'
-import { runTier3Reflection } from './tier3.js'
+import { runTier3Reflection, parseTier3Decision } from './tier3.js'
+import {
+  getSessionSettingsCache,
+  resetSettingsCache,
+  setSessionSettingsCache,
+} from '../../utils/settings/settingsCache.js'
 
 const TEMP_DIRS: string[] = []
 
 afterEach(() => {
   delete process.env.CLAUDE_CONFIG_DIR
   delete process.env.KAIROS_TIER3_INTERVAL_MS
+  resetSettingsCache()
   for (const dir of TEMP_DIRS.splice(0, TEMP_DIRS.length)) {
     rmSync(dir, { recursive: true, force: true })
   }
@@ -70,6 +76,23 @@ function makeAssistantJsonMessage(json: string): ChildStreamMessage {
 }
 
 describe('Kairos Tier 3 reflection', () => {
+  test('parses JSON wrapped in conversational text and markdown fences', () => {
+    expect(
+      parseTier3Decision(
+        'Sure, here is the decision:\n```json\n{"surface":false}\n```\nNo further action.',
+      ),
+    ).toEqual({ surface: false })
+
+    expect(
+      parseTier3Decision(
+        'Based on the latest context, use this:\n{"surface":true,"message":"Surface the failing auth tests."}\nThanks.',
+      ),
+    ).toEqual({
+      surface: true,
+      message: 'Surface the failing auth tests.',
+    })
+  })
+
   test('is disabled by default', async () => {
     const configDir = makeTempDir('kairos-tier3-config-')
     const projectDir = makeTempDir('kairos-tier3-project-')
@@ -216,6 +239,64 @@ describe('Kairos Tier 3 reflection', () => {
     expect(log).toContain('"outcome":"noop"')
   })
 
+  test('skips the run when no safe Tier 3 tools remain after filtering and still consumes the window', async () => {
+    const configDir = makeTempDir('kairos-tier3-no-tools-config-')
+    const projectDir = makeTempDir('kairos-tier3-no-tools-project-')
+    process.env.CLAUDE_CONFIG_DIR = configDir
+
+    writeTier3Settings(projectDir, { enabled: true })
+
+    const stateWriter = await createStateWriter()
+    await stateWriter.ensureProjectDir(projectDir)
+
+    const { launcher, calls } = makeLauncher([
+      makeAssistantJsonMessage('{"surface":false}'),
+      {
+        type: 'result',
+        subtype: 'success',
+        is_error: false,
+        num_turns: 1,
+        duration_ms: 80,
+        total_cost_usd: 0.01,
+      },
+    ])
+
+    const now = () => new Date('2026-04-22T13:30:00.000Z')
+    const first = await runTier3Reflection({
+      projectDir,
+      stateWriter,
+      launcher,
+      costTracker: null,
+      defaultAllowedTools: ['Bash'],
+      maxTurns: 3,
+      timeoutMs: 5_000,
+      handleCapHit: async () => {},
+      now,
+    })
+    const second = await runTier3Reflection({
+      projectDir,
+      stateWriter,
+      launcher,
+      costTracker: null,
+      defaultAllowedTools: ['Read'],
+      maxTurns: 3,
+      timeoutMs: 5_000,
+      handleCapHit: async () => {},
+      now,
+    })
+
+    expect(first.outcome).toBe('skipped_no_allowed_tools')
+    expect(second.outcome).toBe('skipped_hourly_cap')
+    expect(calls).toHaveLength(0)
+
+    const log = readFileSync(
+      join(projectDir, '.claude', 'kairos', 'log.jsonl'),
+      'utf8',
+    )
+    expect(log).toContain('"outcome":"skipped_no_allowed_tools"')
+    expect(log).toContain('"outcome":"skipped_hourly_cap"')
+  })
+
   test('surface=true writes visible message events and filters unsafe tools', async () => {
     const configDir = makeTempDir('kairos-tier3-surface-config-')
     const projectDir = makeTempDir('kairos-tier3-surface-project-')
@@ -281,6 +362,131 @@ describe('Kairos Tier 3 reflection', () => {
       'utf8',
     )
     expect(log).toContain('"outcome":"surface"')
+  })
+
+  test('re-reads tier3 settings without clearing the global settings cache', async () => {
+    const configDir = makeTempDir('kairos-tier3-reread-config-')
+    const projectDir = makeTempDir('kairos-tier3-reread-project-')
+    process.env.CLAUDE_CONFIG_DIR = configDir
+
+    const stateWriter = await createStateWriter()
+    await stateWriter.ensureProjectDir(projectDir)
+
+    const cachedSettings = { settings: {}, errors: [] }
+    setSessionSettingsCache(cachedSettings)
+
+    const disabledLauncher = makeLauncher([
+      makeAssistantJsonMessage('{"surface":false}'),
+      {
+        type: 'result',
+        subtype: 'success',
+        is_error: false,
+        num_turns: 1,
+        duration_ms: 50,
+        total_cost_usd: 0.01,
+      },
+    ])
+
+    const disabled = await runTier3Reflection({
+      projectDir,
+      stateWriter,
+      launcher: disabledLauncher.launcher,
+      costTracker: null,
+      defaultAllowedTools: ['Read'],
+      maxTurns: 3,
+      timeoutMs: 5_000,
+      handleCapHit: async () => {},
+      now: () => new Date('2026-04-22T14:30:00.000Z'),
+    })
+
+    expect(disabled.outcome).toBe('disabled')
+    expect(disabledLauncher.calls).toHaveLength(0)
+    expect(getSessionSettingsCache()).toBe(cachedSettings)
+
+    writeTier3Settings(projectDir, { enabled: true })
+
+    const enabledLauncher = makeLauncher([
+      makeAssistantJsonMessage('{"surface":false}'),
+      {
+        type: 'result',
+        subtype: 'success',
+        is_error: false,
+        num_turns: 1,
+        duration_ms: 50,
+        total_cost_usd: 0.01,
+      },
+    ])
+
+    const enabled = await runTier3Reflection({
+      projectDir,
+      stateWriter,
+      launcher: enabledLauncher.launcher,
+      costTracker: null,
+      defaultAllowedTools: ['Read'],
+      maxTurns: 3,
+      timeoutMs: 5_000,
+      handleCapHit: async () => {},
+      now: () => new Date('2026-04-22T15:30:00.000Z'),
+    })
+
+    expect(enabled.outcome).toBe('noop')
+    expect(enabledLauncher.calls).toHaveLength(1)
+    expect(getSessionSettingsCache()).toBe(cachedSettings)
+  })
+
+  test('concurrent same-window runs claim the interval only once', async () => {
+    const configDir = makeTempDir('kairos-tier3-concurrent-config-')
+    const projectDir = makeTempDir('kairos-tier3-concurrent-project-')
+    process.env.CLAUDE_CONFIG_DIR = configDir
+
+    writeTier3Settings(projectDir, { enabled: true })
+
+    const stateWriter = await createStateWriter()
+    await stateWriter.ensureProjectDir(projectDir)
+
+    const { launcher, calls } = makeLauncher([
+      makeAssistantJsonMessage('{"surface":false}'),
+      {
+        type: 'result',
+        subtype: 'success',
+        is_error: false,
+        num_turns: 1,
+        duration_ms: 80,
+        total_cost_usd: 0.01,
+      },
+    ])
+
+    const now = () => new Date('2026-04-22T14:15:00.000Z')
+    const [first, second] = await Promise.all([
+      runTier3Reflection({
+        projectDir,
+        stateWriter,
+        launcher,
+        costTracker: null,
+        defaultAllowedTools: ['Read'],
+        maxTurns: 3,
+        timeoutMs: 5_000,
+        handleCapHit: async () => {},
+        now,
+      }),
+      runTier3Reflection({
+        projectDir,
+        stateWriter,
+        launcher,
+        costTracker: null,
+        defaultAllowedTools: ['Read'],
+        maxTurns: 3,
+        timeoutMs: 5_000,
+        handleCapHit: async () => {},
+        now,
+      }),
+    ])
+
+    expect([first.outcome, second.outcome].sort()).toEqual([
+      'noop',
+      'skipped_hourly_cap',
+    ])
+    expect(calls).toHaveLength(1)
   })
 
   test('settings interval does not lower the hourly cap, but env override can', async () => {

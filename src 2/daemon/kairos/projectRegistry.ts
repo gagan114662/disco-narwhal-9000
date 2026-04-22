@@ -96,6 +96,10 @@ export async function createProjectRegistry(): Promise<ProjectRegistry> {
           onChange({ added: [], removed, projects: [] })
         })(),
       )
+      await new Promise<void>((resolve, reject) => {
+        watcher.once('ready', () => resolve())
+        watcher.once('error', reject)
+      })
 
       return async () => {
         await watcher.close()

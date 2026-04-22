@@ -29,6 +29,14 @@ export function getProjectKairosDir(projectDir: string): string {
   return join(projectDir, '.claude', 'kairos')
 }
 
+export function getProjectKairosStatusPath(projectDir: string): string {
+  return join(getProjectKairosDir(projectDir), 'status.json')
+}
+
+export function getProjectKairosLogPath(projectDir: string): string {
+  return join(getProjectKairosDir(projectDir), 'log.jsonl')
+}
+
 export function getProjectKairosEventsPath(projectDir: string): string {
   return join(getProjectKairosDir(projectDir), 'events.jsonl')
 }

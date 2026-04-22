@@ -52,6 +52,10 @@ export function setCachedParsedFile(path: string, value: ParsedSettings): void {
   parseFileCache.set(path, value)
 }
 
+export function clearCachedParsedFile(path: string): void {
+  parseFileCache.delete(path)
+}
+
 export function resetSettingsCache(): void {
   sessionSettingsCache = null
   perSourceCache.clear()

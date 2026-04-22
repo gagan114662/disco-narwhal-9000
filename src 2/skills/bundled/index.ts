@@ -1,6 +1,8 @@
 import { feature } from 'bun:bundle'
+import { shouldEnableBrowserHarness } from 'src/utils/browserHarness.js'
 import { shouldAutoEnableClaudeInChrome } from 'src/utils/claudeInChrome/setup.js'
 import { registerBatchSkill } from './batch.js'
+import { registerBrowserHarnessSkill } from './browserHarness.js'
 import { registerClaudeInChromeSkill } from './claudeInChrome.js'
 import { registerDebugSkill } from './debug.js'
 import { registerKeybindingsSkill } from './keybindings.js'
@@ -69,6 +71,9 @@ export function initBundledSkills(): void {
   }
   if (shouldAutoEnableClaudeInChrome()) {
     registerClaudeInChromeSkill()
+  }
+  if (shouldEnableBrowserHarness()) {
+    registerBrowserHarnessSkill()
   }
   if (feature('RUN_SKILL_GENERATOR')) {
     /* eslint-disable @typescript-eslint/no-require-imports */
