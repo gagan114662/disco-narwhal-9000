@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { chmodSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createReminderFromUserRequest } from './createReminderFromUserRequest.js'
@@ -194,5 +194,34 @@ describe('createReminderFromUserRequest', () => {
       code: 'invalid_project',
       message: "Can't schedule reminder: no project directory was provided.",
     })
+  })
+
+  test('non-writable project returns a config_error instead of throwing', async () => {
+    const projectDir = makeProjectDir()
+    const now = new Date('2026-05-15T14:00:00.000Z')
+
+    chmodSync(projectDir, 0o500)
+    try {
+      const result = await createReminderFromUserRequest(
+        {
+          projectDir,
+          text: 'Drink water.',
+          at: new Date('2026-05-15T14:02:00.000Z'),
+        },
+        { now },
+      )
+
+      expect(result).toEqual({
+        ok: false,
+        code: 'config_error',
+        message: `Can't schedule reminder: couldn't write ${join(
+          projectDir,
+          '.claude',
+          'scheduled_tasks.json',
+        )}. Check that the project directory exists and is writable.`,
+      })
+    } finally {
+      chmodSync(projectDir, 0o700)
+    }
   })
 })

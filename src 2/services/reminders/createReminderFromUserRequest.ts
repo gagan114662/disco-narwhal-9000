@@ -15,6 +15,7 @@ import {
   type ScheduleReminderResult,
   scheduleReminder,
 } from './reminderScheduler.js'
+import { getCronFilePath } from '../../utils/cronTasks.js'
 import {
   type ReminderErrorCode,
   type ReminderRequest,
@@ -49,7 +50,7 @@ export type CreateReminderSuccess = {
 
 export type CreateReminderFailure = {
   ok: false
-  code: ReminderErrorCode
+  code: ReminderErrorCode | 'config_error'
   /** Pre-formatted error the caller can show to the user verbatim. */
   message: string
 }
@@ -84,6 +85,12 @@ function formatValidationMessage(
   }
 }
 
+function formatConfigErrorMessage(projectDir: string): string {
+  return `Can't schedule reminder: couldn't write ${getCronFilePath(
+    projectDir,
+  )}. Check that the project directory exists and is writable.`
+}
+
 /**
  * Validate a user's reminder request, schedule it via the durable-cron core,
  * and return a tagged result containing both machine-readable status and a
@@ -112,7 +119,11 @@ export async function createReminderFromUserRequest(
         message: formatValidationMessage(err, req),
       }
     }
-    throw err
+    return {
+      ok: false,
+      code: 'config_error',
+      message: formatConfigErrorMessage(req.projectDir),
+    }
   }
 
   const when = formatTime(scheduled.at)
