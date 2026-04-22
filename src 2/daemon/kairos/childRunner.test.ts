@@ -56,7 +56,13 @@ describe('childRunner.runChild', () => {
         tools: ['Read'],
         session_id: 'sess-1',
       },
-      { type: 'assistant', session_id: 'sess-1' },
+      {
+        type: 'assistant',
+        session_id: 'sess-1',
+        message: {
+          content: [{ type: 'text', text: '{"surface":false}' }],
+        },
+      },
       {
         type: 'result',
         subtype: 'success',
@@ -93,6 +99,7 @@ describe('childRunner.runChild', () => {
     expect(result.numTurns).toBe(2)
     expect(result.sessionId).toBe('sess-1')
     expect(result.allowedTools).toEqual(['Read'])
+    expect(result.lastAssistantText).toBe('{"surface":false}')
 
     expect(calls).toHaveLength(1)
     const startEvents = events.filter(e => e.kind === 'child_started')

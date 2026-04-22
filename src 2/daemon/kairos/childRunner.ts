@@ -77,6 +77,7 @@ export type ChildRunResult = {
   numTurns: number
   durationMs: number
   allowedTools: string[]
+  lastAssistantText?: string
   errorMessage?: string
 }
 
@@ -145,6 +146,36 @@ function exitReasonFromResult(
   }
 }
 
+function extractAssistantText(message: unknown): string | undefined {
+  if (!message || typeof message !== 'object') {
+    return undefined
+  }
+
+  const content = (message as { content?: unknown }).content
+  if (typeof content === 'string') {
+    const trimmed = content.trim()
+    return trimmed.length > 0 ? trimmed : undefined
+  }
+
+  if (!Array.isArray(content)) {
+    return undefined
+  }
+
+  const text = content
+    .filter(
+      (block): block is { type: 'text'; text: string } =>
+        !!block &&
+        typeof block === 'object' &&
+        (block as { type?: unknown }).type === 'text' &&
+        typeof (block as { text?: unknown }).text === 'string',
+    )
+    .map(block => block.text)
+    .join('\n')
+    .trim()
+
+  return text.length > 0 ? text : undefined
+}
+
 export async function runChild(
   options: ChildRunOptions,
   deps: ChildRunDeps,
@@ -184,6 +215,7 @@ export async function runChild(
   let resultMessage:
     | Extract<ChildStreamMessage, { type: 'result' }>
     | undefined
+  let lastAssistantText: string | undefined
   let streamError: Error | null = null
 
   try {
@@ -207,6 +239,11 @@ export async function runChild(
         messageType: String(message.type),
         sessionId,
       })
+
+      if (message.type === 'assistant') {
+        lastAssistantText =
+          extractAssistantText(message.message) ?? lastAssistantText
+      }
 
       if (message.type === 'result') {
         resultMessage = message as Extract<
@@ -241,6 +278,7 @@ export async function runChild(
       numTurns: resultMessage?.num_turns ?? 0,
       durationMs,
       allowedTools,
+      lastAssistantText,
       errorMessage: `child run exceeded ${timeoutMs}ms`,
     }
     await deps.onEvent({
@@ -273,6 +311,7 @@ export async function runChild(
       numTurns: resultMessage?.num_turns ?? 0,
       durationMs,
       allowedTools,
+      lastAssistantText,
       errorMessage: streamError.message,
     }
     await deps.onEvent({
@@ -299,6 +338,7 @@ export async function runChild(
       numTurns: 0,
       durationMs,
       allowedTools,
+      lastAssistantText,
       errorMessage: 'child stream ended without a result message',
     }
     await deps.onEvent({
@@ -333,6 +373,7 @@ export async function runChild(
     numTurns: resultMessage.num_turns ?? 0,
     durationMs: resultMessage.duration_ms ?? durationMs,
     allowedTools,
+    lastAssistantText,
     errorMessage: resultMessage.errors?.[0],
   }
 
