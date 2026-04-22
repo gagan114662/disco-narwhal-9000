@@ -328,7 +328,6 @@ const COMMANDS = memoize((): Command[] => [
   ...(bridge ? [bridge] : []),
   ...(remoteControlServerCommand ? [remoteControlServerCommand] : []),
   ...(voiceCommand ? [voiceCommand] : []),
-  ...(subscribePr ? [subscribePr] : []),
   thinkback,
   thinkbackPlay,
   permissions,
