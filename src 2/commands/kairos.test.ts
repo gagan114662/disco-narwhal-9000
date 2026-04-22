@@ -120,6 +120,35 @@ describe('/kairos command', () => {
     expect((readJson(pausePath) as { paused: boolean }).paused).toBe(false)
   })
 
+  test('resume warns the user when the prior pause was an auth_failure', async () => {
+    // Users who /kairos resume without actually re-auth'ing would otherwise
+    // silently loop-retry on the next tick. Make the command explicitly
+    // call out the prerequisite.
+    const stateDir = join(process.env.CLAUDE_CONFIG_DIR as string, 'kairos')
+    mkdirSync(stateDir, { recursive: true })
+    writeFileSync(
+      join(stateDir, 'pause.json'),
+      JSON.stringify({
+        paused: true,
+        reason: 'auth_failure',
+        scope: 'global',
+        source: 'daemon',
+        setAt: '2026-04-22T12:00:00Z',
+        notice: 'KAIROS daemon hit an auth failure.',
+      }),
+    )
+
+    const out = await runKairosCommand('resume')
+    expect(out).toContain('auth_failure')
+    expect(out).toContain('`claude` interactively')
+  })
+
+  test('resume is silent on the auth warning when prior pause was not auth_failure', async () => {
+    await runKairosCommand('pause')
+    const out = await runKairosCommand('resume')
+    expect(out).toBe('Resumed KAIROS daemon.')
+  })
+
   test('status surfaces the daemon-authored re-auth notice verbatim', async () => {
     const stateDir = join(process.env.CLAUDE_CONFIG_DIR as string, 'kairos')
     mkdirSync(stateDir, { recursive: true })
@@ -192,5 +221,20 @@ describe('/kairos command', () => {
 
     const out = await runKairosCommand(`logs ${projectDir} 2`)
     expect(out).toBe(['{"a":2}', '{"a":3}'].join('\n'))
+  })
+
+  test('logs treats a bare number as a line count, not a project dir', async () => {
+    // Regression: the earlier heuristic matched any token containing `/`,
+    // `~`, or `.` — so `25.` would have been routed to project logs.
+    // Bare digits must always be a line count.
+    const stateDir = join(process.env.CLAUDE_CONFIG_DIR as string, 'kairos')
+    mkdirSync(stateDir, { recursive: true })
+    writeFileSync(
+      join(stateDir, 'daemon.out.log'),
+      ['a', 'b', 'c', 'd', ''].join('\n'),
+    )
+
+    const out = await runKairosCommand('logs 3')
+    expect(out).toBe(['b', 'c', 'd'].join('\n'))
   })
 })

@@ -77,16 +77,23 @@ export type ChildRunExitReason =
 export const AUTH_FAILURE_NOTICE =
   'KAIROS daemon hit an auth failure. Run `claude` interactively once to re-authorize the Keychain entry, then resume the daemon.'
 
+// Deliberately narrow: every pattern must pair an auth noun with an
+// auth-specific failure mode. A bare "keychain" or "no credentials"
+// substring is too easy to hit from unrelated macOS keychain services or
+// HTTP libraries — those would globally pause the daemon on a transient
+// error and force the user to re-auth for no reason.
 const AUTH_FAILURE_PATTERNS: readonly RegExp[] = [
   /\b401\b/,
+  /\b403\b[^\n]*(auth|token|credential|forbidden)/i,
   /unauthori[sz]ed/i,
-  /authentication[^a-z0-9]*(failed|required|error)/i,
+  /authentication[^a-z0-9]*(failed|required|error|denied|rejected)/i,
   /invalid[^a-z0-9]*api[^a-z0-9]*key/i,
   /not[^a-z0-9]*authenticated/i,
-  /keychain/i,
-  /no[^a-z0-9]*credentials/i,
+  /keychain[^\n]{0,80}(denied|errsec|locked|unauthori[sz]ed|auth[^a-z0-9]*failed|access[^a-z0-9]*denied)/i,
+  /errsecauthfailed/i,
+  /no[^a-z0-9]*(valid[^a-z0-9]*)?credentials[^a-z0-9]*(available|found|configured|provided)/i,
   /missing[^a-z0-9]*credentials/i,
-  /oauth[^a-z0-9]*(token[^a-z0-9]*)?(expired|invalid|required)/i,
+  /oauth[^a-z0-9]*(token[^a-z0-9]*)?(expired|invalid|required|revoked)/i,
 ]
 
 /** True when `err` is recognisably an auth-related failure. */

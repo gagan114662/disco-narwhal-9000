@@ -164,6 +164,11 @@ export function buildKairosPlist(inputs: KairosPlistInputs): string {
     stringElement(stdoutPath, '    '),
     '    <key>StandardErrorPath</key>',
     stringElement(stderrPath, '    '),
+    // Keychain ACLs are scoped to the Aqua (GUI) session — pin this so
+    // launchd doesn't try to start the agent in a background/ssh session
+    // where the Keychain is locked.
+    '    <key>LimitLoadToSessionType</key>',
+    stringElement('Aqua', '    '),
   ]
   // envEntries always has HOME/USER/PATH from the default merge above, so
   // this block is effectively always emitted — the conditional is defense

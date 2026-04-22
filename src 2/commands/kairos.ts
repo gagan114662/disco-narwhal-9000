@@ -148,7 +148,15 @@ async function handlePause(): Promise<string> {
 }
 
 async function handleResume(): Promise<string> {
+  const previous = await readJsonIfExists<PauseState>(getKairosPausePath())
   await setPauseState(false)
+  if (previous?.paused && previous.reason === 'auth_failure') {
+    return (
+      'Resumed KAIROS daemon. NOTE: previous pause was auth_failure — if ' +
+      'you have not run `claude` interactively to re-authorize the ' +
+      'Keychain entry, the next fired task will auth-fail again.'
+    )
+  }
   return 'Resumed KAIROS daemon.'
 }
 
@@ -211,8 +219,11 @@ export async function runKairosCommand(args: string): Promise<string> {
       return handleDashboard()
     case 'logs': {
       const first = rest[0]
-      const looksLikeDir = first !== undefined && /[/~.]/.test(first)
-      if (looksLikeDir) {
+      // A bare number is always a line count; anything else (including
+      // `.`, `./foo`, or a bare project name) is a project dir. Avoids
+      // the earlier heuristic's false-positive on tokens like `25.`.
+      const firstIsLineCount = first !== undefined && /^\d+$/.test(first)
+      if (first !== undefined && !firstIsLineCount) {
         return handleLogs(resolveProjectDir(first), rest[1])
       }
       return handleLogs(undefined, first)

@@ -220,6 +220,39 @@ export function makeAuthFailureHandler(
   }
 }
 
+/**
+ * In-memory latch that closes the race between project A detecting an auth
+ * failure and project B's next tick. `handleAuthFailure` starts with an
+ * async `writePauseState`, so without this flag B can read an unpaused
+ * file and fire a second child that burns another Keychain re-prompt.
+ *
+ * - `latch()` flips the in-memory flag synchronously.
+ * - `isPaused()` returns true if the on-disk pause is set OR the latch
+ *   is held. The latch clears when the user explicitly resumes
+ *   (pause.json written with `source: 'user'`).
+ */
+export function createAuthFailurePauseGate(
+  stateWriter: Pick<StateWriter, 'readPauseState'>,
+): { latch: () => void; isPaused: () => Promise<boolean> } {
+  let authFailureLatched = false
+  return {
+    latch() {
+      authFailureLatched = true
+    },
+    async isPaused() {
+      const state = await stateWriter.readPauseState()
+      if (state?.paused === false && state.source === 'user') {
+        // User has acknowledged the auth failure and resumed — clear the
+        // latch so the next tick can attempt a spawn. If auth is still
+        // broken, the next child run will re-latch.
+        authFailureLatched = false
+      }
+      if (state?.paused === true) return true
+      return authFailureLatched
+    },
+  }
+}
+
 export type RunFiredTaskOptions = {
   projectDir: string
   stateWriter: StateWriter
@@ -350,11 +383,13 @@ export async function runKairosWorker(
     2 * 60 * 1000
 
   const handleCapHit = makeCapHitHandler(stateWriter, now)
-  const handleAuthFailure = makeAuthFailureHandler(stateWriter, now)
-  const checkPaused = async (): Promise<boolean> => {
-    const state = await stateWriter.readPauseState()
-    return !!state?.paused
+  const authGate = createAuthFailurePauseGate(stateWriter)
+  const baseAuthFailureHandler = makeAuthFailureHandler(stateWriter, now)
+  const handleAuthFailure: AuthFailureHandler = async params => {
+    authGate.latch()
+    await baseAuthFailureHandler(params)
   }
+  const checkPaused = authGate.isPaused
 
   const syncGlobalStatus = async (state: 'starting' | 'idle' | 'stopped') => {
     await stateWriter.writeGlobalStatus({

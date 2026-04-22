@@ -349,6 +349,15 @@ describe('isAuthFailureError', () => {
     'budget exceeded',
     'timeout',
     '',
+    // Adversarial: words that used to match but shouldn't. A bare "keychain"
+    // mention or "no credentials" phrase from an unrelated subsystem must
+    // not globally pause the daemon.
+    'Keychain service temporarily unavailable',
+    'Keychain backup completed',
+    'no credentials needed for this endpoint',
+    'oauth configuration loaded',
+    'Authentication service starting',
+    'HTTP 403 file not found',
   ])('does NOT classify %p as auth failure', message => {
     expect(isAuthFailureError(new Error(message))).toBe(false)
   })

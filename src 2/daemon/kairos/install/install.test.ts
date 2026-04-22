@@ -90,6 +90,37 @@ describe('installKairosLaunchAgent', () => {
     expect(calls.map(c => c[0])).toEqual(['bootout', 'bootstrap', 'enable'])
     expect(existsSync(plistPath)).toBe(true)
   })
+
+  test('bootstrap failure leaves plist on disk (converges on retry)', async () => {
+    // If the sequence is bootout → write → bootstrap and bootstrap throws,
+    // the plist written to disk should reflect the NEW intent so that a
+    // subsequent install retry picks up where we left off without the
+    // caller having to re-specify the arguments.
+    const dir = makeTempDir()
+    const plistPath = join(dir, `${KAIROS_LAUNCH_AGENT_LABEL}.plist`)
+
+    await expect(
+      installKairosLaunchAgent({
+        plistPath,
+        uid: 501,
+        plistInputs: {
+          program: '/usr/local/bin/claude',
+          args: ['daemon', 'kairos'],
+        },
+        launchctl: async args => {
+          if (args[0] === 'bootstrap') {
+            throw new Error('bootstrap: permission denied')
+          }
+          return { stdout: '', stderr: '' }
+        },
+      }),
+    ).rejects.toThrow(/bootstrap/)
+
+    // Plist MUST be on disk with the new config so a retry works.
+    expect(existsSync(plistPath)).toBe(true)
+    const xml = readFileSync(plistPath, 'utf8')
+    expect(xml).toContain('<string>/usr/local/bin/claude</string>')
+  })
 })
 
 describe('uninstallKairosLaunchAgent', () => {

@@ -13,7 +13,8 @@
 //   bun run ./daemon/kairos/install/install.ts
 // or programmatically: `await installKairosLaunchAgent()`.
 
-import { mkdir, writeFile } from 'fs/promises'
+import { access, mkdir, writeFile } from 'fs/promises'
+import { constants as fsConstants } from 'fs'
 import { dirname } from 'path'
 import { promisify } from 'util'
 import { execFile as execFileCb } from 'child_process'
@@ -41,11 +42,19 @@ export async function resolveCanonicalClaude(
   overrides: {
     env?: NodeJS.ProcessEnv
     which?: (name: string) => Promise<string | null>
+    /**
+     * Validate that a resolved absolute path is executable. Default checks
+     * `X_OK` via fs.access. Tests can pass a no-op to skip the filesystem
+     * probe.
+     */
+    assertExecutable?: (path: string) => Promise<void>
   } = {},
 ): Promise<{ program: string; args: string[] }> {
   const env = overrides.env ?? process.env
+  const assertExec = overrides.assertExecutable ?? defaultAssertExecutable
   const envOverride = env.CLAUDE_BIN?.trim()
   if (envOverride) {
+    await assertExec(envOverride)
     return { program: envOverride, args: ['daemon', 'kairos'] }
   }
   const whichFn = overrides.which ?? defaultWhich
@@ -71,6 +80,18 @@ async function defaultWhich(name: string): Promise<string | null> {
     return trimmed.length > 0 ? trimmed : null
   } catch {
     return null
+  }
+}
+
+async function defaultAssertExecutable(path: string): Promise<void> {
+  try {
+    await access(path, fsConstants.X_OK)
+  } catch {
+    throw new Error(
+      `CLAUDE_BIN=${path} is not an executable file. Point it at an ` +
+        'absolute path to the claude CLI, or unset it to fall back to ' +
+        '`which claude`.',
+    )
   }
 }
 
@@ -102,7 +123,14 @@ export async function installKairosLaunchAgent(
   const runner = options.launchctl ?? defaultRunner
   const target = getLaunchctlServiceTarget(uid)
 
-  const defaults = await resolveCanonicalClaude()
+  // Skip the canonical-claude probe when the caller has already pinned
+  // program + args. Avoids touching CLAUDE_BIN / PATH during test runs
+  // that inject an explicit program path.
+  const needsResolution =
+    !options.plistInputs?.program || !options.plistInputs?.args
+  const defaults = needsResolution
+    ? await resolveCanonicalClaude()
+    : { program: '', args: [] as string[] }
   const inputs: KairosPlistInputs = {
     program: options.plistInputs?.program ?? defaults.program,
     args: options.plistInputs?.args ?? defaults.args,
@@ -114,17 +142,21 @@ export async function installKairosLaunchAgent(
     runAtLoad: options.plistInputs?.runAtLoad,
   }
 
-  await mkdir(dirname(plistPath), { recursive: true })
-  await writeFile(plistPath, buildKairosPlist(inputs), 'utf8')
-
-  // Bootout any existing instance first so re-installs are idempotent.
-  // launchctl returns non-zero when the service isn't loaded yet — swallow
-  // that single class of error and propagate anything else.
+  // Order matters: bootout the OLD service before writing the NEW plist.
+  // That way any mid-install failure leaves the on-disk plist matching the
+  // (now-unloaded) intent, so a retry converges cleanly. Writing first
+  // would briefly advertise new config for a service still running with
+  // old config. launchctl returns non-zero when the service isn't loaded
+  // yet — swallow that single class of error and propagate anything else.
   try {
     await runner(['bootout', target])
   } catch {
     // expected on first install
   }
+
+  await mkdir(dirname(plistPath), { recursive: true })
+  await writeFile(plistPath, buildKairosPlist(inputs), 'utf8')
+
   await runner(['bootstrap', `gui/${uid}`, plistPath])
   await runner(['enable', target])
 

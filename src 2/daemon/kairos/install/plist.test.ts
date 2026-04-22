@@ -30,6 +30,11 @@ describe('buildKairosPlist', () => {
     expect(xml).toContain('<key>KeepAlive</key>')
     expect(xml).toContain('<true/>')
     expect(xml).toContain('<key>ThrottleInterval</key>')
+    // Keychain access requires a graphical (Aqua) session — pin it so
+    // launchd won't start the agent in a background/ssh context where the
+    // Keychain is locked.
+    expect(xml).toContain('<key>LimitLoadToSessionType</key>')
+    expect(xml).toContain('<string>Aqua</string>')
   })
 
   test('escapes XML metacharacters in program arguments', () => {

@@ -5,8 +5,14 @@ import { tmpdir } from 'os'
 import type { CronTask } from '../../utils/cronTasks.js'
 import type { ChildLauncher } from './childRunner.js'
 import { AUTH_FAILURE_NOTICE } from './childRunner.js'
+import type { PauseState } from './stateWriter.js'
 import { createStateWriter } from './stateWriter.js'
-import { makeAuthFailureHandler, makeCapHitHandler, makeRunFiredTask } from './worker.js'
+import {
+  createAuthFailurePauseGate,
+  makeAuthFailureHandler,
+  makeCapHitHandler,
+  makeRunFiredTask,
+} from './worker.js'
 import {
   getKairosGlobalEventsPath,
   getKairosPausePath,
@@ -125,5 +131,63 @@ describe('auth-failure integration', () => {
         e => e.kind === 'auth_failure',
       ),
     ).toBe(true)
+  })
+})
+
+describe('createAuthFailurePauseGate', () => {
+  // Unit tests for the in-memory latch. Covers the cross-project race
+  // where project A's async writePauseState hasn't landed on disk yet
+  // when project B's checkPaused runs.
+  function makeStubReader(state: PauseState | null) {
+    let current = state
+    return {
+      readPauseState: async () => current,
+      set: (next: PauseState | null) => {
+        current = next
+      },
+    }
+  }
+
+  test('returns on-disk paused state when latch is not set', async () => {
+    const reader = makeStubReader({
+      paused: true,
+      reason: 'cap_hit',
+      scope: 'global',
+      source: 'daemon',
+    })
+    const gate = createAuthFailurePauseGate(reader)
+    expect(await gate.isPaused()).toBe(true)
+    reader.set({ paused: false, source: 'user' })
+    expect(await gate.isPaused()).toBe(false)
+  })
+
+  test('latch flips to paused even when on-disk state is still unpaused', async () => {
+    // Models the race window: A called handleAuthFailure (which flips the
+    // in-memory latch synchronously) but the writePauseState hasn't
+    // landed. B's isPaused() must still return true.
+    const reader = makeStubReader(null)
+    const gate = createAuthFailurePauseGate(reader)
+    expect(await gate.isPaused()).toBe(false)
+
+    gate.latch()
+    expect(await gate.isPaused()).toBe(true)
+
+    reader.set({ paused: false, source: 'daemon' })
+    expect(await gate.isPaused()).toBe(true)
+  })
+
+  test('user-authored resume clears the latch; daemon-authored does not', async () => {
+    const reader = makeStubReader(null)
+    const gate = createAuthFailurePauseGate(reader)
+    gate.latch()
+    expect(await gate.isPaused()).toBe(true)
+
+    // Daemon-authored unpause (shouldn't happen in practice, defensive).
+    reader.set({ paused: false, source: 'daemon' })
+    expect(await gate.isPaused()).toBe(true)
+
+    // User runs /kairos resume → pause.json has {paused:false, source:'user'}.
+    reader.set({ paused: false, source: 'user' })
+    expect(await gate.isPaused()).toBe(false)
   })
 })
