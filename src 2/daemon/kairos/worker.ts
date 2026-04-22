@@ -1,9 +1,25 @@
 import { appendFile, mkdir, writeFile } from 'fs/promises'
 import type { Writable } from 'stream'
+import type {
+  ChildLauncher,
+  ChildRunResult,
+} from './childRunner.js'
+import { createSdkChildLauncher, runChild } from './childRunner.js'
+import {
+  createCostTracker,
+  type CapHit,
+  type CostCaps,
+  type CostTracker,
+} from './costTracker.js'
 import { createProjectRegistry } from './projectRegistry.js'
 import { createProjectWorker } from './projectWorker.js'
-import { getKairosStateDir, getKairosStatusPath, getKairosStdoutLogPath } from './paths.js'
-import { createStateWriter } from './stateWriter.js'
+import type { CronTask } from '../../utils/cronTasks.js'
+import {
+  getKairosStateDir,
+  getKairosStatusPath,
+  getKairosStdoutLogPath,
+} from './paths.js'
+import { createStateWriter, type StateWriter } from './stateWriter.js'
 
 type KairosStatus = {
   kind: 'kairos'
@@ -14,11 +30,42 @@ type KairosStatus = {
   stoppedAt?: string
 }
 
+const DEFAULT_ALLOWED_TOOLS = ['Read']
+
+function parseNumberEnv(value: string | undefined): number | undefined {
+  if (value === undefined || value === '') return undefined
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
+function parseAllowedToolsEnv(value: string | undefined): string[] | undefined {
+  if (value === undefined || value === '') return undefined
+  return value
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean)
+}
+
 export type RunKairosWorkerOptions = {
   signal?: AbortSignal
   stdout?: Pick<Writable, 'write'>
   now?: () => Date
   pid?: number
+  /**
+   * When provided, fired tasks spawn a child Claude run via this launcher.
+   * When omitted and `enableChildRuns` is false, fired tasks are still
+   * logged but no external run is made. Defaults to the SDK-backed launcher.
+   */
+  childLauncher?: ChildLauncher
+  /**
+   * Explicit opt-out switch. Tests use this to keep the worker's old
+   * no-child-run behavior without also having to stub the launcher.
+   */
+  enableChildRuns?: boolean
+  caps?: CostCaps
+  allowedTools?: string[]
+  maxTurns?: number
+  timeoutMs?: number
 }
 
 function formatLogLine(message: string, now: Date, pid: number): string {
@@ -58,6 +105,143 @@ function waitForAbort(signal?: AbortSignal): Promise<void> {
   })
 }
 
+/**
+ * Computes the effective tool allowlist applied at child spawn time.
+ * A future phase can thread per-task overrides through here; for now
+ * every task gets the same daemon-level allowlist so the child cannot
+ * exceed what the operator opted into.
+ */
+export function computeEffectiveAllowedTools(
+  defaults: string[],
+  _task: CronTask,
+): string[] {
+  return [...defaults]
+}
+
+type CapHitHandler = (params: {
+  capHit: CapHit
+  projectDir: string
+  task: CronTask
+}) => Promise<void>
+
+/**
+ * Handle the cap-hit path **without** starting a recursive child run.
+ * The daemon itself writes the notice directly to global events.jsonl and
+ * flips pause.json. Anything watching those files (e.g. the dashboard from
+ * Phase 4) picks up the state change.
+ */
+export function makeCapHitHandler(
+  stateWriter: StateWriter,
+  now: () => Date,
+): CapHitHandler {
+  return async ({ capHit, projectDir, task }) => {
+    const t = now().toISOString()
+    await stateWriter.writePauseState({
+      paused: true,
+      reason: 'cap_hit',
+      scope: capHit.scope,
+      cap: capHit.cap,
+      current: capHit.current,
+      setAt: t,
+      source: 'daemon',
+    })
+    await stateWriter.appendGlobalEvent({
+      kind: 'cap_hit_notice',
+      t,
+      scope: capHit.scope,
+      cap: capHit.cap,
+      current: capHit.current,
+      source: 'daemon',
+      projectDir: capHit.scope === 'project' ? projectDir : undefined,
+    })
+    await stateWriter.appendProjectEvent(projectDir, {
+      kind: 'cap_hit_notice',
+      t,
+      scope: capHit.scope,
+      cap: capHit.cap,
+      current: capHit.current,
+      source: 'daemon',
+      taskId: task.id,
+    })
+  }
+}
+
+export type RunFiredTaskOptions = {
+  projectDir: string
+  stateWriter: StateWriter
+  costTracker: CostTracker | null
+  launcher: ChildLauncher | null
+  defaultAllowedTools: string[]
+  maxTurns: number
+  timeoutMs: number
+  handleCapHit: CapHitHandler
+  now: () => Date
+}
+
+export function makeRunFiredTask(options: RunFiredTaskOptions) {
+  const {
+    projectDir,
+    stateWriter,
+    costTracker,
+    launcher,
+    defaultAllowedTools,
+    maxTurns,
+    timeoutMs,
+    handleCapHit,
+    now,
+  } = options
+
+  return async function runFiredTask(
+    task: CronTask,
+    source: 'event' | 'catchup',
+  ): Promise<{ ok: boolean; paused: boolean; result?: ChildRunResult }> {
+    if (!launcher) {
+      return { ok: true, paused: false }
+    }
+
+    const allowedTools = computeEffectiveAllowedTools(defaultAllowedTools, task)
+
+    const result = await runChild(
+      {
+        taskId: task.id,
+        prompt: task.prompt,
+        projectDir,
+        allowedTools,
+        maxTurns,
+        timeoutMs,
+      },
+      {
+        launcher,
+        now,
+        onEvent: event =>
+          stateWriter.appendProjectEvent(projectDir, {
+            ...event,
+            source,
+            taskId: task.id,
+          }),
+      },
+    )
+
+    let paused = false
+    if (costTracker) {
+      const { capHit } = await costTracker.record({
+        projectDir,
+        taskId: task.id,
+        runId: result.runId,
+        costUSD: result.costUSD,
+        numTurns: result.numTurns,
+        durationMs: result.durationMs,
+      })
+      if (capHit) {
+        await handleCapHit({ capHit, projectDir, task })
+        paused = true
+      }
+    }
+
+    return { ok: result.ok, paused, result }
+  }
+}
+
 export async function runKairosWorker(
   options: RunKairosWorkerOptions = {},
 ): Promise<number> {
@@ -72,6 +256,37 @@ export async function runKairosWorker(
     string,
     ReturnType<typeof createProjectWorker>
   >()
+
+  const enableChildRuns = options.enableChildRuns ?? !!options.childLauncher
+  const launcher: ChildLauncher | null = enableChildRuns
+    ? options.childLauncher ?? createSdkChildLauncher()
+    : null
+
+  const caps: CostCaps = options.caps ?? {
+    perProjectUSD: parseNumberEnv(process.env.KAIROS_COST_CAP_PROJECT_USD),
+    globalUSD: parseNumberEnv(process.env.KAIROS_COST_CAP_GLOBAL_USD),
+  }
+  const costTracker =
+    caps.perProjectUSD !== undefined || caps.globalUSD !== undefined
+      ? createCostTracker({ caps, stateWriter, now })
+      : null
+
+  const defaultAllowedTools =
+    options.allowedTools ??
+    parseAllowedToolsEnv(process.env.KAIROS_ALLOWED_TOOLS) ??
+    DEFAULT_ALLOWED_TOOLS
+  const maxTurns =
+    options.maxTurns ?? parseNumberEnv(process.env.KAIROS_MAX_TURNS) ?? 3
+  const timeoutMs =
+    options.timeoutMs ??
+    parseNumberEnv(process.env.KAIROS_TIMEOUT_MS) ??
+    2 * 60 * 1000
+
+  const handleCapHit = makeCapHitHandler(stateWriter, now)
+  const checkPaused = async (): Promise<boolean> => {
+    const state = await stateWriter.readPauseState()
+    return !!state?.paused
+  }
 
   const syncGlobalStatus = async (state: 'starting' | 'idle' | 'stopped') => {
     await stateWriter.writeGlobalStatus({
@@ -89,9 +304,22 @@ export async function runKairosWorker(
   const addProject = async (projectDir: string) => {
     if (activeWorkers.has(projectDir)) return
     await stateWriter.ensureProjectDir(projectDir)
+    const runFiredTask = makeRunFiredTask({
+      projectDir,
+      stateWriter,
+      costTracker,
+      launcher,
+      defaultAllowedTools,
+      maxTurns,
+      timeoutMs,
+      handleCapHit,
+      now,
+    })
     const worker = createProjectWorker(projectDir, {
       stateWriter,
       now,
+      runFiredTask,
+      checkPaused,
     })
     activeWorkers.set(projectDir, worker)
     await stateWriter.appendGlobalEvent({
