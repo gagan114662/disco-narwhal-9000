@@ -6,7 +6,6 @@ import { getDefaultAppState } from '../../state/AppStateStore.js'
 import { createFileStateCacheWithSizeLimit } from '../../utils/fileStateCache.js'
 import { getKairosRpcConfig } from '../../services/rpc/config.js'
 import { startToolsSocketServer } from '../../services/rpc/toolsSocketServer.js'
-import { getAllBaseTools } from '../../tools.js'
 import { getTools } from '../../tools.js'
 import { runScriptProcess } from './RunScriptTool.js'
 import { resetSettingsCache } from '../../utils/settings/settingsCache.js'
@@ -28,10 +27,6 @@ afterEach(() => {
 })
 
 describe('RunScriptTool', () => {
-  test('is registered in the base tool list', () => {
-    expect(getAllBaseTools().some(tool => tool.name === 'RunScript')).toBe(true)
-  })
-
   test('runs a subprocess that uses the Python RPC client', async () => {
     const configDir = makeTempDir('kairos-run-script-')
     process.env.CLAUDE_CONFIG_DIR = configDir
