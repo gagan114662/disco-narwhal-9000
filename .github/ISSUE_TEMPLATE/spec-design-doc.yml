@@ -1,0 +1,76 @@
+name: Spec / design doc
+description: Define the intended approach before implementation fans out.
+title: "[spec] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this when the next step is to produce a decision-ready design, not to directly ship code.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What decision, ambiguity, or coordination cost does this spec need to resolve?
+      placeholder: Describe the unresolved problem and why a design doc is the right next move.
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: User/Developer Impact
+      description: Who benefits from having this design clarified?
+      placeholder: Explain what uncertainty, churn, or blocked work this spec should remove.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What systems, interfaces, or journeys must the design cover?
+      placeholder: List the surfaces the design must explain well enough for implementation to begin.
+    validations:
+      required: true
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Out of Scope
+      description: What should this spec intentionally avoid deciding?
+      placeholder: Call out migrations, implementation details, or future ideas that are not part of this document.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance Criteria
+      description: What makes the design reviewable and complete?
+      placeholder: |
+        - [ ] Key decisions are documented with rationale
+        - [ ] Open questions and follow-ups are made explicit
+    validations:
+      required: true
+  - type: textarea
+    id: suggested_entry_points
+    attributes:
+      label: Suggested Entry Points
+      description: What code, docs, or prior issues should the author inspect first?
+      placeholder: Point to current implementations, docs, or bugs that this design should build from.
+    validations:
+      required: true
+  - type: textarea
+    id: verification_test_plan
+    attributes:
+      label: Verification / Test Plan
+      description: How will reviewers validate that this spec is actionable?
+      placeholder: Describe the review checklist, walkthrough, or artifact checks that prove the doc is complete.
+    validations:
+      required: true
+  - type: dropdown
+    id: trunk_expectations
+    attributes:
+      label: Trunk Expectations
+      description: Will the resulting implementation likely remain trunk-safe?
+      options:
+        - trunk-safe
+        - trunk-touch
+    validations:
+      required: true

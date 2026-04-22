@@ -1,0 +1,76 @@
+name: Leaf build
+description: Small, execution-ready implementation slice with explicit boundaries.
+title: "[leaf build] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this when the work should be executable by a contributor or coding agent without a planning round-trip.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is broken, missing, or ambiguous today?
+      placeholder: Describe the concrete gap and why it matters now.
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: User/Developer Impact
+      description: Who is blocked or slowed down, and what improves once this lands?
+      placeholder: Name the workflow, symptom, or friction this removes.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What is explicitly in bounds for this slice?
+      placeholder: List the files, commands, screens, or behaviors this issue can touch.
+    validations:
+      required: true
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Out of Scope
+      description: What nearby work should stay out of this issue?
+      placeholder: Call out tempting refactors, cleanup, or follow-on work that is not part of this slice.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance Criteria
+      description: Write concrete completion checks.
+      placeholder: |
+        - [ ] Observable behavior or artifact changes in a specific way
+        - [ ] Reviewers can tell when the work is done without guessing
+    validations:
+      required: true
+  - type: textarea
+    id: suggested_entry_points
+    attributes:
+      label: Suggested Entry Points
+      description: Where should a contributor start?
+      placeholder: Point to files, tests, commands, or services that expose the intended change surface.
+    validations:
+      required: true
+  - type: textarea
+    id: verification_test_plan
+    attributes:
+      label: Verification / Test Plan
+      description: How will this be verified?
+      placeholder: List the exact automated test command or manual flow that proves the change works.
+    validations:
+      required: true
+  - type: dropdown
+    id: trunk_expectations
+    attributes:
+      label: Trunk Expectations
+      description: Does this issue stay within trunk-safe boundaries?
+      options:
+        - trunk-safe
+        - trunk-touch
+    validations:
+      required: true
