@@ -67,6 +67,41 @@ export type ChildRunExitReason =
   | 'error'
   | 'max_turns'
   | 'max_budget'
+  | 'auth_failure'
+
+/**
+ * User-facing notice surfaced when the daemon detects an auth failure.
+ * Keep wording stable — the dashboard, pause file, and status command all
+ * quote this string verbatim.
+ */
+export const AUTH_FAILURE_NOTICE =
+  'KAIROS daemon hit an auth failure. Run `claude` interactively once to re-authorize the Keychain entry, then resume the daemon.'
+
+// Deliberately narrow: every pattern must pair an auth noun with an
+// auth-specific failure mode. A bare "keychain" or "no credentials"
+// substring is too easy to hit from unrelated macOS keychain services or
+// HTTP libraries — those would globally pause the daemon on a transient
+// error and force the user to re-auth for no reason.
+const AUTH_FAILURE_PATTERNS: readonly RegExp[] = [
+  /\b401\b/,
+  /\b403\b[^\n]*(auth|token|credential|forbidden)/i,
+  /unauthori[sz]ed/i,
+  /authentication[^a-z0-9]*(failed|required|error|denied|rejected)/i,
+  /invalid[^a-z0-9]*api[^a-z0-9]*key/i,
+  /not[^a-z0-9]*authenticated/i,
+  /keychain[^\n]{0,80}(denied|errsec|locked|unauthori[sz]ed|auth[^a-z0-9]*failed|access[^a-z0-9]*denied)/i,
+  /errsecauthfailed/i,
+  /no[^a-z0-9]*(valid[^a-z0-9]*)?credentials[^a-z0-9]*(available|found|configured|provided)/i,
+  /missing[^a-z0-9]*credentials/i,
+  /oauth[^a-z0-9]*(token[^a-z0-9]*)?(expired|invalid|required|revoked)/i,
+]
+
+/** True when `err` is recognisably an auth-related failure. */
+export function isAuthFailureError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err ?? '')
+  if (!message) return false
+  return AUTH_FAILURE_PATTERNS.some(pattern => pattern.test(message))
+}
 
 export type ChildRunResult = {
   runId: string
@@ -120,6 +155,15 @@ export type ChildEvent =
       t: string
       runId: string
       timeoutMs: number
+    }
+  | {
+      kind: 'auth_failure'
+      t: string
+      runId: string
+      taskId: string
+      projectDir: string
+      notice: string
+      errorMessage: string
     }
 
 export type ChildRunDeps = {
@@ -296,6 +340,19 @@ export async function runChild(
   }
 
   if (streamError) {
+    const authFailure = isAuthFailureError(streamError)
+    const exitReason: ChildRunExitReason = authFailure ? 'auth_failure' : 'error'
+    if (authFailure) {
+      await deps.onEvent({
+        kind: 'auth_failure',
+        t: now().toISOString(),
+        runId,
+        taskId: options.taskId,
+        projectDir: options.projectDir,
+        notice: AUTH_FAILURE_NOTICE,
+        errorMessage: streamError.message,
+      })
+    }
     await deps.onEvent({
       kind: 'child_error',
       t: now().toISOString(),
@@ -305,14 +362,16 @@ export async function runChild(
     const result: ChildRunResult = {
       runId,
       ok: false,
-      exitReason: 'error',
+      exitReason,
       sessionId,
       costUSD: resultMessage?.total_cost_usd ?? 0,
       numTurns: resultMessage?.num_turns ?? 0,
       durationMs,
       allowedTools,
       lastAssistantText,
-      errorMessage: streamError.message,
+      errorMessage: authFailure
+        ? `${AUTH_FAILURE_NOTICE} (${streamError.message})`
+        : streamError.message,
     }
     await deps.onEvent({
       kind: 'child_finished',

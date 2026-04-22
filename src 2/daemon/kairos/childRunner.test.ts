@@ -5,7 +5,11 @@ import type {
   ChildLauncherParams,
   ChildStreamMessage,
 } from './childRunner.js'
-import { runChild } from './childRunner.js'
+import {
+  AUTH_FAILURE_NOTICE,
+  isAuthFailureError,
+  runChild,
+} from './childRunner.js'
 
 type RecordedCall = {
   params: ChildLauncherParams
@@ -289,5 +293,78 @@ describe('childRunner.runChild', () => {
     expect(result.exitReason).toBe('max_budget')
     expect(result.costUSD).toBe(1.0)
     expect(result.errorMessage).toBe('budget exceeded')
+  })
+
+  test('auth failure: launcher throws an auth error → exitReason=auth_failure + auth_failure event', async () => {
+    const events: ChildEvent[] = []
+    const { launcher } = makeLauncher([], {
+      throwError: new Error('Request failed: 401 Unauthorized'),
+    })
+
+    const result = await runChild(
+      {
+        taskId: 't-auth',
+        prompt: 'x',
+        projectDir: '/tmp/proj',
+        allowedTools: [],
+        runId: 'run-auth',
+      },
+      {
+        launcher,
+        onEvent: e => {
+          events.push(e)
+        },
+      },
+    )
+
+    expect(result.ok).toBe(false)
+    expect(result.exitReason).toBe('auth_failure')
+    expect(result.errorMessage).toContain('re-authorize')
+
+    const authEvent = events.find(e => e.kind === 'auth_failure')
+    expect(authEvent).toBeDefined()
+    if (authEvent && authEvent.kind === 'auth_failure') {
+      expect(authEvent.notice).toBe(AUTH_FAILURE_NOTICE)
+      expect(authEvent.taskId).toBe('t-auth')
+      expect(authEvent.projectDir).toBe('/tmp/proj')
+    }
+  })
+})
+
+describe('isAuthFailureError', () => {
+  test.each([
+    '401 Unauthorized',
+    'Authentication failed',
+    'authentication required',
+    'Invalid API key',
+    'Keychain returned errSecAuthFailed',
+    'OAuth token expired',
+    'no credentials available',
+  ])('classifies %p as auth failure', message => {
+    expect(isAuthFailureError(new Error(message))).toBe(true)
+  })
+
+  test.each([
+    'ECONNREFUSED',
+    'budget exceeded',
+    'timeout',
+    '',
+    // Adversarial: words that used to match but shouldn't. A bare "keychain"
+    // mention or "no credentials" phrase from an unrelated subsystem must
+    // not globally pause the daemon.
+    'Keychain service temporarily unavailable',
+    'Keychain backup completed',
+    'no credentials needed for this endpoint',
+    'oauth configuration loaded',
+    'Authentication service starting',
+    'HTTP 403 file not found',
+  ])('does NOT classify %p as auth failure', message => {
+    expect(isAuthFailureError(new Error(message))).toBe(false)
+  })
+
+  test('tolerates non-Error values', () => {
+    expect(isAuthFailureError('401 Unauthorized')).toBe(true)
+    expect(isAuthFailureError(null)).toBe(false)
+    expect(isAuthFailureError(undefined)).toBe(false)
   })
 })
