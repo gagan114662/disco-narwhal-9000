@@ -238,6 +238,85 @@ describe('/kairos command', () => {
     expect(out).toBe(['b', 'c', 'd'].join('\n'))
   })
 
+  test('skills export emits a self-contained manifest', async () => {
+    const projectDir = makeProjectDir()
+    setProjectRoot(projectDir)
+    mkdirSync(join(projectDir, '.claude', 'skills', 'example'), {
+      recursive: true,
+    })
+    writeFileSync(
+      join(projectDir, '.claude', 'skills', 'example', 'SKILL.md'),
+      [
+        '---',
+        'name: example',
+        'description: Example exported skill.',
+        '---',
+        '',
+        'Use this skill to verify command routing.',
+        '',
+      ].join('\n'),
+    )
+
+    const out = await runKairosCommand('skills export example')
+    const parsed = JSON.parse(out) as {
+      skills: Array<{ url: string }>
+    }
+    expect(parsed.skills[0]?.url.startsWith('data:text/markdown;base64,')).toBe(
+      true,
+    )
+  })
+
+  test('skills import previews first and writes on --yes', async () => {
+    const sourceDir = makeProjectDir()
+    mkdirSync(join(sourceDir, 'example'), { recursive: true })
+    writeFileSync(
+      join(sourceDir, 'example', 'SKILL.md'),
+      [
+        '---',
+        'name: example',
+        'description: Example imported skill.',
+        '---',
+        '',
+        'Use this skill to verify import command routing.',
+        '',
+      ].join('\n'),
+    )
+
+    const preview = await runKairosCommand(
+      `skills import ${join(sourceDir, 'example')}`,
+    )
+    expect(preview).toContain('Import preview')
+
+    const confirmed = await runKairosCommand(
+      `skills import ${join(sourceDir, 'example')} --yes`,
+    )
+    expect(confirmed).toContain('Imported skill')
+  })
+
+  test('skills import supports confirmed pasted JSON manifests', async () => {
+    const projectDir = makeProjectDir()
+    setProjectRoot(projectDir)
+    mkdirSync(join(projectDir, '.claude', 'skills', 'example'), {
+      recursive: true,
+    })
+    writeFileSync(
+      join(projectDir, '.claude', 'skills', 'example', 'SKILL.md'),
+      [
+        '---',
+        'name: example',
+        'description: Example exported skill.',
+        '---',
+        '',
+        'Use this skill to verify JSON blob import routing.',
+        '',
+      ].join('\n'),
+    )
+
+    const manifest = await runKairosCommand('skills export example')
+    const confirmed = await runKairosCommand(`skills import --yes ${manifest}`)
+    expect(confirmed).toContain('Imported skill')
+  })
+
   test('memory-proposals list shows pending proposals', async () => {
     const { queueMemoryProposal } = await import(
       '../services/memory/proposalQueue.js'
