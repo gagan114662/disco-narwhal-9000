@@ -12,3 +12,27 @@ export function getKairosStatusPath(): string {
 export function getKairosStdoutLogPath(): string {
   return join(getKairosStateDir(), 'daemon.out.log')
 }
+
+export function getKairosGlobalEventsPath(): string {
+  return join(getKairosStateDir(), 'events.jsonl')
+}
+
+export function getKairosGlobalCostsPath(): string {
+  return join(getKairosStateDir(), 'costs.json')
+}
+
+export function getKairosPausePath(): string {
+  return join(getKairosStateDir(), 'pause.json')
+}
+
+export function getProjectKairosDir(projectDir: string): string {
+  return join(projectDir, '.claude', 'kairos')
+}
+
+export function getProjectKairosEventsPath(projectDir: string): string {
+  return join(getProjectKairosDir(projectDir), 'events.jsonl')
+}
+
+export function getProjectKairosCostsPath(projectDir: string): string {
+  return join(getProjectKairosDir(projectDir), 'costs.json')
+}

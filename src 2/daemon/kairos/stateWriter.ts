@@ -1,7 +1,15 @@
-import { appendFile, mkdir, rename, writeFile } from 'fs/promises'
+import { appendFile, mkdir, readFile, rename, writeFile } from 'fs/promises'
 import { dirname, join } from 'path'
 import { jsonStringify } from '../../utils/slowOperations.js'
-import { getKairosStateDir } from './paths.js'
+import {
+  getKairosGlobalCostsPath,
+  getKairosGlobalEventsPath,
+  getKairosPausePath,
+  getKairosStateDir,
+  getProjectKairosCostsPath,
+  getProjectKairosDir,
+  getProjectKairosEventsPath,
+} from './paths.js'
 
 export type ProjectStatus = {
   projectDir: string
@@ -24,6 +32,16 @@ export type ProjectLogEvent =
   | { kind: 'finished'; t: string; source: 'event' | 'catchup' }
   | { kind: 'project_registered'; t: string; projectDir: string }
   | { kind: 'project_unregistered'; t: string; projectDir: string }
+  | { kind: 'skipped_paused'; t: string; taskId: string; reason: string }
+  | {
+      kind: 'cap_hit_notice'
+      t: string
+      scope: 'project' | 'global'
+      cap: number
+      current: number
+      source: 'daemon'
+      projectDir?: string
+    }
 
 export type GlobalStatus = {
   kind: 'kairos'
@@ -34,6 +52,25 @@ export type GlobalStatus = {
   projects: number
   lastEventAt?: string
   stoppedAt?: string
+}
+
+export type CostsFile = {
+  totalUSD: number
+  totalTurns: number
+  runs: number
+  lastRunUSD?: number
+  lastRunAt?: string
+  updatedAt: string
+}
+
+export type PauseState = {
+  paused: boolean
+  reason?: 'cap_hit'
+  scope?: 'project' | 'global'
+  cap?: number
+  current?: number
+  setAt?: string
+  source: 'daemon' | 'user'
 }
 
 const writeQueues = new Map<string, Promise<void>>()
@@ -71,9 +108,16 @@ async function appendJsonLine(path: string, value: unknown): Promise<void> {
   })
 }
 
-function getProjectKairosDir(projectDir: string): string {
-  return join(projectDir, '.claude', 'kairos')
+async function readJsonFile<T>(path: string): Promise<T | null> {
+  try {
+    const raw = await readFile(path, 'utf8')
+    return JSON.parse(raw) as T
+  } catch {
+    return null
+  }
 }
+
+export type StateWriter = Awaited<ReturnType<typeof createStateWriter>>
 
 export async function createStateWriter() {
   await mkdir(getKairosStateDir(), { recursive: true })
@@ -83,7 +127,7 @@ export async function createStateWriter() {
       await writeJsonAtomic(join(getKairosStateDir(), 'status.json'), status)
     },
     async appendGlobalEvent(event: ProjectLogEvent): Promise<void> {
-      await appendJsonLine(join(getKairosStateDir(), 'events.jsonl'), event)
+      await appendJsonLine(getKairosGlobalEventsPath(), event)
     },
     async ensureProjectDir(projectDir: string): Promise<void> {
       await mkdir(getProjectKairosDir(projectDir), { recursive: true })
@@ -100,6 +144,33 @@ export async function createStateWriter() {
       const dir = getProjectKairosDir(projectDir)
       await mkdir(dir, { recursive: true })
       await appendJsonLine(join(dir, 'log.jsonl'), event)
+    },
+    async appendProjectEvent(
+      projectDir: string,
+      event: Record<string, unknown>,
+    ): Promise<void> {
+      await appendJsonLine(getProjectKairosEventsPath(projectDir), event)
+    },
+    async readGlobalCosts(): Promise<CostsFile | null> {
+      return readJsonFile<CostsFile>(getKairosGlobalCostsPath())
+    },
+    async writeGlobalCosts(costs: CostsFile): Promise<void> {
+      await writeJsonAtomic(getKairosGlobalCostsPath(), costs)
+    },
+    async readProjectCosts(projectDir: string): Promise<CostsFile | null> {
+      return readJsonFile<CostsFile>(getProjectKairosCostsPath(projectDir))
+    },
+    async writeProjectCosts(
+      projectDir: string,
+      costs: CostsFile,
+    ): Promise<void> {
+      await writeJsonAtomic(getProjectKairosCostsPath(projectDir), costs)
+    },
+    async readPauseState(): Promise<PauseState | null> {
+      return readJsonFile<PauseState>(getKairosPausePath())
+    },
+    async writePauseState(state: PauseState): Promise<void> {
+      await writeJsonAtomic(getKairosPausePath(), state)
     },
     getProjectKairosDir,
   }
