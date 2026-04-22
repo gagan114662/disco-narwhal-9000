@@ -134,6 +134,17 @@ export type ChildEvent =
       sessionId?: string
     }
   | {
+      // Emitted once per tool_use content block seen in an assistant message.
+      // Used by downstream observers (e.g. skillLearning) to know which tools
+      // the child actually invoked without re-parsing the SDK stream.
+      kind: 'tool_used'
+      t: string
+      runId: string
+      toolName: string
+      toolInput?: unknown
+      sessionId?: string
+    }
+  | {
       kind: 'child_finished'
       t: string
       runId: string
@@ -188,6 +199,33 @@ function exitReasonFromResult(
     default:
       return 'error'
   }
+}
+
+export type ToolUseBlock = { name: string; input?: unknown }
+
+/**
+ * Extract `tool_use` content blocks from an assistant message. Order preserved
+ * so observers can see the invocation sequence. Unknown shapes yield [].
+ */
+export function extractToolUses(message: unknown): ToolUseBlock[] {
+  if (!message || typeof message !== 'object') return []
+  const content = (message as { content?: unknown }).content
+  if (!Array.isArray(content)) return []
+  const out: ToolUseBlock[] = []
+  for (const block of content) {
+    if (
+      block &&
+      typeof block === 'object' &&
+      (block as { type?: unknown }).type === 'tool_use' &&
+      typeof (block as { name?: unknown }).name === 'string'
+    ) {
+      out.push({
+        name: (block as { name: string }).name,
+        input: (block as { input?: unknown }).input,
+      })
+    }
+  }
+  return out
 }
 
 function extractAssistantText(message: unknown): string | undefined {
@@ -287,6 +325,16 @@ export async function runChild(
       if (message.type === 'assistant') {
         lastAssistantText =
           extractAssistantText(message.message) ?? lastAssistantText
+        for (const toolUse of extractToolUses(message.message)) {
+          await deps.onEvent({
+            kind: 'tool_used',
+            t: now().toISOString(),
+            runId,
+            toolName: toolUse.name,
+            toolInput: toolUse.input,
+            sessionId,
+          })
+        }
       }
 
       if (message.type === 'result') {

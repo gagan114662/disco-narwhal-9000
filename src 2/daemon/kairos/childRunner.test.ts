@@ -114,6 +114,109 @@ describe('childRunner.runChild', () => {
     expect(finishedEvents).toHaveLength(1)
   })
 
+  test('emits tool_used for each tool_use block in assistant messages', async () => {
+    const events: ChildEvent[] = []
+    const { launcher } = makeLauncher([
+      {
+        type: 'assistant',
+        session_id: 'sess-tu',
+        message: {
+          content: [
+            { type: 'text', text: 'invoking a skill' },
+            {
+              type: 'tool_use',
+              id: 't1',
+              name: 'Skill',
+              input: { skill: 'investigate' },
+            },
+            {
+              type: 'tool_use',
+              id: 't2',
+              name: 'Read',
+              input: { file_path: '/tmp/x' },
+            },
+          ],
+        },
+      },
+      {
+        type: 'result',
+        subtype: 'success',
+        is_error: false,
+        num_turns: 1,
+        total_cost_usd: 0,
+        session_id: 'sess-tu',
+      },
+    ])
+
+    await runChild(
+      {
+        taskId: 't-tu',
+        prompt: 'hi',
+        projectDir: '/tmp/proj',
+        allowedTools: ['Read', 'Skill'],
+        runId: 'run-tu',
+      },
+      {
+        launcher,
+        onEvent: e => {
+          events.push(e)
+        },
+        now: makeNow(1_700_000_000_000),
+      },
+    )
+
+    const toolUsed = events.filter(e => e.kind === 'tool_used')
+    expect(toolUsed).toHaveLength(2)
+    // Order preserved.
+    expect(toolUsed[0]).toMatchObject({
+      kind: 'tool_used',
+      runId: 'run-tu',
+      toolName: 'Skill',
+      toolInput: { skill: 'investigate' },
+      sessionId: 'sess-tu',
+    })
+    expect(toolUsed[1]).toMatchObject({
+      kind: 'tool_used',
+      runId: 'run-tu',
+      toolName: 'Read',
+    })
+  })
+
+  test('assistant message with no tool_use blocks emits no tool_used events', async () => {
+    const events: ChildEvent[] = []
+    const { launcher } = makeLauncher([
+      {
+        type: 'assistant',
+        message: { content: [{ type: 'text', text: 'no tools here' }] },
+      },
+      {
+        type: 'result',
+        subtype: 'success',
+        is_error: false,
+        num_turns: 1,
+        total_cost_usd: 0,
+      },
+    ])
+
+    await runChild(
+      {
+        taskId: 't-no-tu',
+        prompt: 'hi',
+        projectDir: '/tmp/proj',
+        allowedTools: ['Read'],
+      },
+      {
+        launcher,
+        onEvent: e => {
+          events.push(e)
+        },
+        now: makeNow(1_700_000_000_000),
+      },
+    )
+
+    expect(events.some(e => e.kind === 'tool_used')).toBe(false)
+  })
+
   test('tool allowlist boundary: launcher receives exactly the configured tools', async () => {
     const { launcher, calls } = makeLauncher([
       {
