@@ -4,6 +4,7 @@ import { z } from 'zod/v4'
 import type { CronTask } from '../../utils/cronTasks.js'
 import { getClaudeConfigHomeDir } from '../../utils/envUtils.js'
 import { parseSettingsFile } from '../../utils/settings/settings.js'
+import { resetSettingsCache } from '../../utils/settings/settingsCache.js'
 import type { ChildLauncher, ChildRunResult } from './childRunner.js'
 import { runChild } from './childRunner.js'
 import type { CapHit, CostTracker } from './costTracker.js'
@@ -46,7 +47,6 @@ type Tier3State = {
 
 type Tier3Config = {
   enabled: boolean
-  intervalMs: number
 }
 
 export type Tier3ReflectionOutcome =
@@ -80,6 +80,11 @@ export type RunTier3ReflectionOptions = {
   timeoutMs: number
   checkPaused?: () => Promise<boolean>
   handleCapHit: Tier3CapHitHandler
+  onSurface?: (params: {
+    projectDir: string
+    runId: string
+    message: string
+  }) => Promise<void>
   now?: () => Date
 }
 
@@ -106,7 +111,7 @@ function parsePositiveNumber(value: unknown): number | undefined {
     : undefined
 }
 
-function readTier3ConfigPartial(settings: unknown): Partial<Tier3Config> {
+function readTier3ConfigPartial(settings: unknown): Pick<Tier3Config, 'enabled'> | {} {
   if (!settings || typeof settings !== 'object') return {}
   const kairos = (settings as Record<string, unknown>).kairos
   if (!kairos || typeof kairos !== 'object') return {}
@@ -117,7 +122,6 @@ function readTier3ConfigPartial(settings: unknown): Partial<Tier3Config> {
   return {
     enabled:
       typeof record.enabled === 'boolean' ? record.enabled : undefined,
-    intervalMs: parsePositiveNumber(record.intervalMs),
   }
 }
 
@@ -137,16 +141,15 @@ export function computeTier3AllowedTools(
   return defaultAllowedTools.filter(tool => SAFE_TIER3_TOOLS.has(tool))
 }
 
-async function readTier3Config(projectDir: string): Promise<Tier3Config> {
+async function readTier3Config(projectDir: string): Promise<Tier3Config & { intervalMs: number }> {
+  resetSettingsCache()
+
   const merged: Partial<Tier3Config> = {}
   for (const path of getProjectSettingsPaths(projectDir)) {
     const { settings } = parseSettingsFile(path)
     const partial = readTier3ConfigPartial(settings)
     if (partial.enabled !== undefined) {
       merged.enabled = partial.enabled
-    }
-    if (partial.intervalMs !== undefined) {
-      merged.intervalMs = partial.intervalMs
     }
   }
 
@@ -158,7 +161,7 @@ async function readTier3Config(projectDir: string): Promise<Tier3Config> {
 
   return {
     enabled: merged.enabled === true,
-    intervalMs: envInterval ?? merged.intervalMs ?? DEFAULT_TIER3_INTERVAL_MS,
+    intervalMs: envInterval ?? DEFAULT_TIER3_INTERVAL_MS,
   }
 }
 
@@ -433,6 +436,11 @@ export async function runTier3Reflection(
     message: decision.message!,
     source: 'daemon' as const,
   }
+  await options.onSurface?.({
+    projectDir: options.projectDir,
+    runId: runResult.runId,
+    message: decision.message!,
+  })
   await options.stateWriter.appendProjectEvent(options.projectDir, surfaceEvent)
   await options.stateWriter.appendGlobalEvent(surfaceEvent)
   await appendReflectionLog(options.stateWriter, options.projectDir, {

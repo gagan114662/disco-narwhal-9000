@@ -36,7 +36,7 @@ function makeTempDir(prefix: string): string {
 
 function writeTier3Settings(
   projectDir: string,
-  settings: { enabled: boolean; intervalMs?: number },
+  settings: { enabled: boolean },
 ): void {
   const settingsDir = join(projectDir, '.claude')
   mkdirSync(settingsDir, { recursive: true })
@@ -114,7 +114,7 @@ describe('Kairos Tier 3 reflection', () => {
     const projectDir = makeTempDir('kairos-tier3-cap-project-')
     process.env.CLAUDE_CONFIG_DIR = configDir
 
-    writeTier3Settings(projectDir, { enabled: true, intervalMs: 60 * 60 * 1000 })
+    writeTier3Settings(projectDir, { enabled: true })
 
     const stateWriter = await createStateWriter()
     await stateWriter.ensureProjectDir(projectDir)
@@ -172,7 +172,7 @@ describe('Kairos Tier 3 reflection', () => {
     const projectDir = makeTempDir('kairos-tier3-noop-project-')
     process.env.CLAUDE_CONFIG_DIR = configDir
 
-    writeTier3Settings(projectDir, { enabled: true, intervalMs: 60 * 60 * 1000 })
+    writeTier3Settings(projectDir, { enabled: true })
 
     const stateWriter = await createStateWriter()
     await stateWriter.ensureProjectDir(projectDir)
@@ -221,7 +221,7 @@ describe('Kairos Tier 3 reflection', () => {
     const projectDir = makeTempDir('kairos-tier3-surface-project-')
     process.env.CLAUDE_CONFIG_DIR = configDir
 
-    writeTier3Settings(projectDir, { enabled: true, intervalMs: 60 * 60 * 1000 })
+    writeTier3Settings(projectDir, { enabled: true })
 
     const stateWriter = await createStateWriter()
     await stateWriter.ensureProjectDir(projectDir)
@@ -240,6 +240,8 @@ describe('Kairos Tier 3 reflection', () => {
         session_id: 'tier3-session',
       },
     ])
+    const surfaced: Array<{ projectDir: string; runId: string; message: string }> =
+      []
 
     const result = await runTier3Reflection({
       projectDir,
@@ -250,12 +252,18 @@ describe('Kairos Tier 3 reflection', () => {
       maxTurns: 3,
       timeoutMs: 5_000,
       handleCapHit: async () => {},
+      onSurface: async params => {
+        surfaced.push(params)
+      },
       now: () => new Date('2026-04-22T14:00:00.000Z'),
     })
 
     expect(result.outcome).toBe('surface')
     expect(result.message).toContain('Tests are failing')
     expect(calls[0]?.allowedTools).toEqual(['Read'])
+    expect(surfaced).toHaveLength(1)
+    expect(surfaced[0]?.projectDir).toBe(projectDir)
+    expect(surfaced[0]?.message).toContain('Tests are failing')
 
     const projectEvents = readFileSync(
       getProjectKairosEventsPath(projectDir),
@@ -273,5 +281,93 @@ describe('Kairos Tier 3 reflection', () => {
       'utf8',
     )
     expect(log).toContain('"outcome":"surface"')
+  })
+
+  test('settings interval does not lower the hourly cap, but env override can', async () => {
+    const configDir = makeTempDir('kairos-tier3-interval-config-')
+    const projectDir = makeTempDir('kairos-tier3-interval-project-')
+    process.env.CLAUDE_CONFIG_DIR = configDir
+
+    const settingsDir = join(projectDir, '.claude')
+    mkdirSync(settingsDir, { recursive: true })
+    writeFileSync(
+      join(settingsDir, 'settings.local.json'),
+      JSON.stringify(
+        { kairos: { tier3: { enabled: true, intervalMs: 15_000 } } },
+        null,
+        2,
+      ),
+    )
+
+    const stateWriter = await createStateWriter()
+    await stateWriter.ensureProjectDir(projectDir)
+
+    const firstLauncher = makeLauncher([
+      makeAssistantJsonMessage('{"surface":false}'),
+      {
+        type: 'result',
+        subtype: 'success',
+        is_error: false,
+        num_turns: 1,
+        duration_ms: 80,
+        total_cost_usd: 0.01,
+      },
+    ])
+
+    const sameHour = () => new Date('2026-04-22T12:15:00.000Z')
+    const first = await runTier3Reflection({
+      projectDir,
+      stateWriter,
+      launcher: firstLauncher.launcher,
+      costTracker: null,
+      defaultAllowedTools: ['Read'],
+      maxTurns: 3,
+      timeoutMs: 5_000,
+      handleCapHit: async () => {},
+      now: sameHour,
+    })
+    const second = await runTier3Reflection({
+      projectDir,
+      stateWriter,
+      launcher: firstLauncher.launcher,
+      costTracker: null,
+      defaultAllowedTools: ['Read'],
+      maxTurns: 3,
+      timeoutMs: 5_000,
+      handleCapHit: async () => {},
+      now: sameHour,
+    })
+
+    expect(first.outcome).toBe('noop')
+    expect(second.outcome).toBe('skipped_hourly_cap')
+    expect(firstLauncher.calls).toHaveLength(1)
+
+    process.env.KAIROS_TIER3_INTERVAL_MS = '15000'
+    const envOverrideLauncher = makeLauncher([
+      makeAssistantJsonMessage('{"surface":false}'),
+      {
+        type: 'result',
+        subtype: 'success',
+        is_error: false,
+        num_turns: 1,
+        duration_ms: 80,
+        total_cost_usd: 0.01,
+      },
+    ])
+
+    const third = await runTier3Reflection({
+      projectDir,
+      stateWriter,
+      launcher: envOverrideLauncher.launcher,
+      costTracker: null,
+      defaultAllowedTools: ['Read'],
+      maxTurns: 3,
+      timeoutMs: 5_000,
+      handleCapHit: async () => {},
+      now: () => new Date('2026-04-22T12:15:15.000Z'),
+    })
+
+    expect(third.outcome).toBe('noop')
+    expect(envOverrideLauncher.calls).toHaveLength(1)
   })
 })

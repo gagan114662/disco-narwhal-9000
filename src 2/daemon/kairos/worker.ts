@@ -336,6 +336,16 @@ export async function runKairosWorker(
         handleCapHit,
         now,
         checkPaused,
+        onSurface: async ({ projectDir, message }) => {
+          await logLine(
+            `[tier3] project=${projectDir} surfaced=${JSON.stringify(message)}`,
+            {
+              stdout: options.stdout,
+              now: now(),
+              pid,
+            },
+          )
+        },
       })
       tier3Controllers.set(projectDir, tier3)
       tier3.start()
