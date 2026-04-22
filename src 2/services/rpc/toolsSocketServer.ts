@@ -10,6 +10,7 @@ import { getMainLoopModel } from '../../utils/model/model.js'
 import { getDefaultAppState } from '../../state/AppStateStore.js'
 import { findToolByName, type Tool, type ToolUseContext } from '../../Tool.js'
 import { getTools } from '../../tools.js'
+import { runWithCwdOverride } from '../../utils/cwd.js'
 import {
   cleanupExpiredRpcGrants,
   deserializeToolPermissionContext,
@@ -151,56 +152,87 @@ async function executeRpcToolCall(request: RpcRequest): Promise<RpcResponse> {
   const args = applyLegacyRpcInputAliases(requestedToolName, rawArgs)
   const context = createToolUseContext(permissionContext, availableTools)
 
-  const validation = await tool.validateInput?.(args as never, context)
-  if (validation && !validation.result) {
-    return {
-      id: request.id,
-      error: { code: 'invalid_input', message: validation.message },
+  return runWithCwdOverride(grant.projectDir, async () => {
+    const validation = await tool.validateInput?.(args as never, context)
+    if (validation && !validation.result) {
+      return {
+        id: request.id,
+        error: { code: 'invalid_input', message: validation.message },
+      }
     }
-  }
 
-  const permissionDecision = await tool.checkPermissions(args as never, context)
-  if (permissionDecision.behavior !== 'allow') {
-    return {
-      id: request.id,
-      error: {
-        code: 'forbidden',
-        message: `Permission denied for ${tool.name}`,
-      },
+    const permissionDecision = await tool.checkPermissions(args as never, context)
+    if (permissionDecision.behavior !== 'allow') {
+      return {
+        id: request.id,
+        error: {
+          code: 'forbidden',
+          message: `Permission denied for ${tool.name}`,
+        },
+      }
     }
-  }
 
-  try {
-    const result = await tool.call(
-      ((permissionDecision.updatedInput ?? args) as never),
-      context,
-      async nestedTool => {
-        return findToolByName(availableTools, nestedTool.name)
-          ? { behavior: 'allow' as const }
-          : {
-              behavior: 'deny' as const,
-              message: `Nested tool ${nestedTool.name} is not allowed`,
-              errorCode: 1,
-            }
-      },
-      createAssistantMessage({ content: [] }),
-    )
+    try {
+      const result = await tool.call(
+        ((permissionDecision.updatedInput ?? args) as never),
+        context,
+        async nestedTool => {
+          return findToolByName(availableTools, nestedTool.name)
+            ? { behavior: 'allow' as const }
+            : {
+                behavior: 'deny' as const,
+                message: `Nested tool ${nestedTool.name} is not allowed`,
+                errorCode: 1,
+              }
+        },
+        createAssistantMessage({ content: [] }),
+      )
 
-    return {
-      id: request.id,
-      result: result.data,
+      return {
+        id: request.id,
+        result: result.data,
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      return {
+        id: request.id,
+        error: { code: 'tool_error', message },
+      }
     }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    return {
-      id: request.id,
-      error: { code: 'tool_error', message },
-    }
-  }
+  })
 }
 
 function parseRpcRequest(line: string): RpcRequest {
-  return JSON.parse(line) as RpcRequest
+  const parsed = JSON.parse(line) as Partial<RpcRequest>
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('RPC request must be a JSON object')
+  }
+  if (parsed.method !== 'list_tools' && parsed.method !== 'call_tool') {
+    throw new Error('Unsupported RPC method')
+  }
+  if (
+    parsed.id !== undefined &&
+    parsed.id !== null &&
+    typeof parsed.id !== 'string' &&
+    typeof parsed.id !== 'number'
+  ) {
+    throw new Error('RPC request id must be a string, number, or null')
+  }
+  if (
+    parsed.params !== undefined &&
+    (!parsed.params ||
+      typeof parsed.params !== 'object' ||
+      Array.isArray(parsed.params))
+  ) {
+    throw new Error('RPC request params must be an object')
+  }
+  return {
+    id: parsed.id ?? null,
+    method: parsed.method,
+    ...(parsed.params
+      ? { params: parsed.params as Record<string, unknown> }
+      : {}),
+  }
 }
 
 function writeRpcResponse(socket: Socket, response: RpcResponse): void {
@@ -230,7 +262,21 @@ export async function startToolsSocketServer(socketPath: string): Promise<ToolsS
           continue
         }
 
-        void executeRpcToolCall(parseRpcRequest(line))
+        let request: RpcRequest
+        try {
+          request = parseRpcRequest(line)
+        } catch (error) {
+          writeRpcResponse(socket, {
+            id: null,
+            error: {
+              code: 'invalid_request',
+              message: error instanceof Error ? error.message : String(error),
+            },
+          })
+          continue
+        }
+
+        void executeRpcToolCall(request)
           .then(response => writeRpcResponse(socket, response))
           .catch(error => {
             logError(error)

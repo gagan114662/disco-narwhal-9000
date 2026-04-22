@@ -10,7 +10,6 @@ import { createRpcGrant, deleteRpcGrant } from '../../services/rpc/authToken.js'
 import { getRpcAllowedToolNames } from '../../services/rpc/toolAllowlist.js'
 
 const RUN_SCRIPT_TOOL_NAME = 'RunScript'
-const DEFAULT_MAX_OUTPUT_CHARS = 16 * 1024
 const TRUNCATION_MARKER = '\n...[stdout truncated]'
 
 const inputSchema = lazySchema(() =>
@@ -102,7 +101,11 @@ async function runScriptProcess(
       if (truncated) return
       stdout += String(chunk)
       if (stdout.length > config.stdoutCapBytes) {
-        stdout = stdout.slice(0, DEFAULT_MAX_OUTPUT_CHARS - TRUNCATION_MARKER.length) + TRUNCATION_MARKER
+        stdout =
+          stdout.slice(
+            0,
+            Math.max(0, config.stdoutCapBytes - TRUNCATION_MARKER.length),
+          ) + TRUNCATION_MARKER
         truncated = true
       }
     })
@@ -154,6 +157,9 @@ export const RunScriptTool = buildTool({
   },
   isConcurrencySafe() {
     return true
+  },
+  isEnabled() {
+    return getKairosRpcConfig().enabled
   },
   isReadOnly() {
     return false

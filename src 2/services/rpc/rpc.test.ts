@@ -21,6 +21,13 @@ async function rpcRequest(
   socketPath: string,
   body: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
+  return rpcRawRequest(socketPath, JSON.stringify(body))
+}
+
+async function rpcRawRequest(
+  socketPath: string,
+  line: string,
+): Promise<Record<string, unknown>> {
   const socket = createConnection(socketPath)
   const response = await new Promise<string>((resolve, reject) => {
     let buffer = ''
@@ -34,7 +41,7 @@ async function rpcRequest(
       }
     })
     socket.once('connect', () => {
-      socket.write(`${JSON.stringify(body)}\n`)
+      socket.write(`${line}\n`)
     })
   })
   socket.end()
@@ -114,6 +121,51 @@ describe('KAIROS RPC server', () => {
     }
   })
 
+  test('executes relative-path tool calls inside the granted project directory', async () => {
+    const configDir = makeTempDir('kairos-rpc-cwd-config-')
+    const projectDir = makeTempDir('kairos-rpc-cwd-project-')
+    process.env.CLAUDE_CONFIG_DIR = configDir
+    writeFileSync(
+      join(configDir, 'settings.json'),
+      JSON.stringify({ kairos: { rpc: { enabled: true } } }),
+    )
+    writeFileSync(join(projectDir, 'relative.txt'), 'hello from granted cwd\n')
+    resetSettingsCache()
+
+    const { socketPath } = getKairosRpcConfig()
+    const server = await startToolsSocketServer(socketPath)
+    const permissionContext = getEmptyToolPermissionContext()
+    permissionContext.additionalWorkingDirectories = new Map([
+      [projectDir, { path: projectDir, source: 'session' }],
+    ])
+    const grant = await createRpcGrant({
+      projectDir,
+      allowedTools: ['Read'],
+      permissionContext,
+      maxCalls: 500,
+      expiresAt: new Date(Date.now() + 60_000),
+    })
+
+    try {
+      const response = await rpcRequest(socketPath, {
+        id: 4,
+        method: 'call_tool',
+        params: {
+          token: grant.token,
+          tool_name: 'ReadFile',
+          args: { path: 'relative.txt' },
+        },
+      })
+      expect(response.error).toBeUndefined()
+      expect((response.result as { file: { content: string } }).file.content).toContain(
+        'hello from granted cwd',
+      )
+    } finally {
+      await deleteRpcGrant(grant.token)
+      await server.stop()
+    }
+  })
+
   test('enforces the per-grant rpc rate limit', async () => {
     const configDir = makeTempDir('kairos-rpc-rate-')
     process.env.CLAUDE_CONFIG_DIR = configDir
@@ -149,6 +201,35 @@ describe('KAIROS RPC server', () => {
       expect(second.error).toBeDefined()
     } finally {
       await deleteRpcGrant(grant.token)
+      await server.stop()
+    }
+  })
+
+  test('returns an invalid_request error for malformed JSON instead of crashing', async () => {
+    const configDir = makeTempDir('kairos-rpc-invalid-json-')
+    process.env.CLAUDE_CONFIG_DIR = configDir
+    writeFileSync(
+      join(configDir, 'settings.json'),
+      JSON.stringify({ kairos: { rpc: { enabled: true } } }),
+    )
+    resetSettingsCache()
+
+    const { socketPath } = getKairosRpcConfig()
+    const server = await startToolsSocketServer(socketPath)
+
+    try {
+      const invalidJson = await rpcRawRequest(socketPath, '{"id":1,"method":')
+      expect(invalidJson.error).toMatchObject({
+        code: 'invalid_request',
+      })
+
+      const followup = await rpcRequest(socketPath, {
+        id: 2,
+        method: 'list_tools',
+        params: {},
+      })
+      expect(followup.error).toBeDefined()
+    } finally {
       await server.stop()
     }
   })
