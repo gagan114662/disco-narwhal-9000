@@ -11,6 +11,10 @@
 import { readFile } from 'fs/promises'
 import { getProjectRoot } from '../bootstrap/state.js'
 import type { Command } from '../types/command.js'
+import {
+  runKairosMemoryCommand,
+  runKairosMemoryProposalsCommand,
+} from './kairos-memory-proposals.js'
 import { runKairosSkillsInteropCommand } from './kairos-skills-interop.js'
 import {
   enqueueDemoTask,
@@ -43,7 +47,9 @@ const HELP_TEXT = `Usage:
 /kairos logs [projectDir] [lines]
 /kairos skills lint <path|skill-name|manifest-json>
 /kairos skills import <url|path|manifest-json> [--yes] [--overwrite]
-/kairos skills export <path|skill-name> [--publish]`
+/kairos skills export <path|skill-name> [--publish]
+/kairos memory-proposals list|diff|accept|reject
+/kairos memory wipe --confirm`
 
 type Subcommand =
   | 'status'
@@ -56,6 +62,8 @@ type Subcommand =
   | 'dashboard'
   | 'logs'
   | 'skills'
+  | 'memory-proposals'
+  | 'memory'
 
 const SUBCOMMANDS = new Set<Subcommand>([
   'status',
@@ -68,6 +76,8 @@ const SUBCOMMANDS = new Set<Subcommand>([
   'dashboard',
   'logs',
   'skills',
+  'memory-proposals',
+  'memory',
 ])
 
 function parseArgs(args: string): { sub: Subcommand | null; rest: string[] } {
@@ -238,6 +248,10 @@ export async function runKairosCommand(args: string): Promise<string> {
       return runKairosSkillsInteropCommand(
         args.trim().slice('skills'.length).trim(),
       )
+    case 'memory-proposals':
+      return runKairosMemoryProposalsCommand(rest)
+    case 'memory':
+      return runKairosMemoryCommand(rest)
   }
 }
 
@@ -246,7 +260,7 @@ const kairos = {
   name: 'kairos',
   description: 'Inspect and control the KAIROS background daemon',
   argumentHint:
-    'status|list|opt-in|opt-out|demo|pause|resume|dashboard|logs|skills',
+    'status|list|opt-in|opt-out|demo|pause|resume|dashboard|logs|skills|memory-proposals|memory',
   load: () => import('./kairos-ui.js'),
 } satisfies Command
 
