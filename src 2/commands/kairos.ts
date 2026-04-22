@@ -16,6 +16,7 @@ import {
   runKairosMemoryProposalsCommand,
 } from './kairos-memory-proposals.js'
 import { runKairosSkillsInteropCommand } from './kairos-skills-interop.js'
+import { runSkillImprovementsCommand } from './kairos-skill-improvements.js'
 import {
   enqueueDemoTask,
   optInProject,
@@ -48,6 +49,7 @@ const HELP_TEXT = `Usage:
 /kairos skills lint <path|skill-name|manifest-json>
 /kairos skills import <url|path|manifest-json> [--yes] [--overwrite]
 /kairos skills export <path|skill-name> [--publish]
+/kairos skill-improvements list|diff|accept|reject [id]
 /kairos memory-proposals list|diff|accept|reject
 /kairos memory wipe --confirm`
 
@@ -62,6 +64,7 @@ type Subcommand =
   | 'dashboard'
   | 'logs'
   | 'skills'
+  | 'skill-improvements'
   | 'memory-proposals'
   | 'memory'
 
@@ -76,6 +79,7 @@ const SUBCOMMANDS = new Set<Subcommand>([
   'dashboard',
   'logs',
   'skills',
+  'skill-improvements',
   'memory-proposals',
   'memory',
 ])
@@ -248,6 +252,8 @@ export async function runKairosCommand(args: string): Promise<string> {
       return runKairosSkillsInteropCommand(
         args.trim().slice('skills'.length).trim(),
       )
+    case 'skill-improvements':
+      return runSkillImprovementsCommand(rest)
     case 'memory-proposals':
       return runKairosMemoryProposalsCommand(rest)
     case 'memory':
@@ -260,7 +266,7 @@ const kairos = {
   name: 'kairos',
   description: 'Inspect and control the KAIROS background daemon',
   argumentHint:
-    'status|list|opt-in|opt-out|demo|pause|resume|dashboard|logs|skills|memory-proposals|memory',
+    'status|list|opt-in|opt-out|demo|pause|resume|dashboard|logs|skills|skill-improvements|memory-proposals|memory',
   load: () => import('./kairos-ui.js'),
 } satisfies Command
 

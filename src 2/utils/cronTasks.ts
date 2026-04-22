@@ -56,6 +56,18 @@ export type CronTask = {
    */
   permanent?: boolean
   /**
+   * Optional discriminator for daemon-originated tasks. Lets the worker
+   * route a task by structural kind instead of sniffing the prompt. Only
+   * the daemon sets this; user-authored cron tasks leave it undefined so
+   * a docs copy-paste of a reserved prompt prefix can never masquerade
+   * as a daemon-internal task.
+   *
+   * Known kinds:
+   *   - `skill_distillation` — one-shot task enqueued by the skill-learning
+   *     loop; worker skips the skill-use observer to prevent re-entrancy.
+   */
+  kind?: string
+  /**
    * Runtime-only flag. false → session-scoped (never written to disk).
    * File-backed tasks leave this undefined; writeCronTasks strips it so
    * the on-disk shape stays { id, cron, prompt, createdAt, lastFiredAt?, recurring?, permanent? }.
@@ -134,6 +146,9 @@ export async function readCronTasks(dir?: string): Promise<CronTask[]> {
         : {}),
       ...(t.recurring ? { recurring: true } : {}),
       ...(t.permanent ? { permanent: true } : {}),
+      ...(typeof t.kind === 'string' && t.kind.length > 0
+        ? { kind: t.kind }
+        : {}),
     })
   }
   return out
@@ -197,16 +212,18 @@ export async function addCronTask(
   recurring: boolean,
   durable: boolean,
   agentId?: string,
+  kind?: string,
 ): Promise<string> {
   // Short ID — 8 hex chars is plenty for MAX_JOBS=50, avoids slice/prefix
   // juggling between the tool layer (shows short IDs) and disk.
   const id = randomUUID().slice(0, 8)
-  const task = {
+  const task: CronTask = {
     id,
     cron,
     prompt,
     createdAt: Date.now(),
     ...(recurring ? { recurring: true } : {}),
+    ...(kind ? { kind } : {}),
   }
   if (!durable) {
     addSessionCronTask({ ...task, ...(agentId ? { agentId } : {}) })
