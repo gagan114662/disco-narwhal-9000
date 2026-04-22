@@ -1,4 +1,4 @@
-import { appendFile, mkdir, writeFile } from 'fs/promises'
+import { appendFile, mkdir, readFile, writeFile } from 'fs/promises'
 import { randomUUID } from 'crypto'
 import type { Writable } from 'stream'
 import type {
@@ -25,12 +25,19 @@ import { createProjectRegistry } from './projectRegistry.js'
 import { createProjectWorker } from './projectWorker.js'
 import type { CronTask } from '../../utils/cronTasks.js'
 import {
+  getKairosGlobalEventsPath,
+  getKairosPausePath,
   getKairosStateDir,
   getKairosStatusPath,
   getKairosStdoutLogPath,
 } from './paths.js'
 import { createStateWriter, type StateWriter } from './stateWriter.js'
 import { createTier3Controller, type Tier3Controller } from './tier3.js'
+import { readTelegramConfig } from '../gateway/telegram/config.js'
+import { createGateway, type Gateway } from '../gateway/telegram/gateway.js'
+import { createDispatcher } from '../gateway/telegram/commands.js'
+import { createReminderFromUserRequest } from '../../services/reminders/createReminderFromUserRequest.js'
+import { setPauseState as setGlobalPauseState } from '../dashboard/model.js'
 
 type KairosStatus = {
   kind: 'kairos'
@@ -556,6 +563,59 @@ export async function runKairosWorker(
     pid,
   })
 
+  // Start the Telegram gateway if ~/.claude/kairos/telegram.json exists.
+  // Off by default: missing config → no gateway, no API calls, no token
+  // needed. The CLI's `/kairos gateway telegram setup` writes the file,
+  // so next daemon start picks it up.
+  let telegramGateway: Gateway | null = null
+  const telegramConfig = await readTelegramConfig()
+  if (telegramConfig && telegramConfig.token) {
+    const dispatcher = createDispatcher({
+      now,
+      readStatus: async () => {
+        try {
+          return JSON.parse(await readFile(getKairosStatusPath(), 'utf8')) as unknown
+        } catch {
+          return null
+        }
+      },
+      readPause: async () => {
+        try {
+          return JSON.parse(await readFile(getKairosPausePath(), 'utf8')) as unknown
+        } catch {
+          return null
+        }
+      },
+      listProjects: async () => projectRegistry.read(),
+      setPause: async paused => {
+        await setGlobalPauseState(paused, now)
+      },
+      scheduleReminder: createReminderFromUserRequest,
+      recordSkip: async ({ chatId }) => {
+        await stateWriter.appendGlobalEvent({
+          kind: 'telegram_skip' as const,
+          t: now().toISOString(),
+          chatId,
+          source: 'daemon' as const,
+        } as never)
+      },
+    })
+    telegramGateway = createGateway({
+      token: telegramConfig.token,
+      eventPath: getKairosGlobalEventsPath(),
+      dispatch: input => dispatcher.dispatch(input),
+      signal: options.signal,
+      log: message =>
+        void logLine(`[telegram] ${message}`, {
+          stdout: options.stdout,
+          now: now(),
+          pid,
+        }),
+      now,
+    })
+    await telegramGateway.start()
+  }
+
   for (const projectDir of await projectRegistry.read()) {
     await addProject(projectDir)
   }
@@ -582,6 +642,7 @@ export async function runKairosWorker(
   await waitForAbort(options.signal)
 
   await stopWatchingProjects()
+  await telegramGateway?.stop()
   for (const projectDir of [...activeWorkers.keys()]) {
     await removeProject(projectDir)
   }

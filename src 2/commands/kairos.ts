@@ -30,6 +30,12 @@ import {
   getKairosStdoutLogPath,
   getProjectKairosLogPath,
 } from '../daemon/kairos/paths.js'
+import {
+  readGatewayStatus,
+  setupTelegram,
+  startPairing,
+  unpairTelegram,
+} from '../daemon/gateway/telegram/cli.js'
 import { safeParseJSON } from '../utils/json.js'
 import type { GlobalStatus, PauseState } from '../daemon/kairos/stateWriter.js'
 
@@ -46,6 +52,10 @@ const HELP_TEXT = `Usage:
 /kairos resume
 /kairos dashboard
 /kairos logs [projectDir] [lines]
+/kairos gateway telegram setup <bot-token>
+/kairos gateway telegram pair
+/kairos gateway telegram status
+/kairos gateway telegram unpair [chatId|all]
 /kairos skills lint <path|skill-name|manifest-json>
 /kairos skills import <url|path|manifest-json> [--yes] [--overwrite]
 /kairos skills export <path|skill-name> [--publish]
@@ -63,6 +73,7 @@ type Subcommand =
   | 'resume'
   | 'dashboard'
   | 'logs'
+  | 'gateway'
   | 'skills'
   | 'skill-improvements'
   | 'memory-proposals'
@@ -78,6 +89,7 @@ const SUBCOMMANDS = new Set<Subcommand>([
   'resume',
   'dashboard',
   'logs',
+  'gateway',
   'skills',
   'skill-improvements',
   'memory-proposals',
@@ -215,6 +227,63 @@ async function handleLogs(
   return tail.join('\n')
 }
 
+async function handleGatewayTelegram(args: string[]): Promise<string> {
+  const [action, ...rest] = args
+  if (!action) {
+    return 'Usage: /kairos gateway telegram <setup|pair|status|unpair> [...]'
+  }
+  switch (action) {
+    case 'setup': {
+      const token = rest.join(' ').trim()
+      if (!token) return 'Usage: /kairos gateway telegram setup <bot-token>'
+      const result = await setupTelegram(token)
+      if (!result.ok) return `Setup failed: ${result.reason}`
+      const who = result.botUsername ? ` as @${result.botUsername}` : ''
+      return `Telegram gateway configured${who}. Now run \`/kairos gateway telegram pair\` to link your chat.`
+    }
+    case 'pair': {
+      const result = await startPairing()
+      if (!result.ok) return result.reason
+      const who = result.botUsername ? `@${result.botUsername}` : 'your bot'
+      return [
+        `Pair code: ${result.code}`,
+        `On your phone, open Telegram, DM ${who}, and send the code above.`,
+        'The code expires in 15 minutes.',
+      ].join('\n')
+    }
+    case 'status': {
+      const s = await readGatewayStatus()
+      if (!s.configured) {
+        return `Telegram gateway: not configured (${s.configPath} missing). Run \`/kairos gateway telegram setup <bot-token>\` to start.`
+      }
+      const who = s.botUsername ? `@${s.botUsername}` : '(unknown username)'
+      const paired = s.pairedChatIds.length === 0 ? 'none' : s.pairedChatIds.join(', ')
+      return `Telegram gateway: bot=${who}, paired chat IDs=${paired}`
+    }
+    case 'unpair': {
+      const target = rest[0]
+      if (!target || target === 'all') {
+        const r = await unpairTelegram('all')
+        if (!r.ok) return r.reason
+        return `Unpaired ${r.removed.length} chat(s). Allowlist cleared.`
+      }
+      const chatId = Number(target)
+      if (!Number.isInteger(chatId)) return `Not a numeric chat id: ${target}`
+      const r = await unpairTelegram(chatId)
+      if (!r.ok) return r.reason
+      return `Unpaired chat ${chatId}. Remaining: ${r.remaining.join(', ') || 'none'}`
+    }
+    default:
+      return `Unknown gateway telegram action: ${action}`
+  }
+}
+
+async function handleGateway(rest: string[]): Promise<string> {
+  const [channel, ...args] = rest
+  if (channel === 'telegram') return handleGatewayTelegram(args)
+  return 'Usage: /kairos gateway telegram <setup|pair|status|unpair> [...]'
+}
+
 export async function runKairosCommand(args: string): Promise<string> {
   const { sub, rest } = parseArgs(args)
   if (sub === null) {
@@ -237,6 +306,8 @@ export async function runKairosCommand(args: string): Promise<string> {
       return handleResume()
     case 'dashboard':
       return handleDashboard()
+    case 'gateway':
+      return handleGateway(rest)
     case 'logs': {
       const first = rest[0]
       // A bare number is always a line count; anything else (including
@@ -266,7 +337,7 @@ const kairos = {
   name: 'kairos',
   description: 'Inspect and control the KAIROS background daemon',
   argumentHint:
-    'status|list|opt-in|opt-out|demo|pause|resume|dashboard|logs|skills|skill-improvements|memory-proposals|memory',
+    'status|list|opt-in|opt-out|demo|pause|resume|dashboard|logs|gateway|skills|skill-improvements|memory-proposals|memory',
   load: () => import('./kairos-ui.js'),
 } satisfies Command
 
