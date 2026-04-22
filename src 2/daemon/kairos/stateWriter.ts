@@ -47,6 +47,7 @@ export type ProjectLogEvent =
       t: string
       windowKey: string
       outcome:
+        | 'skipped_no_allowed_tools'
         | 'skipped_hourly_cap'
         | 'skipped_paused'
         | 'noop'
