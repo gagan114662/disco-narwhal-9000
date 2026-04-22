@@ -72,6 +72,9 @@ const briefCommand =
 const assistantCommand = feature('KAIROS')
   ? require('./commands/assistant/index.js').default
   : null
+const kairosCommand = feature('KAIROS')
+  ? require('./commands/kairos.js').default
+  : null
 const bridge = feature('BRIDGE_MODE')
   ? require('./commands/bridge/index.js').default
   : null
@@ -327,6 +330,7 @@ const COMMANDS = memoize((): Command[] => [
   ...(proactive ? [proactive] : []),
   ...(briefCommand ? [briefCommand] : []),
   ...(assistantCommand ? [assistantCommand] : []),
+  ...(kairosCommand ? [kairosCommand] : []),
   ...(bridge ? [bridge] : []),
   ...(remoteControlServerCommand ? [remoteControlServerCommand] : []),
   ...(voiceCommand ? [voiceCommand] : []),

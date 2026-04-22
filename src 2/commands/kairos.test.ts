@@ -237,4 +237,155 @@ describe('/kairos command', () => {
     const out = await runKairosCommand('logs 3')
     expect(out).toBe(['b', 'c', 'd'].join('\n'))
   })
+
+  test('skills export emits a self-contained manifest', async () => {
+    const projectDir = makeProjectDir()
+    setProjectRoot(projectDir)
+    mkdirSync(join(projectDir, '.claude', 'skills', 'example'), {
+      recursive: true,
+    })
+    writeFileSync(
+      join(projectDir, '.claude', 'skills', 'example', 'SKILL.md'),
+      [
+        '---',
+        'name: example',
+        'description: Example exported skill.',
+        '---',
+        '',
+        'Use this skill to verify command routing.',
+        '',
+      ].join('\n'),
+    )
+
+    const out = await runKairosCommand('skills export example')
+    const parsed = JSON.parse(out) as {
+      skills: Array<{ url: string }>
+    }
+    expect(parsed.skills[0]?.url.startsWith('data:text/markdown;base64,')).toBe(
+      true,
+    )
+  })
+
+  test('skills import previews first and writes on --yes', async () => {
+    const sourceDir = makeProjectDir()
+    mkdirSync(join(sourceDir, 'example'), { recursive: true })
+    writeFileSync(
+      join(sourceDir, 'example', 'SKILL.md'),
+      [
+        '---',
+        'name: example',
+        'description: Example imported skill.',
+        '---',
+        '',
+        'Use this skill to verify import command routing.',
+        '',
+      ].join('\n'),
+    )
+
+    const preview = await runKairosCommand(
+      `skills import ${join(sourceDir, 'example')}`,
+    )
+    expect(preview).toContain('Import preview')
+
+    const confirmed = await runKairosCommand(
+      `skills import ${join(sourceDir, 'example')} --yes`,
+    )
+    expect(confirmed).toContain('Imported skill')
+  })
+
+  test('skills import supports confirmed pasted JSON manifests', async () => {
+    const projectDir = makeProjectDir()
+    setProjectRoot(projectDir)
+    mkdirSync(join(projectDir, '.claude', 'skills', 'example'), {
+      recursive: true,
+    })
+    writeFileSync(
+      join(projectDir, '.claude', 'skills', 'example', 'SKILL.md'),
+      [
+        '---',
+        'name: example',
+        'description: Example exported skill.',
+        '---',
+        '',
+        'Use this skill to verify JSON blob import routing.',
+        '',
+      ].join('\n'),
+    )
+
+    const manifest = await runKairosCommand('skills export example')
+    const confirmed = await runKairosCommand(`skills import --yes ${manifest}`)
+    expect(confirmed).toContain('Imported skill')
+  })
+
+  test('memory-proposals list shows pending proposals', async () => {
+    const { queueMemoryProposal } = await import(
+      '../services/memory/proposalQueue.js'
+    )
+    queueMemoryProposal(
+      {
+        kind: 'fact',
+        content: 'The daemon uses FTS5-backed recall.',
+        evidence_session_id: 'sess-1',
+      },
+      { generateId: () => 'prop001' },
+    )
+
+    const out = await runKairosCommand('memory-proposals list')
+    expect(out).toContain('prop001')
+    expect(out).toContain('[fact]')
+  })
+
+  test('memory-proposals accept updates memory files', async () => {
+    const { queueMemoryProposal } = await import(
+      '../services/memory/proposalQueue.js'
+    )
+    queueMemoryProposal(
+      {
+        kind: 'preference',
+        content: 'The user prefers concise recall summaries.',
+        evidence_session_id: 'sess-2',
+      },
+      { generateId: () => 'prop002' },
+    )
+
+    const out = await runKairosCommand('memory-proposals accept prop002')
+    expect(out).toContain('Accepted proposal prop002')
+    expect(
+      readFileSync(
+        join(process.env.CLAUDE_CONFIG_DIR as string, 'USER.md'),
+        'utf8',
+      ),
+    ).toContain('concise recall summaries')
+  })
+
+  test('memory wipe requires confirmation and removes artifacts', async () => {
+    const { queueMemoryProposal } = await import(
+      '../services/memory/proposalQueue.js'
+    )
+    queueMemoryProposal(
+      {
+        kind: 'fact',
+        content: 'Session memory summaries are stored under ~/.claude/sessions/.summaries.',
+        evidence_session_id: 'sess-3',
+      },
+      { generateId: () => 'prop003' },
+    )
+
+    const refused = await runKairosCommand('memory wipe')
+    expect(refused).toContain('--confirm')
+
+    const wiped = await runKairosCommand('memory wipe --confirm')
+    expect(wiped).toContain('Wiped KAIROS session index')
+    expect(() =>
+      readFileSync(
+        join(
+          process.env.CLAUDE_CONFIG_DIR as string,
+          'memory',
+          '.pending-proposals',
+          'prop003.json',
+        ),
+        'utf8',
+      ),
+    ).toThrow()
+  })
 })
