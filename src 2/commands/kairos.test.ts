@@ -237,4 +237,76 @@ describe('/kairos command', () => {
     const out = await runKairosCommand('logs 3')
     expect(out).toBe(['b', 'c', 'd'].join('\n'))
   })
+
+  test('memory-proposals list shows pending proposals', async () => {
+    const { queueMemoryProposal } = await import(
+      '../services/memory/proposalQueue.js'
+    )
+    queueMemoryProposal(
+      {
+        kind: 'fact',
+        content: 'The daemon uses FTS5-backed recall.',
+        evidence_session_id: 'sess-1',
+      },
+      { generateId: () => 'prop001' },
+    )
+
+    const out = await runKairosCommand('memory-proposals list')
+    expect(out).toContain('prop001')
+    expect(out).toContain('[fact]')
+  })
+
+  test('memory-proposals accept updates memory files', async () => {
+    const { queueMemoryProposal } = await import(
+      '../services/memory/proposalQueue.js'
+    )
+    queueMemoryProposal(
+      {
+        kind: 'preference',
+        content: 'The user prefers concise recall summaries.',
+        evidence_session_id: 'sess-2',
+      },
+      { generateId: () => 'prop002' },
+    )
+
+    const out = await runKairosCommand('memory-proposals accept prop002')
+    expect(out).toContain('Accepted proposal prop002')
+    expect(
+      readFileSync(
+        join(process.env.CLAUDE_CONFIG_DIR as string, 'USER.md'),
+        'utf8',
+      ),
+    ).toContain('concise recall summaries')
+  })
+
+  test('memory wipe requires confirmation and removes artifacts', async () => {
+    const { queueMemoryProposal } = await import(
+      '../services/memory/proposalQueue.js'
+    )
+    queueMemoryProposal(
+      {
+        kind: 'fact',
+        content: 'Session memory summaries are stored under ~/.claude/sessions/.summaries.',
+        evidence_session_id: 'sess-3',
+      },
+      { generateId: () => 'prop003' },
+    )
+
+    const refused = await runKairosCommand('memory wipe')
+    expect(refused).toContain('--confirm')
+
+    const wiped = await runKairosCommand('memory wipe --confirm')
+    expect(wiped).toContain('Wiped KAIROS session index')
+    expect(() =>
+      readFileSync(
+        join(
+          process.env.CLAUDE_CONFIG_DIR as string,
+          'memory',
+          '.pending-proposals',
+          'prop003.json',
+        ),
+        'utf8',
+      ),
+    ).toThrow()
+  })
 })

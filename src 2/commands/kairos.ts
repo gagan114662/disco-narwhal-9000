@@ -12,6 +12,10 @@ import { readFile } from 'fs/promises'
 import { getProjectRoot } from '../bootstrap/state.js'
 import type { Command, LocalCommandCall } from '../types/command.js'
 import {
+  runKairosMemoryCommand,
+  runKairosMemoryProposalsCommand,
+} from './kairos-memory-proposals.js'
+import {
   enqueueDemoTask,
   optInProject,
   optOutProject,
@@ -39,7 +43,9 @@ const HELP_TEXT = `Usage:
 /kairos pause
 /kairos resume
 /kairos dashboard
-/kairos logs [projectDir] [lines]`
+/kairos logs [projectDir] [lines]
+/kairos memory-proposals list|diff|accept|reject
+/kairos memory wipe --confirm`
 
 type Subcommand =
   | 'status'
@@ -51,6 +57,8 @@ type Subcommand =
   | 'resume'
   | 'dashboard'
   | 'logs'
+  | 'memory-proposals'
+  | 'memory'
 
 const SUBCOMMANDS = new Set<Subcommand>([
   'status',
@@ -62,6 +70,8 @@ const SUBCOMMANDS = new Set<Subcommand>([
   'resume',
   'dashboard',
   'logs',
+  'memory-proposals',
+  'memory',
 ])
 
 function parseArgs(args: string): { sub: Subcommand | null; rest: string[] } {
@@ -228,6 +238,10 @@ export async function runKairosCommand(args: string): Promise<string> {
       }
       return handleLogs(undefined, first)
     }
+    case 'memory-proposals':
+      return runKairosMemoryProposalsCommand(rest)
+    case 'memory':
+      return runKairosMemoryCommand(rest)
   }
 }
 
@@ -245,7 +259,8 @@ const kairos = {
   type: 'local',
   name: 'kairos',
   description: 'Inspect and control the KAIROS background daemon',
-  argumentHint: 'status|list|opt-in|opt-out|demo|pause|resume|dashboard|logs',
+  argumentHint:
+    'status|list|opt-in|opt-out|demo|pause|resume|dashboard|logs|memory-proposals|memory',
   supportsNonInteractive: true,
   load: () => Promise.resolve({ call }),
 } satisfies Command
