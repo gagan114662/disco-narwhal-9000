@@ -4,7 +4,11 @@ import type {
   ChildLauncher,
   ChildRunResult,
 } from './childRunner.js'
-import { createSdkChildLauncher, runChild } from './childRunner.js'
+import {
+  AUTH_FAILURE_NOTICE,
+  createSdkChildLauncher,
+  runChild,
+} from './childRunner.js'
 import {
   createCostTracker,
   type CapHit,
@@ -167,6 +171,55 @@ export function makeCapHitHandler(
   }
 }
 
+type AuthFailureHandler = (params: {
+  projectDir: string
+  task: CronTask
+  result: ChildRunResult
+}) => Promise<void>
+
+/**
+ * Auth failures come from the user's Keychain no longer letting the daemon
+ * use the claude binary — usually after an auto-update. Retrying inside the
+ * daemon can't possibly help (the ACL re-prompt needs an interactive UI),
+ * so we flip global pause state with a descriptive reason. The `/kairos
+ * status` command reads pause.json and surfaces the notice verbatim.
+ */
+export function makeAuthFailureHandler(
+  stateWriter: StateWriter,
+  now: () => Date,
+): AuthFailureHandler {
+  return async ({ projectDir, task, result }) => {
+    const t = now().toISOString()
+    await stateWriter.writePauseState({
+      paused: true,
+      reason: 'auth_failure',
+      scope: 'global',
+      setAt: t,
+      source: 'daemon',
+      notice: AUTH_FAILURE_NOTICE,
+    })
+    await stateWriter.appendGlobalEvent({
+      kind: 'auth_failure',
+      t,
+      projectDir,
+      taskId: task.id,
+      runId: result.runId,
+      notice: AUTH_FAILURE_NOTICE,
+      errorMessage: result.errorMessage ?? 'unknown',
+      source: 'daemon',
+    })
+    await stateWriter.appendProjectEvent(projectDir, {
+      kind: 'auth_failure',
+      t,
+      taskId: task.id,
+      runId: result.runId,
+      notice: AUTH_FAILURE_NOTICE,
+      errorMessage: result.errorMessage ?? 'unknown',
+      source: 'daemon',
+    })
+  }
+}
+
 export type RunFiredTaskOptions = {
   projectDir: string
   stateWriter: StateWriter
@@ -176,6 +229,7 @@ export type RunFiredTaskOptions = {
   maxTurns: number
   timeoutMs: number
   handleCapHit: CapHitHandler
+  handleAuthFailure?: AuthFailureHandler
   now: () => Date
 }
 
@@ -189,6 +243,7 @@ export function makeRunFiredTask(options: RunFiredTaskOptions) {
     maxTurns,
     timeoutMs,
     handleCapHit,
+    handleAuthFailure,
     now,
   } = options
 
@@ -224,6 +279,16 @@ export function makeRunFiredTask(options: RunFiredTaskOptions) {
     )
 
     let paused = false
+
+    // Auth failures take precedence over cost accounting: the run didn't
+    // actually consume a cap, and the daemon must stop spawning new children
+    // immediately so every queued task doesn't burn a fresh Keychain
+    // re-prompt on a sleeping user's machine.
+    if (result.exitReason === 'auth_failure' && handleAuthFailure) {
+      await handleAuthFailure({ projectDir, task, result })
+      return { ok: false, paused: true, result }
+    }
+
     if (costTracker) {
       const { capHit } = await costTracker.record({
         projectDir,
@@ -285,6 +350,7 @@ export async function runKairosWorker(
     2 * 60 * 1000
 
   const handleCapHit = makeCapHitHandler(stateWriter, now)
+  const handleAuthFailure = makeAuthFailureHandler(stateWriter, now)
   const checkPaused = async (): Promise<boolean> => {
     const state = await stateWriter.readPauseState()
     return !!state?.paused
@@ -315,6 +381,7 @@ export async function runKairosWorker(
       maxTurns,
       timeoutMs,
       handleCapHit,
+      handleAuthFailure,
       now,
     })
     const worker = createProjectWorker(projectDir, {

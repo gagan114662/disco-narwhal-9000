@@ -72,6 +72,16 @@ export type ProjectLogEvent =
       message: string
       source: 'daemon'
     }
+  | {
+      kind: 'auth_failure'
+      t: string
+      projectDir: string
+      taskId: string
+      runId: string
+      notice: string
+      errorMessage: string
+      source: 'daemon'
+    }
 
 export type GlobalStatus = {
   kind: 'kairos'
@@ -95,12 +105,14 @@ export type CostsFile = {
 
 export type PauseState = {
   paused: boolean
-  reason?: 'cap_hit'
+  reason?: 'cap_hit' | 'auth_failure'
   scope?: 'project' | 'global'
   cap?: number
   current?: number
   setAt?: string
   source: 'daemon' | 'user'
+  /** Human-readable notice shown to the user when the daemon pauses itself. */
+  notice?: string
 }
 
 const writeQueues = new Map<string, Promise<void>>()
