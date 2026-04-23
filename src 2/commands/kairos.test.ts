@@ -12,6 +12,7 @@ import {
   __setKairosCloudSyncDepsForTesting,
   runKairosCommand,
 } from './kairos.js'
+import { __resetKairosCloudLifecycleDepsForTesting } from '../daemon/kairos/cloudLifecycle.js'
 
 const TEMP_DIRS: string[] = []
 let originalProjectRoot: string
@@ -39,6 +40,7 @@ beforeEach(() => {
 
 afterEach(() => {
   setProjectRoot(originalProjectRoot)
+  __resetKairosCloudLifecycleDepsForTesting()
   __resetKairosCloudSyncDepsForTesting()
   delete process.env.CLAUDE_CONFIG_DIR
   delete process.env.KAIROS_DASHBOARD_URL
@@ -53,6 +55,7 @@ describe('/kairos command', () => {
     expect(out).toContain('/kairos status')
     expect(out).toContain('/kairos opt-in')
     expect(out).toContain('/kairos demo')
+    expect(out).toContain('/kairos cloud deploy')
     expect(out).toContain('/kairos cloud-sync')
   })
 

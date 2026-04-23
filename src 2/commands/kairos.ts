@@ -43,6 +43,7 @@ import {
   type ApplyKairosCloudStateBundleResult,
   type KairosCloudStateBundle,
 } from '../daemon/kairos/cloudSync.js'
+import { runKairosCloudLifecycleCommand } from '../daemon/kairos/cloudLifecycle.js'
 import { safeParseJSON } from '../utils/json.js'
 import type { GlobalStatus, PauseState } from '../daemon/kairos/stateWriter.js'
 
@@ -59,6 +60,9 @@ const HELP_TEXT = `Usage:
 /kairos resume
 /kairos dashboard
 /kairos logs [projectDir] [lines]
+/kairos cloud deploy --ssh-host <user@host> [--use-subscription | --anthropic-api-key-env <ENV_NAME>]
+/kairos cloud upgrade [--ssh-host <user@host>] [--use-subscription | --anthropic-api-key-env <ENV_NAME>]
+/kairos cloud destroy [--ssh-host <user@host>] --confirm
 /kairos cloud-sync <runtimeRoot>
 /kairos gateway telegram setup <bot-token>
 /kairos gateway telegram pair
@@ -81,6 +85,7 @@ type Subcommand =
   | 'resume'
   | 'dashboard'
   | 'logs'
+  | 'cloud'
   | 'cloud-sync'
   | 'gateway'
   | 'skills'
@@ -98,6 +103,7 @@ const SUBCOMMANDS = new Set<Subcommand>([
   'resume',
   'dashboard',
   'logs',
+  'cloud',
   'cloud-sync',
   'gateway',
   'skills',
@@ -345,6 +351,10 @@ async function handleCloudSync(runtimeRootArg: string | undefined): Promise<stri
   }
 }
 
+async function handleCloud(rest: string[]): Promise<string> {
+  return runKairosCloudLifecycleCommand(rest)
+}
+
 export async function runKairosCommand(args: string): Promise<string> {
   const { sub, rest } = parseArgs(args)
   if (sub === null) {
@@ -367,6 +377,8 @@ export async function runKairosCommand(args: string): Promise<string> {
       return handleResume()
     case 'dashboard':
       return handleDashboard()
+    case 'cloud':
+      return handleCloud(rest)
     case 'cloud-sync':
       return handleCloudSync(rest.join(' ').trim() || undefined)
     case 'gateway':
@@ -400,7 +412,7 @@ const kairos = {
   name: 'kairos',
   description: 'Inspect and control the KAIROS background daemon',
   argumentHint:
-    'status|list|opt-in|opt-out|demo|pause|resume|dashboard|logs|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
+    'status|list|opt-in|opt-out|demo|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
   load: () => import('./kairos-ui.js'),
 } satisfies Command
 
