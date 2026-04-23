@@ -38,6 +38,12 @@ type ValidationResult = {
   resolvedRefs: Array<{ id: string; locations: string[] }>
 }
 
+type GitHubIssueMatch = {
+  number: number
+  title: string
+  url: string
+}
+
 type ExecResult = {
   stdout: string
   stderr: string
@@ -381,10 +387,68 @@ async function findLocalReferenceMatches(
   return found
 }
 
+async function findGitHubReferenceMatches(
+  id: string,
+  repository: string | null,
+  deps: Pick<IssueCommandDeps, 'exec' | 'getGhAuthStatus'>,
+): Promise<string[]> {
+  if (!repository) return []
+
+  const ghStatus = await (deps.getGhAuthStatus ?? getGhAuthStatus)()
+  if (ghStatus !== 'authenticated') {
+    return []
+  }
+
+  const exec =
+    deps.exec ??
+    (async (file, args, options) =>
+      execFileNoThrowWithCwd(file, args, {
+        cwd: options?.cwd,
+        input: options?.input,
+        stdin: options?.stdin,
+      }))
+
+  const searchQuery = `${id} in:title,body`
+  const result = await exec(
+    'gh',
+    [
+      'issue',
+      'list',
+      '--repo',
+      repository,
+      '--state',
+      'all',
+      '--search',
+      searchQuery,
+      '--limit',
+      '10',
+      '--json',
+      'number,title,url',
+    ],
+    {},
+  )
+
+  if (result.code !== 0 || !result.stdout.trim()) {
+    return []
+  }
+
+  let matches: GitHubIssueMatch[] = []
+  try {
+    matches = JSON.parse(result.stdout) as GitHubIssueMatch[]
+  } catch {
+    return []
+  }
+
+  return matches
+    .filter(match => typeof match.number === 'number' && typeof match.url === 'string')
+    .map(match => `github issue #${match.number}: ${match.url}`)
+}
+
 async function validateUpstreamRefs(
   command: ParsedIssueCommand,
   projectDir: string,
-  deps: Pick<IssueCommandDeps, 'which' | 'exec' | 'readFile'>,
+  repository: string | null,
+  deps: Pick<IssueCommandDeps, 'which' | 'exec' | 'readFile' | 'getGhAuthStatus'>,
 ): Promise<ValidationResult> {
   const blockingErrors: string[] = []
   const warnings: string[] = []
@@ -405,12 +469,22 @@ async function validateUpstreamRefs(
     }
 
     const locations = await findLocalReferenceMatches(projectDir, id, deps)
-    if (locations.length === 0) {
+    if (locations.length > 0) {
+      resolvedRefs.push({ id, locations })
+      continue
+    }
+
+    const githubLocations = await findGitHubReferenceMatches(
+      id,
+      repository,
+      deps,
+    )
+    if (githubLocations.length === 0) {
       warnings.push(`Upstream reference ${id} was not found in the local repo.`)
       continue
     }
 
-    resolvedRefs.push({ id, locations })
+    resolvedRefs.push({ id, locations: githubLocations })
   }
 
   return {
@@ -516,11 +590,16 @@ export async function runIssueCommand(
   }
 
   const projectDir = deps.projectDir ?? getProjectRoot()
-  const validation = await validateUpstreamRefs(command, projectDir, deps)
   const repoInfo = command.repo
     ? command.repo
     : await (deps.detectRepository ?? detectCurrentRepositoryWithHost)()
   const repository = formatRepositoryForGh(repoInfo)
+  const validation = await validateUpstreamRefs(
+    command,
+    projectDir,
+    repository,
+    deps,
+  )
 
   const scaffoldInput: IssueScaffoldInput = {
     kind: command.kind,

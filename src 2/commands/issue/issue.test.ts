@@ -208,6 +208,41 @@ describe('/issue scaffold', () => {
     expect(result).toContain('Created issue: https://github.com/owner/repo/issues/123')
   })
 
+  test('resolves upstream refs from GitHub issues when local files do not contain them', async () => {
+    const projectDir = makeProjectDir()
+
+    const result = await runIssueCommand(
+      'design Define checkout hold flow --upstream REQ-CHECKOUT-HOLD-001 --repo owner/repo',
+      {
+        projectDir,
+        getGhAuthStatus: async () => 'authenticated',
+        which: async () => null,
+        exec: async (file, args) => {
+          expect(file).toBe('gh')
+          expect(args).toContain('issue')
+          expect(args).toContain('list')
+          expect(args).toContain('--repo')
+          expect(args).toContain('owner/repo')
+          return {
+            code: 0,
+            stdout: JSON.stringify([
+              {
+                number: 77,
+                title: 'Requirement source',
+                url: 'https://github.com/owner/repo/issues/77',
+              },
+            ]),
+            stderr: '',
+          }
+        },
+      },
+    )
+
+    expect(result).toContain(
+      'RESOLVED: REQ-CHECKOUT-HOLD-001 -> github issue #77: https://github.com/owner/repo/issues/77',
+    )
+  })
+
   test('blocks GitHub creation when required upstream refs are missing', async () => {
     const projectDir = makeProjectDir()
 
