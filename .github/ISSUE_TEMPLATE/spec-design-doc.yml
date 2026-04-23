@@ -1,0 +1,118 @@
+name: Spec / design doc
+description: Define the intended approach before implementation fans out.
+title: "[spec] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this when the next step is to produce a decision-ready design, not to directly ship code.
+        Preserve upstream `REQ-...` and `AC-...` identifiers verbatim so the resulting work orders can inherit them without reinterpretation.
+  - type: input
+    id: artifact_id
+    attributes:
+      label: Design ID
+      description: Use the format `DES-<PREFIX>-001`.
+      placeholder: DES-CHECKOUT-HOLD-001
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What decision, ambiguity, or coordination cost does this spec need to resolve?
+      placeholder: Describe the unresolved problem and why a design doc is the right next move.
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: User/Developer Impact
+      description: Who benefits from having this design clarified?
+      placeholder: Explain what uncertainty, churn, or blocked work this spec should remove.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What systems, interfaces, or journeys must the design cover?
+      placeholder: List the surfaces the design must explain well enough for implementation to begin.
+    validations:
+      required: true
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Out of Scope
+      description: What should this spec intentionally avoid deciding?
+      placeholder: Call out migrations, implementation details, or future ideas that are not part of this document.
+    validations:
+      required: true
+  - type: textarea
+    id: upstream_requirements
+    attributes:
+      label: Upstream Requirements
+      description: List the `REQ-...` and `AC-...` IDs this design must preserve.
+      placeholder: |
+        REQ-CHECKOUT-HOLD-001
+        AC-REQ-CHECKOUT-HOLD-001.1
+        AC-REQ-CHECKOUT-HOLD-001.2
+    validations:
+      required: true
+  - type: textarea
+    id: copied_requirement_text
+    attributes:
+      label: Copied Requirement Text
+      description: Copy the relevant upstream requirement text verbatim before proposing solutions.
+      placeholder: Paste the exact requirement and acceptance-criterion text here.
+    validations:
+      required: true
+  - type: textarea
+    id: design_decisions
+    attributes:
+      label: Design Decisions
+      description: Record the concrete decisions this design makes.
+      placeholder: |
+        DEC-DES-CHECKOUT-HOLD-001.01: [decision]
+        DEC-DES-CHECKOUT-HOLD-001.02: [decision]
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance Criteria
+      description: What makes the design reviewable and complete?
+      placeholder: |
+        AC-DES-CHECKOUT-HOLD-001.1: The design maps each upstream requirement to a concrete boundary or flow.
+        AC-DES-CHECKOUT-HOLD-001.2: Failure modes, invariants, and non-goals are explicit.
+    validations:
+      required: true
+  - type: textarea
+    id: suggested_entry_points
+    attributes:
+      label: Suggested Entry Points
+      description: What code, docs, or prior issues should the author inspect first?
+      placeholder: Point to current implementations, docs, or bugs that this design should build from.
+    validations:
+      required: true
+  - type: textarea
+    id: verification_test_plan
+    attributes:
+      label: Verification / Review Plan
+      description: How will reviewers validate that this spec is actionable?
+      placeholder: |
+        COV-DES-CHECKOUT-HOLD-001
+        - Review checklist:
+        - Diagrams / traces to inspect:
+        - Questions that must be resolved before implementation starts:
+    validations:
+      required: true
+  - type: dropdown
+    id: trunk_expectations
+    attributes:
+      label: Trunk Expectations
+      description: Will the resulting implementation likely remain trunk-safe?
+      options:
+        - trunk-safe
+        - trunk-touch
+    validations:
+      required: true

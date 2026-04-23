@@ -1,0 +1,106 @@
+name: Leaf build / work order
+description: Small, execution-ready implementation slice with explicit upstream references.
+title: "[work order] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this when the work should be executable by a contributor or coding agent without a planning round-trip.
+        Preserve upstream `REQ-...`, `AC-...`, and `DES-...` identifiers verbatim.
+  - type: input
+    id: artifact_id
+    attributes:
+      label: Work Order ID
+      description: Use the format `WO-<PREFIX>-001`.
+      placeholder: WO-CHECKOUT-HOLD-001
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What outcome ships when this work order is done?
+      placeholder: Describe the smallest independently reviewable slice this work order should deliver.
+    validations:
+      required: true
+  - type: textarea
+    id: in_scope
+    attributes:
+      label: In Scope
+      description: What exact files, commands, behaviors, and tests may this work order touch?
+      placeholder: List the allowed change surface precisely.
+    validations:
+      required: true
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Out of Scope
+      description: What tempting cleanup or adjacent work must stay separate?
+      placeholder: Call out refactors, unrelated fixes, and larger follow-up slices that do not belong here.
+    validations:
+      required: true
+  - type: textarea
+    id: requirements
+    attributes:
+      label: Requirements
+      description: List upstream requirement IDs and copy the relevant text verbatim.
+      placeholder: |
+        REQ-CHECKOUT-HOLD-001
+        AC-REQ-CHECKOUT-HOLD-001.1
+        AC-REQ-CHECKOUT-HOLD-001.2
+        ---
+        Paste the relevant upstream requirement text verbatim below the IDs.
+    validations:
+      required: true
+  - type: textarea
+    id: blueprints
+    attributes:
+      label: Blueprints / Design References
+      description: List the design artifacts and code references that shape this implementation.
+      placeholder: |
+        DES-CHECKOUT-HOLD-001
+        - Files / docs / tests to inspect first:
+        - Integration points and invariants to preserve:
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance Criteria
+      description: Write concrete completion checks with stable IDs.
+      placeholder: |
+        AC-WO-CHECKOUT-HOLD-001.1: The scoped behavior changes exactly as described by the inherited requirement/design IDs.
+        AC-WO-CHECKOUT-HOLD-001.2: The minimum regression coverage needed to keep the slice safe is added or updated.
+    validations:
+      required: true
+  - type: textarea
+    id: suggested_entry_points
+    attributes:
+      label: Suggested Entry Points
+      description: Where should a contributor start?
+      placeholder: Point to the primary files, tests, commands, or services to open first.
+    validations:
+      required: true
+  - type: textarea
+    id: e2e_acceptance_tests
+    attributes:
+      label: E2E Acceptance Tests
+      description: Define the concrete coverage artifact that proves this work order is done.
+      placeholder: |
+        COV-WO-CHECKOUT-HOLD-001
+        - Test command:
+        - Manual flow:
+        - Assertions mapped to the AC IDs:
+        - Known gaps / deferred coverage:
+    validations:
+      required: true
+  - type: dropdown
+    id: trunk_expectations
+    attributes:
+      label: Trunk Expectations
+      description: Does this issue stay within trunk-safe boundaries?
+      options:
+        - trunk-safe
+        - trunk-touch
+    validations:
+      required: true

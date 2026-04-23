@@ -1,0 +1,107 @@
+name: Requirement definition
+description: Define one cohesive, testable capability before design and implementation.
+title: "[requirement] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this when the next artifact should be a stable requirement ID with testable acceptance criteria.
+        Downstream design docs and work orders should preserve the IDs defined here verbatim.
+  - type: input
+    id: artifact_id
+    attributes:
+      label: Requirement ID
+      description: Use the format `REQ-<PREFIX>-001`.
+      placeholder: REQ-CHECKOUT-HOLD-001
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user or business problem requires this capability?
+      placeholder: Describe the concrete problem and why it matters now.
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: User/Developer Impact
+      description: Who benefits if this requirement is satisfied?
+      placeholder: Name the workflow, outcome, or ambiguity this removes.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What exact capability does this requirement cover?
+      placeholder: Keep the requirement atomic enough that design can map to it cleanly.
+    validations:
+      required: true
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Out of Scope
+      description: What nearby capability deserves a separate requirement ID?
+      placeholder: Call out adjacent features that must stay out of this requirement.
+    validations:
+      required: true
+  - type: textarea
+    id: upstream_context
+    attributes:
+      label: Upstream Context
+      description: What business context, user reports, or constraints already exist?
+      placeholder: Link the business problem, source artifact, and known technical constraints.
+    validations:
+      required: true
+  - type: textarea
+    id: requirement_statement
+    attributes:
+      label: Requirement Statement
+      description: Write one user-story style requirement using the same ID.
+      placeholder: |
+        REQ-CHECKOUT-HOLD-001: As a [role], I want to [capability], so that I can [outcome].
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance Criteria
+      description: Use stable IDs and the form `When [condition], the system shall [behavior].`
+      placeholder: |
+        AC-REQ-CHECKOUT-HOLD-001.1: When [condition], the system shall [behavior].
+        AC-REQ-CHECKOUT-HOLD-001.2: When [condition], the system shall [behavior].
+    validations:
+      required: true
+  - type: textarea
+    id: suggested_entry_points
+    attributes:
+      label: Suggested Entry Points
+      description: Where should a designer or engineer look first?
+      placeholder: Point to existing docs, code, subject-matter experts, or tests.
+    validations:
+      required: true
+  - type: textarea
+    id: verification_coverage
+    attributes:
+      label: Verification / Coverage
+      description: Define the coverage artifact that proves the requirement is testable.
+      placeholder: |
+        COV-REQ-CHECKOUT-HOLD-001
+        - Test command:
+        - Manual flow:
+        - Assertions tied to the AC IDs:
+        - Gaps / follow-ups:
+    validations:
+      required: true
+  - type: dropdown
+    id: trunk_expectations
+    attributes:
+      label: Trunk Expectations
+      description: Does satisfying this requirement likely stay trunk-safe?
+      options:
+        - trunk-safe
+        - trunk-touch
+    validations:
+      required: true
