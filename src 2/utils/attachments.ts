@@ -4,6 +4,10 @@ import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
 } from 'src/services/analytics/index.js'
 import {
+  emitWideDiagnosticsRegressionEvent,
+  summarizeDiagnosticRegression,
+} from 'src/services/analytics/wideEvents.js'
+import {
   toolMatchesName,
   type Tools,
   type ToolUseContext,
@@ -1015,7 +1019,7 @@ export async function getAttachments(
     ...userAttachmentResults.flat(),
     ...threadAttachmentResults.flat(),
     ...mainThreadAttachmentResults.flat(),
-  ].filter(a => a !== undefined && a !== null)
+  ].filter((a): a is Attachment => a !== undefined && a !== null)
 }
 
 async function maybe<A>(label: string, f: () => Promise<A[]>): Promise<A[]> {
@@ -2822,7 +2826,7 @@ export function extractAtMentionedFiles(content: string): string[] {
   }
 
   // Extract regular mentions
-  const regularMatchArray = content.match(regularAtMentionRegex) || []
+  const regularMatchArray: string[] = content.match(regularAtMentionRegex) ?? []
   regularMatchArray.forEach(match => {
     const filename = match.slice(match.indexOf('@') + 1)
     // Don't include if it starts with a quote (already handled as quoted)
@@ -2912,6 +2916,13 @@ async function getDiagnosticAttachments(
   if (newDiagnostics.length === 0) {
     return []
   }
+
+  emitWideDiagnosticsRegressionEvent(
+    summarizeDiagnosticRegression(
+      newDiagnostics,
+      diagnosticTracker.getTrackedFileCount(),
+    ),
+  )
 
   return [
     {
@@ -3755,7 +3766,11 @@ async function getTeammateMailboxAttachments(
 
         // Find the teammate ID by name
         const teammateId = appState.teamContext?.teammates
-          ? Object.entries(appState.teamContext.teammates).find(
+          ? Object.entries(
+              appState.teamContext.teammates as Record<string, {
+                name?: string;
+              }>,
+            ).find(
               ([, t]) => t.name === teammateToRemove,
             )?.[0]
           : undefined
