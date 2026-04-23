@@ -21,6 +21,10 @@ import {
   getSkillsRoot,
 } from './paths.js'
 import type { SkillEdit, SkillPatch } from './patchSchema.js'
+import {
+  loadApprovedPatchRecord,
+  type SkillPatchApproval,
+} from './reviewQueue.js'
 
 export const MAX_DELETION_LINES = 10
 
@@ -109,8 +113,24 @@ export type ApplySkillPatchResult = {
  */
 export async function applySkillPatch(
   patch: SkillPatch,
+  approval: SkillPatchApproval,
   now: Date = new Date(),
 ): Promise<ApplySkillPatchResult> {
+  if (!approval) {
+    throw new SkillPatchApplyError('manual approval required')
+  }
+  const approvedRecord = await loadApprovedPatchRecord(approval)
+  if (!approvedRecord || approvedRecord.approval?.approvedAt !== approval.approvedAt) {
+    throw new SkillPatchApplyError(
+      `manual approval required: no review record for approvalId=${approval.approvalId}`,
+    )
+  }
+  if (JSON.stringify(approvedRecord.patch) !== JSON.stringify(patch)) {
+    throw new SkillPatchApplyError(
+      `manual approval required: approvalId=${approval.approvalId} does not match patch contents`,
+    )
+  }
+
   const skillPath = getSkillFilePath(patch.skill)
   if (!isInsideSkillsRoot(skillPath)) {
     throw new SkillPatchApplyError(

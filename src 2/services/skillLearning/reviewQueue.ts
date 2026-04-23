@@ -1,14 +1,13 @@
 // Browse and mutate the pending-improvements queue from the command line.
 //
 // On-disk layout (see paths.ts):
-//   <id>.json             — pending
+//   <id>.json             — pending, optionally stamped with approval metadata
 //   applied/<id>.json     — accepted and written back to live skill
 //   rejected/<id>.json    — rejected, kept for audit
 //   backups/<skill>-<ts>.md — pre-apply snapshots
 
-import { readdir, readFile, rename } from 'fs/promises'
+import { mkdir, readdir, readFile, rename, writeFile } from 'fs/promises'
 import { join } from 'path'
-import { mkdir } from 'fs/promises'
 import { isFsInaccessible } from '../../utils/errors.js'
 import {
   getAppliedDir,
@@ -20,12 +19,19 @@ import {
 } from './paths.js'
 import { SkillPatchSchema, type SkillPatch } from './patchSchema.js'
 
+export type SkillPatchApproval = {
+  approvedBy: string
+  approvedAt: number
+  approvalId: string
+}
+
 export type StoredPatch = {
   id: string
   createdAt: number
   patch: SkillPatch
   status: 'pending' | 'applied' | 'rejected'
   path: string
+  approval?: SkillPatchApproval
 }
 
 async function readJsonSafe(path: string): Promise<unknown | null> {
@@ -35,6 +41,23 @@ async function readJsonSafe(path: string): Promise<unknown | null> {
   } catch (e) {
     if (isFsInaccessible(e)) return null
     return null
+  }
+}
+
+function parseApproval(raw: unknown): SkillPatchApproval | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const rec = raw as Record<string, unknown>
+  if (typeof rec.approvedBy !== 'string' || rec.approvedBy.length === 0) {
+    return undefined
+  }
+  if (typeof rec.approvedAt !== 'number') return undefined
+  if (typeof rec.approvalId !== 'string' || rec.approvalId.length === 0) {
+    return undefined
+  }
+  return {
+    approvedBy: rec.approvedBy,
+    approvedAt: rec.approvedAt,
+    approvalId: rec.approvalId,
   }
 }
 
@@ -55,6 +78,7 @@ function parseStored(
     patch: patch.data,
     status,
     path,
+    approval: parseApproval(rec.approval),
   }
 }
 
@@ -100,6 +124,40 @@ export async function loadPatchById(id: string): Promise<StoredPatch | null> {
     if (stored) return stored
   }
   return null
+}
+
+export async function recordPatchApproval(
+  id: string,
+  approval: SkillPatchApproval,
+): Promise<StoredPatch> {
+  const path = getPendingPatchPath(id)
+  const raw = await readJsonSafe(path)
+  const stored = parseStored(id, raw, 'pending', path)
+  if (!stored) {
+    throw new Error(`pending patch ${id} not found`)
+  }
+
+  const nextRaw = {
+    id,
+    createdAt: stored.createdAt,
+    patch: stored.patch,
+    approval,
+  }
+  await writeFile(path, `${JSON.stringify(nextRaw, null, 2)}\n`, 'utf-8')
+  return {
+    ...stored,
+    approval,
+  }
+}
+
+export async function loadApprovedPatchRecord(
+  approval: SkillPatchApproval,
+): Promise<StoredPatch | null> {
+  const stored = await loadPatchById(approval.approvalId)
+  if (!stored?.approval) return null
+  if (stored.approval.approvedAt !== approval.approvedAt) return null
+  if (stored.approval.approvedBy !== approval.approvedBy) return null
+  return stored
 }
 
 /**
