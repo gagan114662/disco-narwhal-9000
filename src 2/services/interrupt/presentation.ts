@@ -53,7 +53,7 @@ export function formatQueuedPreviewContent(
   }
 
   if (typeof value === 'string') {
-    return getQueuedMessageBadgeLabel(value)
+    return prefixQueuedPreviewText(value)
   }
 
   const prefixed = value.map((block, index) => {
@@ -62,7 +62,7 @@ export function formatQueuedPreviewContent(
     }
     return {
       ...block,
-      text: getQueuedMessageBadgeLabel(block.text),
+      text: prefixQueuedPreviewText(block.text),
     } satisfies TextBlockParam
   })
 
@@ -73,7 +73,7 @@ export function formatQueuedPreviewContent(
   return [
     {
       type: 'text',
-      text: getQueuedMessageBadgeLabel(''),
+      text: prefixQueuedPreviewText(''),
     },
     ...prefixed,
   ]
@@ -98,4 +98,8 @@ function truncateForBadge(text: string, limit: number): string {
     return normalized
   }
   return `${normalized.slice(0, limit - 3)}...`
+}
+
+function prefixQueuedPreviewText(text: string): string {
+  return text.startsWith('queued:') ? text : `queued: ${text}`
 }

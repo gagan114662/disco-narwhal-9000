@@ -1,4 +1,7 @@
 import { describe, expect, test } from 'bun:test'
+import React from 'react'
+import { FallbackToolUseRejectedMessage } from '../../components/FallbackToolUseRejectedMessage.js'
+import { renderToString } from '../../utils/staticRender.js'
 import {
   extractQueuedCommandText,
   formatQueuedPreviewContent,
@@ -98,6 +101,17 @@ describe('interrupt presentation helpers', () => {
 
     expect(
       formatQueuedPreviewContent(
+        'line one\nline two\n' + 'x'.repeat(80),
+        {
+          mode: 'prompt',
+          isMeta: false,
+          origin: undefined,
+        },
+      ),
+    ).toBe(`queued: line one\nline two\n${'x'.repeat(80)}`)
+
+    expect(
+      formatQueuedPreviewContent(
         [{ type: 'text', text: 'hello from queue' }],
         {
           mode: 'prompt',
@@ -106,6 +120,14 @@ describe('interrupt presentation helpers', () => {
         },
       ),
     ).toEqual([{ type: 'text', text: 'queued: hello from queue' }])
+  })
+
+  test('renders tool-scoped cancellation copy for fallback rejection UI', async () => {
+    const rendered = await renderToString(
+      React.createElement(FallbackToolUseRejectedMessage),
+    )
+    expect(rendered).toContain('Interrupted tool run')
+    expect(rendered).not.toContain('Interrupted response')
   })
 
   test('extracts text from content blocks and exposes the redirect marker', () => {
