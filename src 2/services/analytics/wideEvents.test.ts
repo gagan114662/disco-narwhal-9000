@@ -2,7 +2,10 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { _resetForTesting, attachAnalyticsSink } from './index.js'
 import {
   _validateWideEventForTesting,
+  emitWideAgentLifecycleEvent,
+  emitWideDiagnosticsRegressionEvent,
   emitWideTaskLifecycleEvent,
+  emitWideToolExecutionEvent,
   getWideEventAgentFamily,
   getWideEventModelFamily,
   getWideEventToolFamily,
@@ -106,7 +109,7 @@ describe('wide event helpers', () => {
 })
 
 describe('emitWideTaskLifecycleEvent', () => {
-  test('routes canonical events through the analytics sink', () => {
+  test('routes all canonical event families through the analytics sink', () => {
     const logged: Array<{
       eventName: string
       metadata: unknown
@@ -127,6 +130,38 @@ describe('emitWideTaskLifecycleEvent', () => {
       duration_ms: 42,
     })
 
+    emitWideAgentLifecycleEvent({
+      lifecycle: 'stopped',
+      execution_mode: 'remote',
+      agent_family: 'general-purpose',
+      model_family: 'sonnet',
+      is_built_in_agent: true,
+      duration_ms: 84,
+      result: 'completed',
+    })
+
+    emitWideToolExecutionEvent({
+      result: 'denied',
+      tool_family: 'Bash',
+      tool_transport: 'local',
+      is_read_only: false,
+      duration_ms: 126,
+      permission_source: 'user_reject',
+      tool_result_size_bytes: 0,
+    })
+
+    emitWideDiagnosticsRegressionEvent({
+      change: 'worsened_after_edit',
+      tracked_file_count: 3,
+      affected_file_count: 1,
+      diagnostic_count: 2,
+      error_count: 1,
+      warning_count: 1,
+      info_count: 0,
+      hint_count: 0,
+      has_linter_diagnostics: true,
+    })
+
     expect(logged).toEqual([
       {
         eventName: 'tengu_wide_task_lifecycle',
@@ -136,6 +171,44 @@ describe('emitWideTaskLifecycleEvent', () => {
           execution_mode: 'background',
           has_tool_use_id: true,
           duration_ms: 42,
+        },
+      },
+      {
+        eventName: 'tengu_wide_agent_lifecycle',
+        metadata: {
+          lifecycle: 'stopped',
+          execution_mode: 'remote',
+          agent_family: 'general-purpose',
+          model_family: 'sonnet',
+          is_built_in_agent: true,
+          duration_ms: 84,
+          result: 'completed',
+        },
+      },
+      {
+        eventName: 'tengu_wide_tool_execution',
+        metadata: {
+          result: 'denied',
+          tool_family: 'Bash',
+          tool_transport: 'local',
+          is_read_only: false,
+          duration_ms: 126,
+          permission_source: 'user_reject',
+          tool_result_size_bytes: 0,
+        },
+      },
+      {
+        eventName: 'tengu_wide_diagnostics_regression',
+        metadata: {
+          change: 'worsened_after_edit',
+          tracked_file_count: 3,
+          affected_file_count: 1,
+          diagnostic_count: 2,
+          error_count: 1,
+          warning_count: 1,
+          info_count: 0,
+          hint_count: 0,
+          has_linter_diagnostics: true,
         },
       },
     ])

@@ -1,3 +1,4 @@
+/** Authority for canonical wide event shapes; add new event families here instead of emitting ad-hoc payloads from callsites. */
 import type { DiagnosticFile } from '../diagnosticTracking.js'
 import { logEvent } from './index.js'
 
