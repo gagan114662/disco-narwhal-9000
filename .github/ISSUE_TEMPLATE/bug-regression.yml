@@ -1,0 +1,113 @@
+name: Bug / regression
+description: Capture a concrete failure mode with enough detail to reproduce and verify.
+title: "[bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for broken behavior, regressions, or user-visible mismatches between expected and actual behavior.
+        Keep the repro, actual behavior, expected behavior, and verification steps stable across all follow-up artifacts.
+  - type: input
+    id: artifact_id
+    attributes:
+      label: Bug ID
+      description: Use the format `BUG-<PREFIX>-001`.
+      placeholder: BUG-SETTINGS-EDITS-001
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is failing now, and what should happen instead?
+      placeholder: Describe the repro, the current bad behavior, and the expected result.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Capture the exact repro contract before proposing fixes.
+      placeholder: |
+        - Environment:
+        - Steps to reproduce:
+        - Actual result:
+        - Expected result:
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: User/Developer Impact
+      description: Who is affected, how often, and how badly?
+      placeholder: Explain the broken workflow, frequency, and severity of the failure.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What is in bounds for the fix?
+      placeholder: Limit the issue to the bug fix, guardrails, and tests needed to keep it fixed.
+    validations:
+      required: true
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Out of Scope
+      description: What should not be bundled into this bug fix?
+      placeholder: List unrelated cleanup, larger refactors, or adjacent bugs that should stay separate.
+    validations:
+      required: true
+  - type: textarea
+    id: upstream_references
+    attributes:
+      label: Upstream References
+      description: Link the bug to existing requirement IDs, design IDs, and suspect code paths.
+      placeholder: |
+        Related requirement IDs: REQ-...
+        Related design IDs: DES-...
+        Suspect files / tests / logs:
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance Criteria
+      description: How will we know the regression is actually fixed?
+      placeholder: |
+        AC-BUG-SETTINGS-EDITS-001.1: The documented repro no longer fails under the same conditions.
+        AC-BUG-SETTINGS-EDITS-001.2: Expected behavior is explicit and tied back to a requirement or design reference.
+    validations:
+      required: true
+  - type: textarea
+    id: suggested_entry_points
+    attributes:
+      label: Suggested Entry Points
+      description: Where should the investigation start?
+      placeholder: Point to the failing command, screen, file, log path, or test that best exposes the bug.
+    validations:
+      required: true
+  - type: textarea
+    id: verification_test_plan
+    attributes:
+      label: Verification / Coverage
+      description: What exact repro and validation steps should be run?
+      placeholder: |
+        COV-BUG-SETTINGS-EDITS-001
+        - Failing-before-fix command or repro:
+        - Passing-after-fix command or manual flow:
+        - Assertions:
+        - Missing coverage / residual risk:
+    validations:
+      required: true
+  - type: dropdown
+    id: trunk_expectations
+    attributes:
+      label: Trunk Expectations
+      description: Does the bug fix stay within trunk-safe boundaries?
+      options:
+        - trunk-safe
+        - trunk-touch
+    validations:
+      required: true
