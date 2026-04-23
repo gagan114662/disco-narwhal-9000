@@ -742,7 +742,7 @@ export async function runKairosCloudLifecycleCommand(
   args: string[],
 ): Promise<string> {
   const parsed = parseCloudCommand(args)
-  if (!parsed.ok) {
+  if (parsed.ok === false) {
     return parsed.message
   }
 

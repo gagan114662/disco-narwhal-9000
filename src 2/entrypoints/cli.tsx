@@ -1,5 +1,9 @@
 import { feature } from 'bun:bundle';
 
+declare const MACRO: {
+  VERSION?: string
+}
+
 const CLI_VERSION =
   typeof MACRO !== 'undefined' && typeof MACRO.VERSION === 'string'
     ? MACRO.VERSION

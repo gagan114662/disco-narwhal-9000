@@ -253,13 +253,13 @@ async function handleGatewayTelegram(args: string[]): Promise<string> {
       const token = rest.join(' ').trim()
       if (!token) return 'Usage: /kairos gateway telegram setup <bot-token>'
       const result = await setupTelegram(token)
-      if (!result.ok) return `Setup failed: ${result.reason}`
+      if (result.ok === false) return `Setup failed: ${result.reason}`
       const who = result.botUsername ? ` as @${result.botUsername}` : ''
       return `Telegram gateway configured${who}. Now run \`/kairos gateway telegram pair\` to link your chat.`
     }
     case 'pair': {
       const result = await startPairing()
-      if (!result.ok) return result.reason
+      if (result.ok === false) return result.reason
       const who = result.botUsername ? `@${result.botUsername}` : 'your bot'
       return [
         `Pair code: ${result.code}`,
@@ -280,13 +280,13 @@ async function handleGatewayTelegram(args: string[]): Promise<string> {
       const target = rest[0]
       if (!target || target === 'all') {
         const r = await unpairTelegram('all')
-        if (!r.ok) return r.reason
+        if (r.ok === false) return r.reason
         return `Unpaired ${r.removed.length} chat(s). Allowlist cleared.`
       }
       const chatId = Number(target)
       if (!Number.isInteger(chatId)) return `Not a numeric chat id: ${target}`
       const r = await unpairTelegram(chatId)
-      if (!r.ok) return r.reason
+      if (r.ok === false) return r.reason
       return `Unpaired chat ${chatId}. Remaining: ${r.remaining.join(', ') || 'none'}`
     }
     default:

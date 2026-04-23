@@ -30,6 +30,10 @@ import { getBaseRenderOptions } from './utils/renderOptions.js';
 import { getSettingsWithAllErrors } from './utils/settings/allErrors.js';
 import { hasAutoModeOptIn, hasSkipDangerousModePermissionPrompt } from './utils/settings/settings.js';
 
+declare const MACRO: {
+  VERSION?: string
+}
+
 const CLI_VERSION =
   typeof MACRO !== 'undefined' && typeof MACRO.VERSION === 'string'
     ? MACRO.VERSION
