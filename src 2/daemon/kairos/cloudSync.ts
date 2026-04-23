@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'crypto'
-import { chmod, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'fs/promises'
-import { dirname, join, relative, sep } from 'path'
+import { chmod, mkdir, readFile, readdir, realpath, rename, rm, stat, writeFile } from 'fs/promises'
+import { homedir } from 'os'
+import { dirname, join, relative, resolve, sep } from 'path'
 import { getClaudeConfigHomeDir } from '../../utils/envUtils.js'
 import { execFileNoThrowWithCwd } from '../../utils/execFileNoThrow.js'
 import { gitExe, normalizeGitRemoteUrl } from '../../utils/git.js'
@@ -98,6 +99,68 @@ async function pathExists(path: string): Promise<boolean> {
     return true
   } catch {
     return false
+  }
+}
+
+function isSubpath(candidatePath: string, rootPath: string): boolean {
+  const rel = relative(rootPath, candidatePath)
+  return rel === '' || (!rel.startsWith('..') && !rel.startsWith(`..${sep}`))
+}
+
+async function getKnownSyncRoots(): Promise<string[]> {
+  const home = process.env.HOME || homedir()
+  const roots = [
+    join(home, 'Dropbox'),
+    join(home, 'Dropbox (Personal)'),
+    join(home, 'Dropbox (Business)'),
+    join(home, 'Google Drive'),
+    join(home, 'GoogleDrive'),
+    join(home, 'OneDrive'),
+    join(home, 'Library', 'Mobile Documents'),
+  ]
+
+  const iCloudDesktopSignal = join(
+    home,
+    'Library',
+    'Mobile Documents',
+    'com~apple~CloudDocs',
+    'Desktop',
+  )
+  if (await pathExists(iCloudDesktopSignal)) {
+    roots.push(join(home, 'Documents'))
+  }
+
+  return roots
+}
+
+export async function assertRuntimeRootOutsideSyncRoots(
+  runtimeRoot: string,
+): Promise<void> {
+  const requestedRoot = resolve(runtimeRoot)
+  let resolvedRoot: string
+  try {
+    resolvedRoot = await realpath(requestedRoot)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    throw new KairosCloudSyncError(
+      `Cloud sync runtime root must exist before applying state: ${requestedRoot} (${message})`,
+    )
+  }
+
+  const knownSyncRoots = await getKnownSyncRoots()
+  for (const syncRoot of knownSyncRoots) {
+    if (!(await pathExists(syncRoot))) {
+      continue
+    }
+    const resolvedSyncRoot = await realpath(syncRoot).catch(() => null)
+    if (!resolvedSyncRoot) {
+      continue
+    }
+    if (isSubpath(resolvedRoot, resolvedSyncRoot)) {
+      throw new KairosCloudSyncError(
+        `Refusing to apply KAIROS cloud sync inside a user-synced directory. runtimeRoot=${resolvedRoot} is under sync root ${resolvedSyncRoot}. Choose a runtime root outside Dropbox, Google Drive, OneDrive, and iCloud-managed paths.`,
+      )
+    }
   }
 }
 
@@ -526,6 +589,7 @@ export async function applyKairosCloudStateBundle(
   options: ApplyKairosCloudStateBundleOptions,
 ): Promise<ApplyKairosCloudStateBundleResult> {
   const now = options.now ?? (() => new Date())
+  await assertRuntimeRootOutsideSyncRoots(options.runtimeRoot)
   const sourceDir = getKairosCloudSourceDir(options.runtimeRoot)
   const overlayDir = getKairosCloudOverlayDir(options.runtimeRoot)
   const manifestPath = getKairosCloudManifestPath(options.runtimeRoot)

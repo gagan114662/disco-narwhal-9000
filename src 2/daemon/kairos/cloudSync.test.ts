@@ -5,6 +5,7 @@ import {
   mkdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   statSync,
   writeFileSync,
 } from 'fs'
@@ -12,6 +13,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import {
   applyKairosCloudStateBundle,
+  assertRuntimeRootOutsideSyncRoots,
   buildKairosCloudStateBundle,
   getKairosCloudManifestPath,
   getKairosCloudOverlayDir,
@@ -25,9 +27,15 @@ import {
 import { createProjectRegistry } from './projectRegistry.js'
 
 const TEMP_DIRS: string[] = []
+const originalHome = process.env.HOME
 
 afterEach(() => {
   delete process.env.CLAUDE_CONFIG_DIR
+  if (originalHome === undefined) {
+    delete process.env.HOME
+  } else {
+    process.env.HOME = originalHome
+  }
   for (const dir of TEMP_DIRS.splice(0, TEMP_DIRS.length)) {
     rmSync(dir, { recursive: true, force: true })
   }
@@ -215,6 +223,49 @@ describe('Kairos cloud state sync', () => {
         },
       }),
     ).rejects.toThrow('has no reachable git remote')
+  })
+
+  test('allows a normal temp runtime root outside sync dirs', async () => {
+    const homeDir = makeTempDir('kairos-cloud-home-')
+    const runtimeRoot = makeTempDir('kairos-cloud-runtime-')
+    process.env.HOME = homeDir
+
+    await expect(
+      assertRuntimeRootOutsideSyncRoots(runtimeRoot),
+    ).resolves.toBeUndefined()
+  })
+
+  test('rejects a runtime root under Dropbox', async () => {
+    const homeDir = makeTempDir('kairos-cloud-home-')
+    const dropboxDir = join(homeDir, 'Dropbox')
+    const runtimeRoot = join(dropboxDir, 'kairos-runtime')
+    process.env.HOME = homeDir
+    mkdirSync(runtimeRoot, { recursive: true })
+
+    await expect(
+      assertRuntimeRootOutsideSyncRoots(runtimeRoot),
+    ).rejects.toThrow(KairosCloudSyncError)
+    await expect(
+      assertRuntimeRootOutsideSyncRoots(runtimeRoot),
+    ).rejects.toThrow('user-synced directory')
+  })
+
+  test('rejects a symlinked runtime root that resolves into Dropbox', async () => {
+    const homeDir = makeTempDir('kairos-cloud-home-')
+    const outsideDir = makeTempDir('kairos-cloud-outside-')
+    const dropboxDir = join(homeDir, 'Dropbox')
+    const realRuntimeRoot = join(dropboxDir, 'kairos-runtime')
+    const symlinkRoot = join(outsideDir, 'runtime-link')
+    process.env.HOME = homeDir
+    mkdirSync(realRuntimeRoot, { recursive: true })
+    symlinkSync(realRuntimeRoot, symlinkRoot)
+
+    await expect(
+      assertRuntimeRootOutsideSyncRoots(symlinkRoot),
+    ).rejects.toThrow(KairosCloudSyncError)
+    await expect(
+      assertRuntimeRootOutsideSyncRoots(symlinkRoot),
+    ).rejects.toThrow('Dropbox')
   })
 
   test('applies a bundle into a read-only source tree and preserves overlay state across re-syncs', async () => {
