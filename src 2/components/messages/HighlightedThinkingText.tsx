@@ -22,6 +22,7 @@ export function HighlightedThinkingText(t0) {
   const isQueued = useQueuedMessage()?.isQueued ?? false;
   const isSelected = useContext(MessageActionsSelectedContext);
   const pointerColor = isSelected ? "suggestion" : "subtle";
+  const visibleText = isQueued && !text.startsWith("queued:") ? `queued: ${text}` : text;
   if (useBriefLayout) {
     let t1;
     if ($[0] !== timestamp) {
@@ -60,10 +61,10 @@ export function HighlightedThinkingText(t0) {
     }
     const t6 = isQueued ? "subtle" : "text";
     let t7;
-    if ($[9] !== t6 || $[10] !== text) {
-      t7 = <Text color={t6}>{text}</Text>;
+    if ($[9] !== t6 || $[10] !== visibleText) {
+      t7 = <Text color={t6}>{visibleText}</Text>;
       $[9] = t6;
-      $[10] = text;
+      $[10] = visibleText;
       $[11] = t7;
     } else {
       t7 = $[11];
@@ -81,10 +82,10 @@ export function HighlightedThinkingText(t0) {
   }
   let parts;
   let t1;
-  if ($[15] !== pointerColor || $[16] !== text) {
+  if ($[15] !== pointerColor || $[16] !== visibleText) {
     t1 = Symbol.for("react.early_return_sentinel");
     bb0: {
-      const triggers = isUltrathinkEnabled() ? findThinkingTriggerPositions(text) : [];
+      const triggers = isUltrathinkEnabled() ? findThinkingTriggerPositions(visibleText) : [];
       if (triggers.length === 0) {
         let t2;
         if ($[19] !== pointerColor) {
@@ -95,9 +96,9 @@ export function HighlightedThinkingText(t0) {
           t2 = $[20];
         }
         let t3;
-        if ($[21] !== text) {
-          t3 = <Text color="text">{text}</Text>;
-          $[21] = text;
+        if ($[21] !== visibleText) {
+          t3 = <Text color="text">{visibleText}</Text>;
+          $[21] = visibleText;
           $[22] = t3;
         } else {
           t3 = $[22];
@@ -118,19 +119,19 @@ export function HighlightedThinkingText(t0) {
       let cursor = 0;
       for (const t of triggers) {
         if (t.start > cursor) {
-          parts.push(<Text key={`plain-${cursor}`} color="text">{text.slice(cursor, t.start)}</Text>);
+          parts.push(<Text key={`plain-${cursor}`} color="text">{visibleText.slice(cursor, t.start)}</Text>);
         }
         for (let i = t.start; i < t.end; i++) {
-          parts.push(<Text key={`rb-${i}`} color={getRainbowColor(i - t.start)}>{text[i]}</Text>);
+          parts.push(<Text key={`rb-${i}`} color={getRainbowColor(i - t.start)}>{visibleText[i]}</Text>);
         }
         cursor = t.end;
       }
-      if (cursor < text.length) {
-        parts.push(<Text key={`plain-${cursor}`} color="text">{text.slice(cursor)}</Text>);
+      if (cursor < visibleText.length) {
+        parts.push(<Text key={`plain-${cursor}`} color="text">{visibleText.slice(cursor)}</Text>);
       }
     }
     $[15] = pointerColor;
-    $[16] = text;
+    $[16] = visibleText;
     $[17] = parts;
     $[18] = t1;
   } else {
