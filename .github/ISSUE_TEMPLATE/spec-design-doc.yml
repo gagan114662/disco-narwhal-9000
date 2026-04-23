@@ -6,6 +6,15 @@ body:
     attributes:
       value: |
         Use this when the next step is to produce a decision-ready design, not to directly ship code.
+        Preserve upstream `REQ-...` and `AC-...` identifiers verbatim so the resulting work orders can inherit them without reinterpretation.
+  - type: input
+    id: artifact_id
+    attributes:
+      label: Design ID
+      description: Use the format `DES-<PREFIX>-001`.
+      placeholder: DES-CHECKOUT-HOLD-001
+    validations:
+      required: true
   - type: textarea
     id: problem
     attributes:
@@ -39,13 +48,42 @@ body:
     validations:
       required: true
   - type: textarea
+    id: upstream_requirements
+    attributes:
+      label: Upstream Requirements
+      description: List the `REQ-...` and `AC-...` IDs this design must preserve.
+      placeholder: |
+        REQ-CHECKOUT-HOLD-001
+        AC-REQ-CHECKOUT-HOLD-001.1
+        AC-REQ-CHECKOUT-HOLD-001.2
+    validations:
+      required: true
+  - type: textarea
+    id: copied_requirement_text
+    attributes:
+      label: Copied Requirement Text
+      description: Copy the relevant upstream requirement text verbatim before proposing solutions.
+      placeholder: Paste the exact requirement and acceptance-criterion text here.
+    validations:
+      required: true
+  - type: textarea
+    id: design_decisions
+    attributes:
+      label: Design Decisions
+      description: Record the concrete decisions this design makes.
+      placeholder: |
+        DEC-DES-CHECKOUT-HOLD-001.01: [decision]
+        DEC-DES-CHECKOUT-HOLD-001.02: [decision]
+    validations:
+      required: true
+  - type: textarea
     id: acceptance_criteria
     attributes:
       label: Acceptance Criteria
       description: What makes the design reviewable and complete?
       placeholder: |
-        - [ ] Key decisions are documented with rationale
-        - [ ] Open questions and follow-ups are made explicit
+        AC-DES-CHECKOUT-HOLD-001.1: The design maps each upstream requirement to a concrete boundary or flow.
+        AC-DES-CHECKOUT-HOLD-001.2: Failure modes, invariants, and non-goals are explicit.
     validations:
       required: true
   - type: textarea
@@ -59,9 +97,13 @@ body:
   - type: textarea
     id: verification_test_plan
     attributes:
-      label: Verification / Test Plan
+      label: Verification / Review Plan
       description: How will reviewers validate that this spec is actionable?
-      placeholder: Describe the review checklist, walkthrough, or artifact checks that prove the doc is complete.
+      placeholder: |
+        COV-DES-CHECKOUT-HOLD-001
+        - Review checklist:
+        - Diagrams / traces to inspect:
+        - Questions that must be resolved before implementation starts:
     validations:
       required: true
   - type: dropdown

@@ -4,7 +4,7 @@ const issue = {
   type: 'local',
   name: 'issue',
   description: 'Generate a structured GitHub issue draft',
-  argumentHint: '[leaf|spec|bug] <title>',
+  argumentHint: '[requirement|design|work-order|bug] <title>',
   supportsNonInteractive: true,
   load: () => import('./issue.js'),
 } satisfies Command

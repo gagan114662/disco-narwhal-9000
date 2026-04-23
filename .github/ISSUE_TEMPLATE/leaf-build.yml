@@ -1,51 +1,76 @@
-name: Leaf build
-description: Small, execution-ready implementation slice with explicit boundaries.
-title: "[leaf build] "
+name: Leaf build / work order
+description: Small, execution-ready implementation slice with explicit upstream references.
+title: "[work order] "
 body:
   - type: markdown
     attributes:
       value: |
         Use this when the work should be executable by a contributor or coding agent without a planning round-trip.
-  - type: textarea
-    id: problem
+        Preserve upstream `REQ-...`, `AC-...`, and `DES-...` identifiers verbatim.
+  - type: input
+    id: artifact_id
     attributes:
-      label: Problem
-      description: What is broken, missing, or ambiguous today?
-      placeholder: Describe the concrete gap and why it matters now.
+      label: Work Order ID
+      description: Use the format `WO-<PREFIX>-001`.
+      placeholder: WO-CHECKOUT-HOLD-001
     validations:
       required: true
   - type: textarea
-    id: impact
+    id: summary
     attributes:
-      label: User/Developer Impact
-      description: Who is blocked or slowed down, and what improves once this lands?
-      placeholder: Name the workflow, symptom, or friction this removes.
+      label: Summary
+      description: What outcome ships when this work order is done?
+      placeholder: Describe the smallest independently reviewable slice this work order should deliver.
     validations:
       required: true
   - type: textarea
-    id: scope
+    id: in_scope
     attributes:
-      label: Scope
-      description: What is explicitly in bounds for this slice?
-      placeholder: List the files, commands, screens, or behaviors this issue can touch.
+      label: In Scope
+      description: What exact files, commands, behaviors, and tests may this work order touch?
+      placeholder: List the allowed change surface precisely.
     validations:
       required: true
   - type: textarea
     id: out_of_scope
     attributes:
       label: Out of Scope
-      description: What nearby work should stay out of this issue?
-      placeholder: Call out tempting refactors, cleanup, or follow-on work that is not part of this slice.
+      description: What tempting cleanup or adjacent work must stay separate?
+      placeholder: Call out refactors, unrelated fixes, and larger follow-up slices that do not belong here.
+    validations:
+      required: true
+  - type: textarea
+    id: requirements
+    attributes:
+      label: Requirements
+      description: List upstream requirement IDs and copy the relevant text verbatim.
+      placeholder: |
+        REQ-CHECKOUT-HOLD-001
+        AC-REQ-CHECKOUT-HOLD-001.1
+        AC-REQ-CHECKOUT-HOLD-001.2
+        ---
+        Paste the relevant upstream requirement text verbatim below the IDs.
+    validations:
+      required: true
+  - type: textarea
+    id: blueprints
+    attributes:
+      label: Blueprints / Design References
+      description: List the design artifacts and code references that shape this implementation.
+      placeholder: |
+        DES-CHECKOUT-HOLD-001
+        - Files / docs / tests to inspect first:
+        - Integration points and invariants to preserve:
     validations:
       required: true
   - type: textarea
     id: acceptance_criteria
     attributes:
       label: Acceptance Criteria
-      description: Write concrete completion checks.
+      description: Write concrete completion checks with stable IDs.
       placeholder: |
-        - [ ] Observable behavior or artifact changes in a specific way
-        - [ ] Reviewers can tell when the work is done without guessing
+        AC-WO-CHECKOUT-HOLD-001.1: The scoped behavior changes exactly as described by the inherited requirement/design IDs.
+        AC-WO-CHECKOUT-HOLD-001.2: The minimum regression coverage needed to keep the slice safe is added or updated.
     validations:
       required: true
   - type: textarea
@@ -53,15 +78,20 @@ body:
     attributes:
       label: Suggested Entry Points
       description: Where should a contributor start?
-      placeholder: Point to files, tests, commands, or services that expose the intended change surface.
+      placeholder: Point to the primary files, tests, commands, or services to open first.
     validations:
       required: true
   - type: textarea
-    id: verification_test_plan
+    id: e2e_acceptance_tests
     attributes:
-      label: Verification / Test Plan
-      description: How will this be verified?
-      placeholder: List the exact automated test command or manual flow that proves the change works.
+      label: E2E Acceptance Tests
+      description: Define the concrete coverage artifact that proves this work order is done.
+      placeholder: |
+        COV-WO-CHECKOUT-HOLD-001
+        - Test command:
+        - Manual flow:
+        - Assertions mapped to the AC IDs:
+        - Known gaps / deferred coverage:
     validations:
       required: true
   - type: dropdown

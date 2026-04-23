@@ -19,7 +19,7 @@ export const call: LocalCommandCall = async args => {
   if (!parsed) {
     return {
       type: 'text',
-      value: `${getIssueCommandHelp()}\n\nInvalid issue type. Use one of: leaf, spec, bug.`,
+      value: `${getIssueCommandHelp()}\n\nInvalid issue type. Use one of: requirement, design, work-order, bug.`,
     }
   }
 

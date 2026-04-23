@@ -1,40 +1,55 @@
-# Add model-executable issue templates and revive the /issue scaffolder
+# Add deterministic requirement, design, and work-order scaffolds
 
-Type: leaf build
-Summary: Focused implementation slice that should be independently shippable.
+Artifact Type: work order
+Artifact ID: WO-ADD-DETERMINISTIC-REQUIRE-001
+Coverage ID: COV-WO-ADD-DETERMINISTIC-REQUIRE-001
+Stage Summary: Translate approved requirements and design into the smallest independently shippable implementation slice.
+Transformation Rule: Preserve upstream REQ, AC, and DES IDs verbatim. Do not renumber or reinterpret upstream constraints inside the execution plan.
 
-## Problem
-- This repo had no checked-in GitHub issue templates, and `/issue` resolved to a hidden disabled stub.
-- That made it easy to write backlog items that were fine for humans but underspecified for autonomous contributors.
+## Summary
+- Add a requirement-stage template plus stricter design and work-order scaffolds so issue intake behaves more like a typed artifact pipeline than a loose markdown note.
+- This is the smallest reviewable slice because it only changes the issue command, the GitHub forms, and one example document.
 
-## User/Developer Impact
-- Contributors can now start from a consistent work-order format instead of hand-writing issue bodies from scratch.
-- The issue intake path becomes stricter about scope, acceptance criteria, and suggested entry points.
-
-## Scope
-- Add structured GitHub issue forms under `.github/ISSUE_TEMPLATE/`.
-- Replace the stubbed `src 2/commands/issue/index.js` path with a working scaffold generator.
-- Add a focused automated test for the scaffold generator and a concrete example draft in docs.
+## In Scope
+- `src 2/commands/issue/`
+- `.github/ISSUE_TEMPLATE/`
+- `docs/issue-scaffold-example.md`
 
 ## Out of Scope
-- Creating GitHub issues directly from inside the app.
-- Automated triage, prioritization, or assignee selection.
+- GitHub API issue creation from inside the app
+- Planner-style phase management
+- Automatic synchronization between issues and code
+
+## Requirements
+- Required upstream IDs: `REQ-ISSUE-DETERMINISM-001`, `AC-REQ-ISSUE-DETERMINISM-001.1`, `AC-REQ-ISSUE-DETERMINISM-001.2`
+- Copy the upstream requirement text verbatim here before implementation begins.
+- Do not renumber or paraphrase inherited IDs.
+
+## Blueprints / Design References
+- Required design IDs: `DES-ISSUE-DETERMINISM-001`
+- Code / docs / tests to inspect first:
+- `src 2/commands/issue/scaffold.ts`
+- `.github/ISSUE_TEMPLATE/`
 
 ## Acceptance Criteria
-- [ ] GitHub offers at least three structured issue templates in the repo.
-- [ ] `/issue` returns a usable markdown scaffold instead of resolving to a hidden disabled stub.
-- [ ] The scaffold includes problem, impact, scope, out-of-scope, acceptance criteria, entry points, verification, and trunk expectations.
+- [ ] `AC-WO-ADD-DETERMINISTIC-REQUIRE-001.1`: The issue scaffolder emits stable artifact IDs and coverage IDs for each stage.
+- [ ] `AC-WO-ADD-DETERMINISTIC-REQUIRE-001.2`: Requirement, design, work-order, and bug templates require upstream references and structured verification fields.
+- [ ] `AC-WO-ADD-DETERMINISTIC-REQUIRE-001.3`: Reviewers can verify the new schema without inferring missing context.
 
 ## Suggested Entry Points
 - `src 2/commands/issue/index.ts`
 - `src 2/commands/issue/scaffold.ts`
-- `.github/ISSUE_TEMPLATE/`
+- `.github/ISSUE_TEMPLATE/requirement-definition.yml`
 
-## Verification / Test Plan
-- [ ] Run `bun test ./commands/issue/issue.test.ts` from `src 2`.
-- [ ] Invoke `/issue leaf Add model-executable issue templates and revive the /issue scaffolder` and confirm the returned body contains the canonical sections.
-- [ ] Confirm GitHub shows the three new templates in the issue picker.
+## E2E Acceptance Tests
+### COV-WO-ADD-DETERMINISTIC-REQUIRE-001
+- Test command: `bun test ./commands/issue/issue.test.ts`
+- Manual flow: Run `/issue requirement Define checkout fulfillment holds` and `/issue work-order Add retry budget logging to the RPC client`.
+- Assertions mapped to the AC IDs above:
+- Work-order output includes `Artifact ID`, `AC-WO-...`, and `COV-WO-...`.
+- Requirement output includes `REQ-...`, `AC-REQ-...`, and `COV-REQ-...`.
+- Known gaps / deferred coverage: no live GitHub UI check is automated in-repo.
 
 ## Trunk Expectations
 - Preferred: trunk-safe
-- Escalate to trunk-touch only if the issue must cross guarded files or shared infra.
+- Escalate to trunk-touch only if trunk ownership or shared infrastructure makes isolation impossible.
