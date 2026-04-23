@@ -1,5 +1,9 @@
 import { feature } from 'bun:bundle';
 
+declare const MACRO: {
+  VERSION?: string
+}
+
 const CLI_VERSION =
   typeof MACRO !== 'undefined' && typeof MACRO.VERSION === 'string'
     ? MACRO.VERSION
@@ -44,6 +48,113 @@ async function main(): Promise<void> {
     // biome-ignore lint/suspicious/noConsole:: intentional console output
     console.log(`${CLI_VERSION} (Claude Code)`);
     return;
+  }
+
+  // Fast-path for auth subcommands. This avoids loading the full interactive
+  // CLI bootstrap when the user only needs local auth management.
+  if (args[0] === 'auth') {
+    const subcommand = args[1];
+    if (subcommand === 'login') {
+      let email: string | undefined;
+      let sso = false;
+      let useConsole = false;
+      let claudeai = false;
+      for (let i = 2; i < args.length; i++) {
+        const arg = args[i];
+        if (arg === '--email') {
+          email = args[i + 1];
+          if (!email) {
+            process.stderr.write('Error: --email requires a value.\n');
+            process.exit(1);
+          }
+          i += 1;
+          continue;
+        }
+        if (arg === '--sso') {
+          sso = true;
+          continue;
+        }
+        if (arg === '--console') {
+          useConsole = true;
+          continue;
+        }
+        if (arg === '--claudeai') {
+          claudeai = true;
+          continue;
+        }
+        if (arg === '--help' || arg === '-h') {
+          process.stdout.write(
+            'Usage: claude auth login [options]\n\n' +
+              'Options:\n' +
+              '  --email <email>  Pre-populate email address on the login page\n' +
+              '  --sso            Force SSO login flow\n' +
+              '  --console        Use Anthropic Console billing instead of Claude subscription\n' +
+              '  --claudeai       Use Claude subscription (default)\n',
+          );
+          return;
+        }
+        process.stderr.write(`Error: Unknown auth login option: ${arg}\n`);
+        process.exit(1);
+      }
+
+      const { enableConfigs } = await import('../utils/config.js');
+      enableConfigs();
+      const { initSinks } = await import('../utils/sinks.js');
+      initSinks();
+      const { authLogin } = await import('../cli/handlers/auth.js');
+      await authLogin({
+        email,
+        sso,
+        console: useConsole,
+        claudeai,
+      });
+      return;
+    }
+
+    if (subcommand === 'status') {
+      const wantsText = args.includes('--text');
+      const wantsJson = args.includes('--json');
+      for (const arg of args.slice(2)) {
+        if (arg === '--text' || arg === '--json') {
+          continue;
+        }
+        if (arg === '--help' || arg === '-h') {
+          process.stdout.write(
+            'Usage: claude auth status [--json | --text]\n',
+          );
+          return;
+        }
+        process.stderr.write(`Error: Unknown auth status option: ${arg}\n`);
+        process.exit(1);
+      }
+
+      const { enableConfigs } = await import('../utils/config.js');
+      enableConfigs();
+      const { initSinks } = await import('../utils/sinks.js');
+      initSinks();
+      const { authStatus } = await import('../cli/handlers/auth.js');
+      await authStatus({ json: wantsJson, text: wantsText });
+      return;
+    }
+
+    if (subcommand === 'logout') {
+      for (const arg of args.slice(2)) {
+        if (arg === '--help' || arg === '-h') {
+          process.stdout.write('Usage: claude auth logout\n');
+          return;
+        }
+        process.stderr.write(`Error: Unknown auth logout option: ${arg}\n`);
+        process.exit(1);
+      }
+
+      const { enableConfigs } = await import('../utils/config.js');
+      enableConfigs();
+      const { initSinks } = await import('../utils/sinks.js');
+      initSinks();
+      const { authLogout } = await import('../cli/handlers/auth.js');
+      await authLogout();
+      return;
+    }
   }
 
   // For all other paths, load the startup profiler

@@ -29,6 +29,10 @@ export function getKairosPausePath(): string {
   return join(getKairosStateDir(), 'pause.json')
 }
 
+export function getKairosCloudDeployStatePath(): string {
+  return join(getKairosStateDir(), 'cloud-deploy.json')
+}
+
 export function getProjectKairosDir(projectDir: string): string {
   return join(projectDir, '.claude', 'kairos')
 }
