@@ -48466,7 +48466,7 @@ var require_package = __commonJS((exports, module) => {
 
 // node_modules/@aws-sdk/util-user-agent-node/dist-cjs/index.js
 var require_dist_cjs72 = __commonJS((exports) => {
-  var __dirname = "/Users/gaganarora/conductor/workspaces/again/cayenne/src 2/node_modules/@aws-sdk/util-user-agent-node/dist-cjs";
+  var __dirname = "/Users/gaganarora/conductor/workspaces/again/stuttgart-v1/src 2/node_modules/@aws-sdk/util-user-agent-node/dist-cjs";
   var node_os = __require("os");
   var node_process = __require("process");
   var utilConfigProvider = require_dist_cjs57();
@@ -104004,7 +104004,8 @@ async function readCronTasks(dir) {
       createdAt: t2.createdAt,
       ...typeof t2.lastFiredAt === "number" ? { lastFiredAt: t2.lastFiredAt } : {},
       ...t2.recurring ? { recurring: true } : {},
-      ...t2.permanent ? { permanent: true } : {}
+      ...t2.permanent ? { permanent: true } : {},
+      ...typeof t2.kind === "string" && t2.kind.length > 0 ? { kind: t2.kind } : {}
     });
   }
   return out;
@@ -104018,14 +104019,15 @@ async function writeCronTasks(tasks, dir) {
   await writeFile3(getCronFilePath(root2), jsonStringify(body, null, 2) + `
 `, "utf-8");
 }
-async function addCronTask(cron, prompt, recurring, durable, agentId) {
+async function addCronTask(cron, prompt, recurring, durable, agentId, kind) {
   const id = randomUUID4().slice(0, 8);
   const task = {
     id,
     cron,
     prompt,
     createdAt: Date.now(),
-    ...recurring ? { recurring: true } : {}
+    ...recurring ? { recurring: true } : {},
+    ...kind ? { kind } : {}
   };
   if (!durable) {
     addSessionCronTask({ ...task, ...agentId ? { agentId } : {} });
