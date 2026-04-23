@@ -21,6 +21,19 @@ export * from './coreTypes.generated.js'
 // Re-export utility types that can't be expressed as Zod schemas
 export type { NonNullableUsage } from './sdkUtilityTypes.js'
 
+// ─── Manual type bridges (re-derive until generator runs) ─────────────────
+//
+// `bun scripts/generate-sdk-types.ts` writes the canonical SDKResultSuccess
+// (and friends) into coreTypes.generated.ts. When that generator hasn't been
+// run since a schema change, callers like bridge/bridgeMessaging.ts break on
+// the missing export. The z.infer bridge below keeps the type in sync with
+// the schema *until the next generator run overwrites the .generated file*.
+// Safe to delete this block after `bun scripts/generate-sdk-types.ts`.
+import type { z } from 'zod/v4'
+import type { SDKResultSuccessSchema } from './coreSchemas.js'
+
+export type SDKResultSuccess = z.infer<ReturnType<typeof SDKResultSuccessSchema>>
+
 // Const arrays for runtime usage
 export const HOOK_EVENTS = [
   'PreToolUse',
