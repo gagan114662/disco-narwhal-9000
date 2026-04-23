@@ -75,6 +75,10 @@ export class DiagnosticTrackingService {
     this.lastProcessedTimestamps.clear()
   }
 
+  getTrackedFileCount(): number {
+    return this.baseline.size
+  }
+
   private normalizeFileUri(fileUri: string): string {
     // Remove our protocol prefixes
     const protocolPrefixes = [

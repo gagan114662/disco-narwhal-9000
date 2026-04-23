@@ -19,6 +19,12 @@ import {
   sanitizeToolNameForAnalytics,
 } from 'src/services/analytics/metadata.js'
 import {
+  emitWideToolExecutionEvent,
+  getWideEventToolFamily,
+  getWideEventToolTransport,
+  normalizeWidePermissionSource,
+} from 'src/services/analytics/wideEvents.js'
+import {
   addToToolDuration,
   getCodeEditToolDecisionCounter,
   getStatsStore,
@@ -995,8 +1001,23 @@ async function checkPermissionsAndCallTool(
   if (permissionDecision.behavior !== 'allow') {
     logForDebugging(`${tool.name} tool permission denied`)
     const decisionInfo = toolUseContext.toolDecisions?.get(toolUseID)
+    const permissionSource = normalizeWidePermissionSource(
+      decisionInfo?.source ??
+        decisionReasonToOTelSource(
+          permissionDecision.decisionReason,
+          'deny',
+        ),
+    )
     endToolBlockedOnUserSpan('reject', decisionInfo?.source || 'unknown')
     endToolSpan()
+
+    emitWideToolExecutionEvent({
+      result: permissionDecision.behavior === 'ask' ? 'interrupted' : 'denied',
+      tool_family: getWideEventToolFamily(tool.name),
+      tool_transport: getWideEventToolTransport(tool.name),
+      is_read_only: tool.isReadOnly(processedInput),
+      permission_source: permissionSource,
+    })
 
     logEvent('tengu_tool_use_can_use_tool_rejected', {
       messageID:
@@ -1299,6 +1320,10 @@ async function checkPermissionsAndCallTool(
       : typeof mappedContent === 'string'
         ? mappedContent.length
         : jsonStringify(mappedContent).length
+    const widePermissionSource = normalizeWidePermissionSource(
+      decisionInfo?.source ??
+        decisionReasonToOTelSource(permissionDecision.decisionReason, 'allow'),
+    )
 
     // Extract file extension for file-related tools
     let fileExtension: ReturnType<typeof getFileExtensionForAnalytics>
@@ -1354,6 +1379,15 @@ async function checkPermissionsAndCallTool(
           requestId as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       }),
       ...mcpToolDetailsForAnalytics(tool.name, mcpServerType, mcpServerBaseUrl),
+    })
+    emitWideToolExecutionEvent({
+      result: 'completed',
+      tool_family: getWideEventToolFamily(tool.name),
+      tool_transport: getWideEventToolTransport(tool.name),
+      is_read_only: tool.isReadOnly(callInput),
+      duration_ms: durationMs,
+      permission_source: widePermissionSource,
+      tool_result_size_bytes: toolResultSizeBytes,
     })
 
     // Enrich tool parameters with git commit ID from successful git commit output
@@ -1625,6 +1659,31 @@ async function checkPermissionsAndCallTool(
             clients: updatedClients,
           },
         }
+      })
+    }
+
+    const widePermissionSource = normalizeWidePermissionSource(
+      decisionInfo?.source ??
+        decisionReasonToOTelSource(permissionDecision.decisionReason, 'allow'),
+    )
+
+    if (error instanceof AbortError) {
+      emitWideToolExecutionEvent({
+        result: 'interrupted',
+        tool_family: getWideEventToolFamily(tool.name),
+        tool_transport: getWideEventToolTransport(tool.name),
+        is_read_only: tool.isReadOnly(callInput),
+        duration_ms: durationMs,
+        permission_source: widePermissionSource,
+      })
+    } else {
+      emitWideToolExecutionEvent({
+        result: 'failed',
+        tool_family: getWideEventToolFamily(tool.name),
+        tool_transport: getWideEventToolTransport(tool.name),
+        is_read_only: tool.isReadOnly(callInput),
+        duration_ms: durationMs,
+        permission_source: widePermissionSource,
       })
     }
 

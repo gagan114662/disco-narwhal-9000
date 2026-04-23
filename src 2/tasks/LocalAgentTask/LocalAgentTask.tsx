@@ -1,13 +1,14 @@
 import { getSdkAgentProgressSummariesEnabled } from '../../bootstrap/state.js';
 import { OUTPUT_FILE_TAG, STATUS_TAG, SUMMARY_TAG, TASK_ID_TAG, TASK_NOTIFICATION_TAG, TOOL_USE_ID_TAG, WORKTREE_BRANCH_TAG, WORKTREE_PATH_TAG, WORKTREE_TAG } from '../../constants/xml.js';
 import { abortSpeculation } from '../../services/PromptSuggestion/speculation.js';
+import { emitWideAgentLifecycleEvent, emitWideTaskLifecycleEvent, getWideEventAgentFamily, getWideEventModelFamily } from '../../services/analytics/wideEvents.js';
 import type { AppState } from '../../state/AppState.js';
 import type { SetAppState, Task, TaskStateBase } from '../../Task.js';
 import { createTaskStateBase } from '../../Task.js';
 import type { Tools } from '../../Tool.js';
 import { findToolByName } from '../../Tool.js';
 import type { AgentToolResult } from '../../tools/AgentTool/agentToolUtils.js';
-import type { AgentDefinition } from '../../tools/AgentTool/loadAgentsDir.js';
+import { isBuiltInAgent, type AgentDefinition } from '../../tools/AgentTool/loadAgentsDir.js';
 import { SYNTHETIC_OUTPUT_TOOL_NAME } from '../../tools/SyntheticOutputTool/SyntheticOutputTool.js';
 import { asAgentId } from '../../types/ids.js';
 import type { Message } from '../../types/message.js';
@@ -146,6 +147,40 @@ export type LocalAgentTaskState = TaskStateBase & {
   // and on unselect; cleared on retain.
   evictAfter?: number;
 };
+function getLocalTaskExecutionMode(task: Pick<LocalAgentTaskState, 'isBackgrounded'>): 'foreground' | 'background' {
+  return task.isBackgrounded ? 'background' : 'foreground';
+}
+function emitLocalTaskCreated(task: Pick<LocalAgentTaskState, 'isBackgrounded' | 'toolUseId'>): void {
+  emitWideTaskLifecycleEvent({
+    lifecycle: 'created',
+    task_family: 'local_agent',
+    execution_mode: getLocalTaskExecutionMode(task),
+    has_tool_use_id: task.toolUseId !== undefined
+  });
+}
+function emitLocalTaskTerminalEvent(task: Pick<LocalAgentTaskState, 'agentType' | 'endTime' | 'isBackgrounded' | 'selectedAgent' | 'startTime' | 'toolUseId'>, lifecycle: 'completed' | 'failed' | 'interrupted'): void {
+  const durationMs = Math.max(0, (task.endTime ?? Date.now()) - task.startTime);
+  emitWideTaskLifecycleEvent({
+    lifecycle,
+    task_family: 'local_agent',
+    execution_mode: getLocalTaskExecutionMode(task),
+    has_tool_use_id: task.toolUseId !== undefined,
+    duration_ms: durationMs
+  });
+  if (!task.selectedAgent) {
+    return;
+  }
+  const isBuiltIn = isBuiltInAgent(task.selectedAgent);
+  emitWideAgentLifecycleEvent({
+    lifecycle: 'stopped',
+    execution_mode: getLocalTaskExecutionMode(task),
+    agent_family: getWideEventAgentFamily(task.agentType, isBuiltIn),
+    model_family: getWideEventModelFamily(task.selectedAgent.model),
+    is_built_in_agent: isBuiltIn,
+    duration_ms: durationMs,
+    result: lifecycle === 'interrupted' ? 'interrupted' : lifecycle
+  });
+}
 export function isLocalAgentTask(task: unknown): task is LocalAgentTaskState {
   return typeof task === 'object' && task !== null && 'type' in task && task.type === 'local_agent';
 }
@@ -280,6 +315,7 @@ export const LocalAgentTask: Task = {
  */
 export function killAsyncAgent(taskId: string, setAppState: SetAppState): void {
   let killed = false;
+  let wideEventTask: Pick<LocalAgentTaskState, 'agentType' | 'endTime' | 'isBackgrounded' | 'selectedAgent' | 'startTime' | 'toolUseId'> | null = null;
   updateTaskState<LocalAgentTaskState>(taskId, setAppState, task => {
     if (task.status !== 'running') {
       return task;
@@ -287,7 +323,7 @@ export function killAsyncAgent(taskId: string, setAppState: SetAppState): void {
     killed = true;
     task.abortController?.abort();
     task.unregisterCleanup?.();
-    return {
+    const nextTask: LocalAgentTaskState = {
       ...task,
       status: 'killed',
       endTime: Date.now(),
@@ -296,8 +332,20 @@ export function killAsyncAgent(taskId: string, setAppState: SetAppState): void {
       unregisterCleanup: undefined,
       selectedAgent: undefined
     };
+    wideEventTask = {
+      agentType: task.agentType,
+      endTime: nextTask.endTime,
+      isBackgrounded: task.isBackgrounded,
+      selectedAgent: task.selectedAgent,
+      startTime: task.startTime,
+      toolUseId: task.toolUseId
+    };
+    return nextTask;
   });
   if (killed) {
+    if (wideEventTask) {
+      emitLocalTaskTerminalEvent(wideEventTask, 'interrupted');
+    }
     void evictTaskOutput(taskId);
   }
 }
@@ -411,12 +459,13 @@ export function updateAgentSummary(taskId: string, summary: string, setAppState:
  */
 export function completeAgentTask(result: AgentToolResult, setAppState: SetAppState): void {
   const taskId = result.agentId;
+  let wideEventTask: Pick<LocalAgentTaskState, 'agentType' | 'endTime' | 'isBackgrounded' | 'selectedAgent' | 'startTime' | 'toolUseId'> | null = null;
   updateTaskState<LocalAgentTaskState>(taskId, setAppState, task => {
     if (task.status !== 'running') {
       return task;
     }
     task.unregisterCleanup?.();
-    return {
+    const nextTask: LocalAgentTaskState = {
       ...task,
       status: 'completed',
       result,
@@ -426,7 +475,19 @@ export function completeAgentTask(result: AgentToolResult, setAppState: SetAppSt
       unregisterCleanup: undefined,
       selectedAgent: undefined
     };
+    wideEventTask = {
+      agentType: task.agentType,
+      endTime: nextTask.endTime,
+      isBackgrounded: task.isBackgrounded,
+      selectedAgent: task.selectedAgent,
+      startTime: task.startTime,
+      toolUseId: task.toolUseId
+    };
+    return nextTask;
   });
+  if (wideEventTask) {
+    emitLocalTaskTerminalEvent(wideEventTask, 'completed');
+  }
   void evictTaskOutput(taskId);
   // Note: Notification is sent by AgentTool via enqueueAgentNotification
 }
@@ -435,12 +496,13 @@ export function completeAgentTask(result: AgentToolResult, setAppState: SetAppSt
  * Fail an agent task with error.
  */
 export function failAgentTask(taskId: string, error: string, setAppState: SetAppState): void {
+  let wideEventTask: Pick<LocalAgentTaskState, 'agentType' | 'endTime' | 'isBackgrounded' | 'selectedAgent' | 'startTime' | 'toolUseId'> | null = null;
   updateTaskState<LocalAgentTaskState>(taskId, setAppState, task => {
     if (task.status !== 'running') {
       return task;
     }
     task.unregisterCleanup?.();
-    return {
+    const nextTask: LocalAgentTaskState = {
       ...task,
       status: 'failed',
       error,
@@ -450,7 +512,19 @@ export function failAgentTask(taskId: string, error: string, setAppState: SetApp
       unregisterCleanup: undefined,
       selectedAgent: undefined
     };
+    wideEventTask = {
+      agentType: task.agentType,
+      endTime: nextTask.endTime,
+      isBackgrounded: task.isBackgrounded,
+      selectedAgent: task.selectedAgent,
+      startTime: task.startTime,
+      toolUseId: task.toolUseId
+    };
+    return nextTask;
   });
+  if (wideEventTask) {
+    emitLocalTaskTerminalEvent(wideEventTask, 'failed');
+  }
   void evictTaskOutput(taskId);
   // Note: Notification is sent by AgentTool via enqueueAgentNotification
 }
@@ -511,6 +585,7 @@ export function registerAsyncAgent({
 
   // Register task in AppState
   registerTask(taskState, setAppState);
+  emitLocalTaskCreated(taskState);
   return taskState;
 }
 
@@ -576,6 +651,7 @@ export function registerAgentForeground({
   });
   backgroundSignalResolvers.set(agentId, resolveBackgroundSignal!);
   registerTask(taskState, setAppState);
+  emitLocalTaskCreated(taskState);
 
   // Auto-background after timeout if configured
   let cancelAutoBackground: (() => void) | undefined;

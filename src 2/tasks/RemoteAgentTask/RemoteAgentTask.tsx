@@ -2,6 +2,8 @@ import type { ToolUseBlock } from '@anthropic-ai/sdk/resources';
 import { getRemoteSessionUrl } from '../../constants/product.js';
 import { OUTPUT_FILE_TAG, REMOTE_REVIEW_PROGRESS_TAG, REMOTE_REVIEW_TAG, STATUS_TAG, SUMMARY_TAG, TASK_ID_TAG, TASK_NOTIFICATION_TAG, TASK_TYPE_TAG, TOOL_USE_ID_TAG, ULTRAPLAN_TAG } from '../../constants/xml.js';
 import type { SDKAssistantMessage, SDKMessage } from '../../entrypoints/agentSdkTypes.js';
+import { emitWideAgentLifecycleEvent, emitWideTaskLifecycleEvent } from '../../services/analytics/wideEvents.js';
+import type { WideModelFamily } from '../../services/analytics/wideEvents.js';
 import type { SetAppState, Task, TaskContext, TaskStateBase } from '../../Task.js';
 import { createTaskStateBase, generateTaskId } from '../../Task.js';
 import { TodoWriteTool } from '../../tools/TodoWriteTool/TodoWriteTool.js';
@@ -49,6 +51,11 @@ export type RemoteAgentTaskState = TaskStateBase & {
     bugsRefuted: number;
   };
   isUltraplan?: boolean;
+  agentTelemetry?: {
+    agentFamily: string;
+    isBuiltInAgent: boolean;
+    modelFamily: WideModelFamily;
+  };
   /**
    * Scanner-derived pill state. Undefined = running. `needs_input` when the
    * remote asked a clarifying question and is idle; `plan_ready` when
@@ -61,6 +68,39 @@ const REMOTE_TASK_TYPES = ['remote-agent', 'ultraplan', 'ultrareview', 'autofix-
 export type RemoteTaskType = (typeof REMOTE_TASK_TYPES)[number];
 function isRemoteTaskType(v: string | undefined): v is RemoteTaskType {
   return (REMOTE_TASK_TYPES as readonly string[]).includes(v ?? '');
+}
+type RemoteHookOutputEvent = Extract<SDKMessage, {
+  type: 'system';
+}> & {
+  subtype: 'hook_progress' | 'hook_response';
+  stdout: string;
+  hook_event?: string;
+};
+type RemoteHookLifecycleEvent = Extract<SDKMessage, {
+  type: 'system';
+}> & {
+  subtype: 'hook_started' | 'hook_progress' | 'hook_response';
+  hook_event?: string;
+};
+function isRemoteHookOutputEvent(msg: SDKMessage): msg is RemoteHookOutputEvent {
+  if (msg?.type !== 'system') {
+    return false;
+  }
+  const subtype = (msg as {
+    subtype?: string;
+  }).subtype;
+  return (subtype === 'hook_progress' || subtype === 'hook_response') && typeof (msg as {
+    stdout?: unknown;
+  }).stdout === 'string';
+}
+function isRemoteHookLifecycleEvent(msg: SDKMessage): msg is RemoteHookLifecycleEvent {
+  if (msg?.type !== 'system') {
+    return false;
+  }
+  const subtype = (msg as {
+    subtype?: string;
+  }).subtype;
+  return subtype === 'hook_started' || subtype === 'hook_progress' || subtype === 'hook_response';
 }
 export type AutofixPrRemoteTaskMetadata = {
   owner: string;
@@ -200,6 +240,31 @@ function markTaskNotified(taskId: string, setAppState: SetAppState): boolean {
   });
   return shouldEnqueue;
 }
+function emitRemoteTaskLifecycle(task: Pick<RemoteAgentTaskState, 'agentTelemetry' | 'isLongRunning' | 'isRemoteReview' | 'isUltraplan' | 'remoteTaskType' | 'startTime' | 'toolUseId'>, lifecycle: 'created' | 'completed' | 'failed' | 'interrupted'): void {
+  const durationMs = lifecycle === 'created' ? undefined : Math.max(0, Date.now() - task.startTime);
+  emitWideTaskLifecycleEvent({
+    lifecycle,
+    task_family: task.remoteTaskType,
+    execution_mode: 'remote',
+    has_tool_use_id: task.toolUseId !== undefined,
+    duration_ms: durationMs,
+    is_long_running: task.isLongRunning,
+    is_remote_review: task.isRemoteReview,
+    is_ultraplan: task.isUltraplan
+  });
+  if (!task.agentTelemetry || lifecycle === 'created') {
+    return;
+  }
+  emitWideAgentLifecycleEvent({
+    lifecycle: 'stopped',
+    execution_mode: 'remote',
+    agent_family: task.agentTelemetry.agentFamily,
+    model_family: task.agentTelemetry.modelFamily,
+    is_built_in_agent: task.agentTelemetry.isBuiltInAgent,
+    duration_ms: durationMs,
+    result: lifecycle === 'interrupted' ? 'interrupted' : lifecycle
+  });
+}
 
 /**
  * Extract the plan content from the remote session log.
@@ -257,7 +322,7 @@ function extractReviewFromLog(log: SDKMessage[]): string | null {
     // The final echo before hook exit may land in either the last
     // hook_progress or the terminal hook_response depending on buffering;
     // both have flat stdout.
-    if (msg?.type === 'system' && (msg.subtype === 'hook_progress' || msg.subtype === 'hook_response')) {
+    if (msg && isRemoteHookOutputEvent(msg)) {
       const tagged = extractTag(msg.stdout, REMOTE_REVIEW_TAG);
       if (tagged?.trim()) return tagged.trim();
     }
@@ -273,7 +338,7 @@ function extractReviewFromLog(log: SDKMessage[]): string | null {
   // Hook-stdout concat fallback: a single echo should land in one event, but
   // large JSON payloads can flush across two if the pipe buffer fills
   // mid-write. Per-message scan above misses a tag split across events.
-  const hookStdout = log.filter(msg => msg.type === 'system' && (msg.subtype === 'hook_progress' || msg.subtype === 'hook_response')).map(msg => msg.stdout).join('');
+  const hookStdout = log.filter(isRemoteHookOutputEvent).map(msg => msg.stdout).join('');
   const hookTagged = extractTag(hookStdout, REMOTE_REVIEW_TAG);
   if (hookTagged?.trim()) return hookTagged.trim();
 
@@ -296,7 +361,7 @@ function extractReviewTagFromLog(log: SDKMessage[]): string | null {
   // hook_progress / hook_response per-message scan (bughunter path)
   for (let i = log.length - 1; i >= 0; i--) {
     const msg = log[i];
-    if (msg?.type === 'system' && (msg.subtype === 'hook_progress' || msg.subtype === 'hook_response')) {
+    if (msg && isRemoteHookOutputEvent(msg)) {
       const tagged = extractTag(msg.stdout, REMOTE_REVIEW_TAG);
       if (tagged?.trim()) return tagged.trim();
     }
@@ -312,7 +377,7 @@ function extractReviewTagFromLog(log: SDKMessage[]): string | null {
   }
 
   // Hook-stdout concat fallback for split tags
-  const hookStdout = log.filter(msg => msg.type === 'system' && (msg.subtype === 'hook_progress' || msg.subtype === 'hook_response')).map(msg => msg.stdout).join('');
+  const hookStdout = log.filter(isRemoteHookOutputEvent).map(msg => msg.stdout).join('');
   const hookTagged = extractTag(hookStdout, REMOTE_REVIEW_TAG);
   if (hookTagged?.trim()) return hookTagged.trim();
   return null;
@@ -395,6 +460,11 @@ export function registerRemoteAgentTask(options: {
   isRemoteReview?: boolean;
   isUltraplan?: boolean;
   isLongRunning?: boolean;
+  agentTelemetry?: {
+    agentFamily: string;
+    isBuiltInAgent: boolean;
+    modelFamily: WideModelFamily;
+  };
   remoteTaskMetadata?: RemoteTaskMetadata;
 }): {
   taskId: string;
@@ -410,6 +480,7 @@ export function registerRemoteAgentTask(options: {
     isRemoteReview,
     isUltraplan,
     isLongRunning,
+    agentTelemetry,
     remoteTaskMetadata
   } = options;
   const taskId = generateTaskId('remote_agent');
@@ -431,10 +502,12 @@ export function registerRemoteAgentTask(options: {
     isRemoteReview,
     isUltraplan,
     isLongRunning,
+    agentTelemetry,
     pollStartedAt: Date.now(),
     remoteTaskMetadata
   };
   registerTask(taskState, context.setAppState);
+  emitRemoteTaskLifecycle(taskState, 'created');
 
   // Persist identity to the session sidecar so --resume can reconnect to
   // still-running remote sessions. Status is not stored — it's fetched
@@ -582,6 +655,7 @@ function startRemoteSessionPolling(taskId: string, context: TaskContext): () => 
           status: 'completed',
           endTime: Date.now()
         } : t);
+        emitRemoteTaskLifecycle(task, 'completed');
         enqueueRemoteNotification(taskId, task.title, 'completed', context.setAppState, task.toolUseId);
         void evictTaskOutput(taskId);
         void removeRemoteAgentMetadata(taskId);
@@ -596,6 +670,7 @@ function startRemoteSessionPolling(taskId: string, context: TaskContext): () => 
             status: 'completed',
             endTime: Date.now()
           } : t);
+          emitRemoteTaskLifecycle(task, 'completed');
           enqueueRemoteNotification(taskId, completionResult, 'completed', context.setAppState, task.toolUseId);
           void evictTaskOutput(taskId);
           void removeRemoteAgentMetadata(taskId);
@@ -629,7 +704,7 @@ function startRemoteSessionPolling(taskId: string, context: TaskContext): () => 
         const open = `<${REMOTE_REVIEW_PROGRESS_TAG}>`;
         const close = `</${REMOTE_REVIEW_PROGRESS_TAG}>`;
         for (const ev of response.newEvents) {
-          if (ev.type === 'system' && (ev.subtype === 'hook_progress' || ev.subtype === 'hook_response')) {
+          if (isRemoteHookOutputEvent(ev)) {
             const s = ev.stdout;
             const closeAt = s.lastIndexOf(close);
             const openAt = closeAt === -1 ? -1 : s.lastIndexOf(open, closeAt);
@@ -657,7 +732,7 @@ function startRemoteSessionPolling(taskId: string, context: TaskContext): () => 
       // Hook events count as output only for remote-review — bughunter's
       // SessionStart hook produces zero assistant turns so stableIdle would
       // never arm without this.
-      const hasAnyOutput = accumulatedLog.some(msg => msg.type === 'assistant' || task.isRemoteReview && msg.type === 'system' && (msg.subtype === 'hook_progress' || msg.subtype === 'hook_response'));
+      const hasAnyOutput = accumulatedLog.some(msg => msg.type === 'assistant' || task.isRemoteReview && isRemoteHookOutputEvent(msg));
       if (response.sessionStatus === 'idle' && !logGrew && hasAnyOutput) {
         consecutiveIdlePolls++;
       } else {
@@ -678,7 +753,7 @@ function startRemoteSessionPolling(taskId: string, context: TaskContext): () => 
       // in prompt mode from blocking stableIdle — the code_review container
       // only registers SessionStart, but the 30min-hang failure mode is
       // worth defending against.
-      const hasSessionStartHook = accumulatedLog.some(m => m.type === 'system' && (m.subtype === 'hook_started' || m.subtype === 'hook_progress' || m.subtype === 'hook_response') && (m as {
+      const hasSessionStartHook = accumulatedLog.some(m => isRemoteHookLifecycleEvent(m) && (m as {
         hook_event?: string;
       }).hook_event === 'SessionStart');
       const hasAssistantEvents = accumulatedLog.some(m => m.type === 'assistant');
@@ -746,12 +821,14 @@ function startRemoteSessionPolling(taskId: string, context: TaskContext): () => 
             ...t,
             status: 'failed'
           }));
+          emitRemoteTaskLifecycle(task, 'failed');
           const reason = result && result.subtype !== 'success' ? 'remote session returned an error' : reviewTimedOut && !sessionDone ? 'remote session exceeded 30 minutes' : 'no review output — orchestrator may have exited early';
           enqueueRemoteReviewFailureNotification(taskId, reason, context.setAppState);
           void evictTaskOutput(taskId);
           void removeRemoteAgentMetadata(taskId);
           return; // Stop polling
         }
+        emitRemoteTaskLifecycle(task, finalStatus);
         enqueueRemoteNotification(taskId, task.title, finalStatus, context.setAppState, task.toolUseId);
         void evictTaskOutput(taskId);
         void removeRemoteAgentMetadata(taskId);
@@ -773,6 +850,7 @@ function startRemoteSessionPolling(taskId: string, context: TaskContext): () => 
             status: 'failed',
             endTime: Date.now()
           }));
+          emitRemoteTaskLifecycle(task, 'failed');
           enqueueRemoteReviewFailureNotification(taskId, 'remote session exceeded 30 minutes', context.setAppState);
           void evictTaskOutput(taskId);
           void removeRemoteAgentMetadata(taskId);
@@ -813,6 +891,7 @@ export const RemoteAgentTask: Task = {
     let description: string | undefined;
     let sessionId: string | undefined;
     let killed = false;
+    let wideEventTask: Pick<RemoteAgentTaskState, 'agentTelemetry' | 'isLongRunning' | 'isRemoteReview' | 'isUltraplan' | 'remoteTaskType' | 'startTime' | 'toolUseId'> | null = null;
     updateTaskState<RemoteAgentTaskState>(taskId, setAppState, task => {
       if (task.status !== 'running') {
         return task;
@@ -821,6 +900,15 @@ export const RemoteAgentTask: Task = {
       description = task.description;
       sessionId = task.sessionId;
       killed = true;
+      wideEventTask = {
+        agentTelemetry: task.agentTelemetry,
+        isLongRunning: task.isLongRunning,
+        isRemoteReview: task.isRemoteReview,
+        isUltraplan: task.isUltraplan,
+        remoteTaskType: task.remoteTaskType,
+        startTime: task.startTime,
+        toolUseId: task.toolUseId
+      };
       return {
         ...task,
         status: 'killed',
@@ -832,6 +920,9 @@ export const RemoteAgentTask: Task = {
     // Close the task_started bookend for SDK consumers. The poll loop's
     // early-return when status!=='running' won't emit a notification.
     if (killed) {
+      if (wideEventTask) {
+        emitRemoteTaskLifecycle(wideEventTask, 'interrupted');
+      }
       emitTaskTerminatedSdk(taskId, 'stopped', {
         toolUseId,
         summary: description
