@@ -10,6 +10,7 @@ import type { QueuedCommand } from '../../types/textInputTypes.js';
 import { isQueuedCommandVisible } from '../../utils/messageQueueManager.js';
 import { createUserMessage, EMPTY_LOOKUPS, normalizeMessages } from '../../utils/messages.js';
 import { jsonParse } from '../../utils/slowOperations.js';
+import { formatQueuedPreviewContent } from '../../services/interrupt/presentation.js';
 import { Message } from '../Message.js';
 const EMPTY_SET = new Set<string>();
 
@@ -81,7 +82,7 @@ function PromptInputQueuedCommandsImpl(): React.ReactNode {
 
   // createUserMessage mints a fresh UUID per call; without memoization, streaming
   // re-renders defeat Message's areMessagePropsEqual (compares uuid) → flicker.
-  const messages = useMemo(() => {
+  const messageEntries = useMemo(() => {
     if (queuedCommands.length === 0) return null;
     // task-notification is shown via useInboxNotification; most isMeta commands
     // (scheduled tasks, proactive ticks) are system-generated and hidden.
@@ -90,8 +91,9 @@ function PromptInputQueuedCommandsImpl(): React.ReactNode {
     const visibleCommands = queuedCommands.filter(isQueuedCommandVisible);
     if (visibleCommands.length === 0) return null;
     const processedCommands = processQueuedCommands(visibleCommands);
-    return normalizeMessages(processedCommands.map(cmd => {
+    const messages = normalizeMessages(processedCommands.map(cmd => {
       let content = cmd.value;
+      content = formatQueuedPreviewContent(content, cmd);
       if (cmd.mode === 'bash' && typeof content === 'string') {
         content = `<bash-input>${content}</bash-input>`;
       }
@@ -101,14 +103,18 @@ function PromptInputQueuedCommandsImpl(): React.ReactNode {
         content
       });
     }));
+    return messages.map((message, index) => ({
+      command: processedCommands[index]!,
+      message,
+    }));
   }, [queuedCommands]);
 
   // Don't show leader's queued commands when viewing any agent's transcript
-  if (viewingAgent || messages === null) {
+  if (viewingAgent || messageEntries === null) {
     return null;
   }
   return <Box marginTop={1} flexDirection="column">
-      {messages.map((message, i) => <QueuedMessageProvider key={i} isFirst={i === 0} useBriefLayout={useBriefLayout}>
+      {messageEntries.map(({ command, message }, i) => <QueuedMessageProvider key={i} isFirst={i === 0} useBriefLayout={useBriefLayout}>
           <Message message={message} lookups={EMPTY_LOOKUPS} addMargin={false} tools={[]} commands={[]} verbose={false} inProgressToolUseIDs={EMPTY_SET} progressMessagesForMessage={[]} shouldAnimate={false} shouldShowDot={false} isTranscriptMode={false} isStatic={true} />
         </QueuedMessageProvider>)}
     </Box>;

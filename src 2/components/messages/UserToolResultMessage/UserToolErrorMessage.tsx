@@ -33,7 +33,7 @@ export function UserToolErrorMessage(t0) {
   if (typeof param.content === "string" && param.content.includes(INTERRUPT_MESSAGE_FOR_TOOL_USE)) {
     let t1;
     if ($[0] === Symbol.for("react.memo_cache_sentinel")) {
-      t1 = <MessageResponse height={1}><InterruptedByUser /></MessageResponse>;
+      t1 = <MessageResponse height={1}><InterruptedByUser scope="tool" /></MessageResponse>;
       $[0] = t1;
     } else {
       t1 = $[0];

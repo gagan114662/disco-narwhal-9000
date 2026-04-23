@@ -25,6 +25,7 @@ import { TeammateMessageContent } from './UserTeammateMessage.js';
 import { isShutdownApproved } from '../../utils/teammateMailbox.js';
 import { CtrlOToExpand } from '../CtrlOToExpand.js';
 import { FilePathLink } from '../FilePathLink.js';
+import { RedirectedMarker } from '../Interrupt/RedirectedMarker.js';
 import { feature } from 'bun:bundle';
 import { useSelectedMessageBg } from '../messageActions.js';
 type Props = {
@@ -243,6 +244,7 @@ export function AttachmentMessage({
         const text = typeof attachment.prompt === 'string' ? attachment.prompt : getContentText(attachment.prompt) || '';
         const hasImages = attachment.imagePasteIds && attachment.imagePasteIds.length > 0;
         return <Box flexDirection="column">
+          <RedirectedMarker commandMode={attachment.commandMode} isMeta={attachment.isMeta} origin={attachment.origin} />
           <UserTextMessage addMargin={addMargin} param={{
             text,
             type: 'text'
