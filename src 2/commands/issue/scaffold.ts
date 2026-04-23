@@ -25,6 +25,18 @@ type IssueIdentifierBundle = {
   coverageId: string
 }
 
+export type TrunkExpectation = 'trunk-safe' | 'trunk-touch'
+
+export type IssueScaffoldInput = {
+  kind: IssueTemplateKind
+  title: string
+  repository?: string
+  generatedAt?: string
+  upstreamIds?: string[]
+  entryPoints?: string[]
+  trunkExpectation?: TrunkExpectation
+}
+
 const DEFAULT_KIND: IssueTemplateKind = 'work-order'
 const DEFAULT_TITLE = 'TODO: concise, outcome-focused issue title'
 const STOP_WORDS = new Set([
@@ -94,7 +106,9 @@ const ISSUE_TEMPLATE_DETAILS: Record<IssueTemplateKind, IssueTemplateDetails> = 
   },
 }
 
-function normalizeKindToken(rawKind: string): IssueTemplateKind | null {
+export function parseIssueKindToken(
+  rawKind: string,
+): IssueTemplateKind | null {
   const normalized = rawKind.trim().toLowerCase()
   if (!normalized) return null
 
@@ -115,7 +129,7 @@ export function parseIssueCommandArgs(args: string): ParsedIssueCommandArgs | nu
 
   const typeFlagMatch = remaining.match(/^--type(?:=|\s+)(\S+)(?:\s+|$)/)
   if (typeFlagMatch) {
-    const parsedKind = normalizeKindToken(typeFlagMatch[1])
+    const parsedKind = parseIssueKindToken(typeFlagMatch[1])
     if (parsedKind) {
       kind = parsedKind
       remaining = remaining.slice(typeFlagMatch[0].length).trim()
@@ -124,7 +138,7 @@ export function parseIssueCommandArgs(args: string): ParsedIssueCommandArgs | nu
     }
   } else if (remaining.length > 0) {
     const [firstToken] = remaining.split(/\s+/, 1)
-    const parsedKind = normalizeKindToken(firstToken)
+    const parsedKind = parseIssueKindToken(firstToken)
     if (parsedKind) {
       kind = parsedKind
       remaining = remaining.slice(firstToken.length).trim()
@@ -145,12 +159,24 @@ export function getIssueCommandHelp(): string {
     'Usage:',
     '  /issue [requirement|design|work-order|bug] <title>',
     '  /issue --type <requirement|design|work-order|bug> <title>',
+    '  /issue work-order <title> --upstream REQ-FOO-001 --upstream DES-FOO-001',
+    '  /issue bug <title> --entry src/app.ts --create',
     '',
     'Examples:',
     '  /issue requirement Define checkout fulfillment holds',
     '  /issue design Define remote session reconnect behavior',
     '  /issue work-order Add retry budget logging to the RPC client',
     '  /issue --type bug Settings panel drops unsaved edits',
+    '',
+    'Flags:',
+    '  --upstream, -u   Repeatable upstream REQ/DES/AC/COV reference',
+    '  --entry, -e      Repeatable entry point path or command',
+    '  --trunk          trunk-safe | trunk-touch',
+    '  --create         Create the GitHub issue with gh after writing the draft',
+    '  --repo, -R       Override the detected repository (owner/repo)',
+    '  --label, -l      Repeatable GitHub label to apply on create',
+    '  --assignee, -a   Repeatable GitHub assignee to apply on create',
+    '  --draft-path     Override the written draft path',
   ].join('\n')
 }
 
@@ -182,7 +208,22 @@ export function buildIssueIdentifiers(
   }
 }
 
-function buildHeader(kind: IssueTemplateKind, title: string): string[] {
+function renderBulletList(
+  values: string[],
+  placeholder: string,
+): string[] {
+  if (values.length === 0) {
+    return [`- ${placeholder}`]
+  }
+  return values.map(value => `- ${value}`)
+}
+
+function buildHeader({
+  kind,
+  title,
+  repository,
+  generatedAt,
+}: Pick<IssueScaffoldInput, 'kind' | 'title' | 'repository' | 'generatedAt'>): string[] {
   const details = ISSUE_TEMPLATE_DETAILS[kind]
   const identifiers = buildIssueIdentifiers(kind, title)
 
@@ -192,17 +233,21 @@ function buildHeader(kind: IssueTemplateKind, title: string): string[] {
     `Artifact Type: ${details.label}`,
     `Artifact ID: ${identifiers.artifactId}`,
     `Coverage ID: ${identifiers.coverageId}`,
+    ...(repository ? [`Repository: ${repository}`] : []),
+    ...(generatedAt ? [`Generated: ${generatedAt}`] : []),
     `Stage Summary: ${details.stageSummary}`,
     `Transformation Rule: ${details.transformationRule}`,
     '',
   ]
 }
 
-function buildRequirementScaffold(kind: IssueTemplateKind, title: string): string {
+function buildRequirementScaffold(input: IssueScaffoldInput): string {
+  const { kind, title, upstreamIds = [], entryPoints = [], trunkExpectation } =
+    input
   const identifiers = buildIssueIdentifiers(kind, title)
 
   return [
-    ...buildHeader(kind, title),
+    ...buildHeader(input),
     '## Problem',
     '- What user or business problem requires this capability?',
     '- Why is now the right time to define it precisely?',
@@ -219,6 +264,7 @@ function buildRequirementScaffold(kind: IssueTemplateKind, title: string): strin
     '- Call out nearby capabilities that deserve separate requirement IDs.',
     '',
     '## Upstream Context',
+    ...renderBulletList(upstreamIds, 'No upstream references supplied.'),
     '- Product / business context:',
     '- Related customer reports or source artifacts:',
     '- Technical constraints already known:',
@@ -232,7 +278,10 @@ function buildRequirementScaffold(kind: IssueTemplateKind, title: string): strin
     `- [ ] ${identifiers.acceptanceBaseId}.3: When [condition], the system shall [behavior].`,
     '',
     '## Suggested Entry Points',
-    '- Existing docs, code paths, or users who can validate intent:',
+    ...renderBulletList(
+      entryPoints,
+      'Existing docs, code paths, or users who can validate intent:',
+    ),
     '',
     '## Verification / Coverage',
     `### ${identifiers.coverageId}`,
@@ -242,16 +291,18 @@ function buildRequirementScaffold(kind: IssueTemplateKind, title: string): strin
     '- Gaps / follow-ups:',
     '',
     '## Trunk Expectations',
-    '- Preferred: trunk-safe',
+    `- Selected: ${trunkExpectation ?? 'trunk-safe'}`,
     '- Escalate to trunk-touch only if satisfying the requirement necessarily crosses guarded shared surfaces.',
   ].join('\n')
 }
 
-function buildDesignScaffold(kind: IssueTemplateKind, title: string): string {
+function buildDesignScaffold(input: IssueScaffoldInput): string {
+  const { kind, title, upstreamIds = [], entryPoints = [], trunkExpectation } =
+    input
   const identifiers = buildIssueIdentifiers(kind, title)
 
   return [
-    ...buildHeader(kind, title),
+    ...buildHeader(input),
     '## Problem',
     '- What uncertainty, risk, or architectural gap needs a design decision?',
     '',
@@ -266,8 +317,8 @@ function buildDesignScaffold(kind: IssueTemplateKind, title: string): string {
     '- List implementation tasks, migrations, and future ideas that should stay out of this design doc.',
     '',
     '## Upstream Requirements',
-    '- Required IDs: `REQ-...`',
-    '- Copy the relevant `REQ-...` and `AC-...` text verbatim before proposing solutions.',
+    ...renderBulletList(upstreamIds, 'Required IDs: `REQ-...`, `AC-...`'),
+    '- Copy the relevant upstream text verbatim before proposing solutions.',
     '- If no upstream requirement exists, stop and create one first.',
     '',
     '## Design Decisions',
@@ -281,7 +332,10 @@ function buildDesignScaffold(kind: IssueTemplateKind, title: string): string {
     `- [ ] ${identifiers.acceptanceBaseId}.3: The design is specific enough that a work order can inherit it without reinterpretation.`,
     '',
     '## Suggested Entry Points',
-    '- Current code paths, docs, diagrams, incidents, or prior issues that should anchor the design:',
+    ...renderBulletList(
+      entryPoints,
+      'Current code paths, docs, diagrams, incidents, or prior issues that should anchor the design:',
+    ),
     '',
     '## Verification / Review Plan',
     `### ${identifiers.coverageId}`,
@@ -290,16 +344,18 @@ function buildDesignScaffold(kind: IssueTemplateKind, title: string): string {
     '- Concrete questions that must be resolved before implementation starts:',
     '',
     '## Trunk Expectations',
-    '- Preferred: trunk-safe',
+    `- Selected: ${trunkExpectation ?? 'trunk-safe'}`,
     '- Escalate to trunk-touch only if the resulting implementation will necessarily cross guarded shared surfaces.',
   ].join('\n')
 }
 
-function buildWorkOrderScaffold(kind: IssueTemplateKind, title: string): string {
+function buildWorkOrderScaffold(input: IssueScaffoldInput): string {
+  const { kind, title, upstreamIds = [], entryPoints = [], trunkExpectation } =
+    input
   const identifiers = buildIssueIdentifiers(kind, title)
 
   return [
-    ...buildHeader(kind, title),
+    ...buildHeader(input),
     '## Summary',
     '- What outcome ships when this work order is complete?',
     '- Why is this the smallest independently reviewable slice?',
@@ -311,13 +367,15 @@ function buildWorkOrderScaffold(kind: IssueTemplateKind, title: string): string 
     '- List tempting cleanup, refactors, and adjacent capabilities that must stay separate.',
     '',
     '## Requirements',
-    '- Required upstream IDs: `REQ-...`, `AC-...`',
+    ...renderBulletList(
+      upstreamIds,
+      'Required upstream IDs: `REQ-...`, `AC-...`, `DES-...`',
+    ),
     '- Copy the upstream requirement text verbatim here before implementation begins.',
     '- Do not renumber or paraphrase inherited IDs.',
     '',
     '## Blueprints / Design References',
-    '- Required design IDs: `DES-...`',
-    '- Code / docs / tests to inspect first:',
+    ...renderBulletList(entryPoints, 'Code / docs / tests to inspect first:'),
     '- Integration points and invariants to preserve:',
     '',
     '## Acceptance Criteria',
@@ -326,7 +384,10 @@ function buildWorkOrderScaffold(kind: IssueTemplateKind, title: string): string 
     `- [ ] ${identifiers.acceptanceBaseId}.3: Reviewers can validate completion without inferring missing context.`,
     '',
     '## Suggested Entry Points',
-    '- Primary files, commands, tests, or services a contributor should open first:',
+    ...renderBulletList(
+      entryPoints,
+      'Primary files, commands, tests, or services a contributor should open first:',
+    ),
     '',
     '## E2E Acceptance Tests',
     `### ${identifiers.coverageId}`,
@@ -336,16 +397,18 @@ function buildWorkOrderScaffold(kind: IssueTemplateKind, title: string): string 
     '- Known gaps / deferred coverage:',
     '',
     '## Trunk Expectations',
-    '- Preferred: trunk-safe',
+    `- Selected: ${trunkExpectation ?? 'trunk-safe'}`,
     '- Escalate to trunk-touch only if trunk ownership or shared infrastructure makes isolation impossible.',
   ].join('\n')
 }
 
-function buildBugScaffold(kind: IssueTemplateKind, title: string): string {
+function buildBugScaffold(input: IssueScaffoldInput): string {
+  const { kind, title, upstreamIds = [], entryPoints = [], trunkExpectation } =
+    input
   const identifiers = buildIssueIdentifiers(kind, title)
 
   return [
-    ...buildHeader(kind, title),
+    ...buildHeader(input),
     '## Problem',
     '- What is failing now, and what should happen instead?',
     '',
@@ -365,9 +428,14 @@ function buildBugScaffold(kind: IssueTemplateKind, title: string): string {
     '- List unrelated cleanup, large refactors, and adjacent bugs that should not piggyback here.',
     '',
     '## Upstream References',
-    '- Related requirement IDs: `REQ-...`',
-    '- Related design IDs: `DES-...`',
-    '- Suspect files, tests, logs, dashboards, or incidents:',
+    ...renderBulletList(
+      upstreamIds,
+      'Related requirement IDs: `REQ-...`, related design IDs: `DES-...`',
+    ),
+    ...renderBulletList(
+      entryPoints,
+      'Suspect files, tests, logs, dashboards, or incidents:',
+    ),
     '',
     '## Acceptance Criteria',
     `- [ ] ${identifiers.acceptanceBaseId}.1: The documented repro no longer fails under the same conditions.`,
@@ -375,7 +443,10 @@ function buildBugScaffold(kind: IssueTemplateKind, title: string): string {
     `- [ ] ${identifiers.acceptanceBaseId}.3: Regression coverage exists or the remaining gap is explicitly documented.`,
     '',
     '## Suggested Entry Points',
-    '- Failing command, screen, file, log path, or test to inspect first:',
+    ...renderBulletList(
+      entryPoints,
+      'Failing command, screen, file, log path, or test to inspect first:',
+    ),
     '',
     '## Verification / Coverage',
     `### ${identifiers.coverageId}`,
@@ -385,27 +456,21 @@ function buildBugScaffold(kind: IssueTemplateKind, title: string): string {
     '- Missing coverage / residual risk:',
     '',
     '## Trunk Expectations',
-    '- Preferred: trunk-safe',
+    `- Selected: ${trunkExpectation ?? 'trunk-safe'}`,
     '- Escalate to trunk-touch only if the fix necessarily crosses guarded shared surfaces.',
   ].join('\n')
 }
 
-export function buildIssueScaffold({
-  kind,
-  title,
-}: {
-  kind: IssueTemplateKind
-  title: string
-}): string {
-  if (kind === 'requirement-definition') {
-    return buildRequirementScaffold(kind, title)
+export function buildIssueScaffold(input: IssueScaffoldInput): string {
+  if (input.kind === 'requirement-definition') {
+    return buildRequirementScaffold(input)
   }
-  if (kind === 'spec-design-doc') {
-    return buildDesignScaffold(kind, title)
+  if (input.kind === 'spec-design-doc') {
+    return buildDesignScaffold(input)
   }
-  if (kind === 'bug-regression') {
-    return buildBugScaffold(kind, title)
+  if (input.kind === 'bug-regression') {
+    return buildBugScaffold(input)
   }
 
-  return buildWorkOrderScaffold(kind, title)
+  return buildWorkOrderScaffold(input)
 }

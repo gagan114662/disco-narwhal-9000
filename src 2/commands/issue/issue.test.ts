@@ -1,11 +1,30 @@
-import { describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, test } from 'bun:test'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import {
   buildIssueScaffold,
   buildIssueIdentifiers,
   deriveArtifactStem,
   getIssueCommandHelp,
   parseIssueCommandArgs,
+  parseIssueKindToken,
 } from './scaffold.js'
+import { parseIssueWorkflowArgs, runIssueCommand } from './workflow.js'
+
+const TEMP_DIRS: string[] = []
+
+function makeProjectDir(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'issue-command-test-'))
+  TEMP_DIRS.push(dir)
+  return dir
+}
+
+afterEach(() => {
+  for (const dir of TEMP_DIRS.splice(0, TEMP_DIRS.length)) {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
 
 describe('/issue scaffold', () => {
   test('parses requirement aliases', () => {
@@ -16,6 +35,11 @@ describe('/issue scaffold', () => {
       title: 'Define checkout fulfillment holds',
       usedPlaceholderTitle: false,
     })
+  })
+
+  test('parses explicit kind tokens directly', () => {
+    expect(parseIssueKindToken('design')).toBe('spec-design-doc')
+    expect(parseIssueKindToken('wo')).toBe('work-order')
   })
 
   test('parses explicit type flags and preserves the remaining title', () => {
@@ -92,5 +116,114 @@ describe('/issue scaffold', () => {
     expect(help).toContain(
       '/issue --type <requirement|design|work-order|bug> <title>',
     )
+    expect(help).toContain('--create')
+    expect(help).toContain('--upstream')
+  })
+
+  test('parses workflow flags for file creation and GitHub issue creation', () => {
+    expect(
+      parseIssueWorkflowArgs(
+        'work-order Add retry budget logging --upstream REQ-FOO-001 --entry src/rpc.ts --label cli --assignee gagan --create',
+      ),
+    ).toEqual({
+      kind: 'work-order',
+      title: 'Add retry budget logging',
+      create: true,
+      repo: undefined,
+      upstreamIds: ['REQ-FOO-001'],
+      entryPoints: ['src/rpc.ts'],
+      labels: ['cli'],
+      assignees: ['gagan'],
+      trunkExpectation: undefined,
+      draftPath: undefined,
+    })
+  })
+
+  test('writes a draft file and reports validation results', async () => {
+    const projectDir = makeProjectDir()
+    mkdirSync(join(projectDir, 'docs'), { recursive: true })
+    const requirementPath = join(projectDir, 'docs', 'req.md')
+    await Bun.write(
+      requirementPath,
+      'REQ-CHECKOUT-HOLD-001\nAC-REQ-CHECKOUT-HOLD-001.1\n',
+    )
+
+    const result = await runIssueCommand(
+      'design Define checkout hold flow --upstream REQ-CHECKOUT-HOLD-001 --entry docs/req.md',
+      {
+        projectDir,
+        now: new Date('2026-04-23T10:00:00.000Z'),
+        detectRepository: async () => ({
+          host: 'github.com',
+          owner: 'owner',
+          name: 'repo',
+        }),
+        which: async () => null,
+      },
+    )
+
+    expect(result).toContain('Draft written to .claude/issue-drafts/')
+    expect(result).toContain('RESOLVED: REQ-CHECKOUT-HOLD-001 -> docs/req.md')
+
+    const draftPathMatch = result.match(
+      /Draft written to ([^\n]+\.md)/,
+    )
+    expect(draftPathMatch?.[1]).toBeTruthy()
+    const draftPath = join(projectDir, draftPathMatch![1]!)
+    const draftBody = readFileSync(draftPath, 'utf8')
+    expect(draftBody).toContain('Repository:')
+    expect(draftBody).toContain('REQ-CHECKOUT-HOLD-001')
+    expect(draftBody).toContain('docs/req.md')
+  })
+
+  test('creates a GitHub issue when validation passes and gh succeeds', async () => {
+    const projectDir = makeProjectDir()
+    mkdirSync(join(projectDir, 'docs'), { recursive: true })
+    await Bun.write(
+      join(projectDir, 'docs', 'req.md'),
+      'REQ-CHECKOUT-HOLD-001\nDES-CHECKOUT-HOLD-001\n',
+    )
+
+    const result = await runIssueCommand(
+      'work-order Add retry budget logging --upstream REQ-CHECKOUT-HOLD-001 --upstream DES-CHECKOUT-HOLD-001 --create --repo owner/repo',
+      {
+        projectDir,
+        getGhAuthStatus: async () => 'authenticated',
+        which: async () => null,
+        exec: async (file, args) => {
+          expect(file).toBe('gh')
+          expect(args).toContain('issue')
+          expect(args).toContain('create')
+          expect(args).toContain('--repo')
+          expect(args).toContain('owner/repo')
+          return {
+            code: 0,
+            stdout: 'https://github.com/owner/repo/issues/123\n',
+            stderr: '',
+          }
+        },
+      },
+    )
+
+    expect(result).toContain('Created issue: https://github.com/owner/repo/issues/123')
+  })
+
+  test('blocks GitHub creation when required upstream refs are missing', async () => {
+    const projectDir = makeProjectDir()
+
+    const result = await runIssueCommand(
+      'work-order Add retry budget logging --create --repo owner/repo',
+      {
+        projectDir,
+        getGhAuthStatus: async () => 'authenticated',
+        which: async () => null,
+        exec: async () => {
+          throw new Error('should not run gh')
+        },
+      },
+    )
+
+    expect(result).toContain('BLOCKING:')
+    expect(result).toContain('Issue creation skipped because validation failed.')
   })
 })
