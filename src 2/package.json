@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "bun ./entrypoints/cli.tsx",
     "test": "bun test",
+    "subsystems:validate": "bun ./scripts/validateSubsystems.ts",
     "structural-fix:resolver-eval": "bun ./scripts/structuralFixResolverEval.ts",
     "structural-fix:smoke": "bun ./scripts/structuralFixSmoke.ts",
     "structural-fix:daily": "bun test ./services/structuralFix/structuralFix.test.ts ./utils/skills/repoSkillResolver.test.ts ./utils/skills/repoSkillAutoload.test.ts ./utils/processUserInput/processUserInput.test.ts && bun run structural-fix:resolver-eval && bun run structural-fix:smoke",

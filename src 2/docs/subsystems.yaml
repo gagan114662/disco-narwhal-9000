@@ -1,0 +1,279 @@
+schema_version: 1
+manifest_owner: "@gagan114662"
+matching_rule: "Treat owned_paths as repo-relative prefixes. When several entries match a file, use the most specific prefix."
+governance_files:
+  - ".github/CODEOWNERS"
+  - ".github/workflows/trunk-guard.yml"
+magic_docs:
+  - "src 2/docs/navigation.md"
+subsystems:
+  - id: "cli-session-loop"
+    name: "CLI / session loop"
+    owner: "@gagan114662"
+    reviewer_expectation: "Escalate before changing startup routing, prompt assembly, or query contracts. This slice usually crosses trunk-guarded files."
+    change_expectation: "trunk-touch"
+    owned_paths:
+      - "src 2/entrypoints/"
+      - "src 2/main.tsx"
+      - "src 2/replLauncher.tsx"
+      - "src 2/interactiveHelpers.tsx"
+      - "src 2/query.ts"
+      - "src 2/query/"
+      - "src 2/commands.ts"
+      - "src 2/context.ts"
+    high_risk_paths:
+      - "src 2/QueryEngine.ts"
+      - "src 2/Task.ts"
+      - "src 2/Tool.ts"
+      - "src 2/query/"
+      - "src 2/context.ts"
+    entry_files:
+      - "src 2/entrypoints/cli.tsx"
+      - "src 2/main.tsx"
+      - "src 2/query.ts"
+    neighboring_modules:
+      - "src 2/replLauncher.tsx"
+      - "src 2/interactiveHelpers.tsx"
+      - "src 2/commands.ts"
+      - "src 2/context.ts"
+      - "src 2/QueryEngine.ts"
+    tests:
+      files: []
+      commands:
+        - "bun run smoke:cli"
+        - "bun run smoke:bundle"
+    exercise:
+      commands:
+        - "bun ./entrypoints/cli.tsx --version"
+        - "bun ./dist/cli.js --version"
+      tools: []
+    common_failure_modes:
+      - "Fast-path argument handling drifts from the main initialization path."
+      - "Prompt assembly changes break query budgeting or session restore assumptions."
+      - "Command registration and REPL rendering fall out of sync after startup edits."
+
+  - id: "agenttool-subagents"
+    name: "AgentTool / subagents"
+    owner: "@gagan114662"
+    reviewer_expectation: "Normal edits are usually leaf-safe inside tools and tasks. Escalate when worktree isolation, async task lifecycle, or agent prompt contracts change."
+    change_expectation: "trunk-safe"
+    owned_paths:
+      - "src 2/tools/AgentTool/"
+      - "src 2/tasks/LocalAgentTask/"
+      - "src 2/tasks/RemoteAgentTask/"
+      - "src 2/tasks/InProcessTeammateTask/"
+      - "src 2/tools/shared/spawnMultiAgent.ts"
+      - "src 2/tools/SendMessageTool/"
+      - "src 2/tools/TeamCreateTool/"
+    high_risk_paths:
+      - "src 2/tools/AgentTool/runAgent.ts"
+      - "src 2/tools/AgentTool/forkSubagent.ts"
+      - "src 2/tasks/LocalAgentTask/LocalAgentTask.tsx"
+      - "src 2/tasks/RemoteAgentTask/RemoteAgentTask.tsx"
+      - "src 2/tools/shared/spawnMultiAgent.ts"
+    entry_files:
+      - "src 2/tools/AgentTool/AgentTool.tsx"
+      - "src 2/tools/AgentTool/runAgent.ts"
+      - "src 2/tools/AgentTool/loadAgentsDir.ts"
+    neighboring_modules:
+      - "src 2/tools/AgentTool/forkSubagent.ts"
+      - "src 2/tasks/LocalAgentTask/LocalAgentTask.tsx"
+      - "src 2/tasks/RemoteAgentTask/RemoteAgentTask.tsx"
+      - "src 2/tasks/InProcessTeammateTask/InProcessTeammateTask.tsx"
+      - "src 2/tools/shared/spawnMultiAgent.ts"
+    tests:
+      files: []
+      commands:
+        - "bun run smoke:employee"
+    exercise:
+      commands:
+        - "bun ./scripts/employeeSmoke.ts"
+      tools:
+        - "AgentTool"
+        - "SendMessageTool"
+        - "TaskCreateTool"
+        - "TaskGetTool"
+        - "TaskOutputTool"
+    common_failure_modes:
+      - "Background and foreground task states diverge, leaving orphaned or invisible agent runs."
+      - "Worktree or remote isolation changes leak cwd, permissions, or messages across agents."
+      - "Agent schema changes break built-in agent selection or teammate routing."
+
+  - id: "mcp-ide-bridge"
+    name: "MCP / IDE bridge"
+    owner: "@gagan114662"
+    reviewer_expectation: "Treat connection lifecycle, auth, and remote-control surfaces as high risk. Use the dedicated MCP and bridge utility tests for regression checks, then follow with command-level smoke for connection and CLI surfaces."
+    change_expectation: "trunk-safe"
+    owned_paths:
+      - "src 2/services/mcp/"
+      - "src 2/bridge/"
+      - "src 2/commands/mcp/"
+      - "src 2/commands/ide/"
+    high_risk_paths:
+      - "src 2/services/mcp/client.ts"
+      - "src 2/bridge/bridgeMain.ts"
+      - "src 2/bridge/replBridge.ts"
+      - "src 2/bridge/createSession.ts"
+      - "src 2/services/mcp/MCPConnectionManager.tsx"
+    entry_files:
+      - "src 2/services/mcp/client.ts"
+      - "src 2/bridge/bridgeMain.ts"
+      - "src 2/bridge/createSession.ts"
+    neighboring_modules:
+      - "src 2/services/mcp/MCPConnectionManager.tsx"
+      - "src 2/services/mcp/config.ts"
+      - "src 2/bridge/replBridge.ts"
+      - "src 2/bridge/sessionRunner.ts"
+      - "src 2/commands/ide/ide.tsx"
+    tests:
+      files:
+        - "src 2/services/mcp/client.test.ts"
+        - "src 2/bridge/bridgeUtilities.test.ts"
+      commands:
+        - "bun test ./services/mcp/client.test.ts ./bridge/bridgeUtilities.test.ts"
+        - "bun run smoke:cli"
+        - "bun ./entrypoints/cli.tsx mcp --help"
+        - "bun ./entrypoints/cli.tsx ide --help"
+        - "bun ./entrypoints/cli.tsx remote-control --help"
+    exercise:
+      commands:
+        - "claude mcp"
+        - "claude ide"
+        - "claude remote-control"
+      tools:
+        - "MCPTool"
+        - "ListMcpResourcesTool"
+        - "ReadMcpResourceTool"
+        - "WebFetchTool"
+    common_failure_modes:
+      - "Auth refresh or session expiry handling leaves clients permanently disconnected."
+      - "Bridge session state drifts between local state, claude.ai, and IDE callbacks."
+      - "Tool or resource discovery changes silently hide MCP capabilities from the model."
+
+  - id: "daemon-kairos"
+    name: "daemon / KAIROS surfaces"
+    owner: "@gagan114662"
+    reviewer_expectation: "Daemon work is leaf-safe until it changes child-run policy, persisted state layout, or dashboard/control contracts."
+    change_expectation: "trunk-safe"
+    owned_paths:
+      - "src 2/daemon/"
+      - "src 2/commands/kairos.ts"
+      - "src 2/commands/kairos-skill-improvements.ts"
+      - "src 2/commands/kairos-memory-proposals.ts"
+    high_risk_paths:
+      - "src 2/daemon/main.ts"
+      - "src 2/daemon/kairos/worker.ts"
+      - "src 2/daemon/kairos/childRunner.ts"
+      - "src 2/daemon/kairos/cloudSync.ts"
+      - "src 2/daemon/dashboard/server.ts"
+    entry_files:
+      - "src 2/daemon/main.ts"
+      - "src 2/daemon/kairos/worker.ts"
+      - "src 2/commands/kairos.ts"
+    neighboring_modules:
+      - "src 2/daemon/kairos/projectWorker.ts"
+      - "src 2/daemon/kairos/stateWriter.ts"
+      - "src 2/daemon/kairos/tier3.ts"
+      - "src 2/daemon/dashboard/server.ts"
+      - "src 2/daemon/gateway/telegram/gateway.ts"
+    tests:
+      files:
+        - "src 2/commands/kairos.test.ts"
+        - "src 2/daemon/kairos/worker.test.ts"
+        - "src 2/daemon/kairos/projectWorker.test.ts"
+        - "src 2/daemon/kairos/childRunner.test.ts"
+        - "src 2/daemon/dashboard/server.test.ts"
+      commands:
+        - "bun test ./commands/kairos.test.ts ./daemon/kairos/worker.test.ts ./daemon/dashboard/server.test.ts"
+    exercise:
+      commands:
+        - "claude /kairos status"
+        - "claude daemon kairos"
+      tools: []
+    common_failure_modes:
+      - "Pause, auth-failure, or cap-hit state is written inconsistently across status files and event logs."
+      - "Project workers double-run or skip scheduled tasks after backpressure and abort races."
+      - "Dashboard and terminal controls disagree because they stop sharing the same on-disk model."
+
+  - id: "state-persistence"
+    name: "State persistence"
+    owner: "@gagan114662"
+    reviewer_expectation: "Assume changes are trunk-touch when they alter session identity, app state shape, transcript layout, or durable memory paths."
+    change_expectation: "trunk-touch"
+    owned_paths:
+      - "src 2/state/"
+      - "src 2/bootstrap/state.ts"
+      - "src 2/utils/sessionStorage.ts"
+      - "src 2/services/memory/"
+    high_risk_paths:
+      - "src 2/bootstrap/state.ts"
+      - "src 2/state/AppStateStore.ts"
+      - "src 2/utils/sessionStorage.ts"
+      - "src 2/services/memory/sessionIndex.ts"
+      - "src 2/services/memory/sessionSummaryTask.ts"
+    entry_files:
+      - "src 2/state/AppStateStore.ts"
+      - "src 2/utils/sessionStorage.ts"
+      - "src 2/services/memory/sessionIndex.ts"
+    neighboring_modules:
+      - "src 2/state/onChangeAppState.ts"
+      - "src 2/bootstrap/state.ts"
+      - "src 2/services/memory/sessionSummaryTask.ts"
+      - "src 2/services/memory/summarizeSession.ts"
+      - "src 2/services/memory/paths.ts"
+    tests:
+      files:
+        - "src 2/services/memory/sessionIndex.test.ts"
+        - "src 2/services/memory/sessionSummaryTask.test.ts"
+        - "src 2/services/memory/summarizeSession.test.ts"
+      commands:
+        - "bun test ./services/memory/sessionIndex.test.ts ./services/memory/sessionSummaryTask.test.ts ./services/memory/summarizeSession.test.ts"
+    exercise:
+      commands:
+        - "claude /resume"
+        - "claude /memory"
+      tools:
+        - "RecallPastSessionsTool"
+    common_failure_modes:
+      - "Transcript parent chains or tombstoning rules regress and break resume."
+      - "AppState shape changes stop hydrating cleanly across interactive sessions."
+      - "SQLite or on-disk memory files drift from the summaries the UI expects."
+
+  - id: "telemetry-diagnostics"
+    name: "Telemetry / diagnostics"
+    owner: "@gagan114662"
+    reviewer_expectation: "Keep telemetry metadata redacted, and treat diagnostics fetching as user-visible latency. Escalate before changing sinks or privacy boundaries."
+    change_expectation: "trunk-safe"
+    owned_paths:
+      - "src 2/services/analytics/"
+      - "src 2/services/diagnosticTracking.ts"
+      - "src 2/services/internalLogging.ts"
+      - "src 2/utils/telemetry/"
+    high_risk_paths:
+      - "src 2/services/analytics/index.ts"
+      - "src 2/services/analytics/sink.ts"
+      - "src 2/services/analytics/firstPartyEventLoggingExporter.ts"
+      - "src 2/services/analytics/datadog.ts"
+      - "src 2/services/diagnosticTracking.ts"
+    entry_files:
+      - "src 2/services/analytics/index.ts"
+      - "src 2/services/analytics/sink.ts"
+      - "src 2/services/diagnosticTracking.ts"
+    neighboring_modules:
+      - "src 2/services/analytics/datadog.ts"
+      - "src 2/services/analytics/firstPartyEventLoggingExporter.ts"
+      - "src 2/services/analytics/growthbook.ts"
+      - "src 2/hooks/useIdeLogging.ts"
+      - "src 2/utils/log.ts"
+    tests:
+      files: []
+      commands:
+        - "bun run smoke:cli"
+    exercise:
+      commands:
+        - "claude --verbose"
+      tools: []
+    common_failure_modes:
+      - "New metadata leaks code, paths, or PII into general-access analytics backends."
+      - "Queued events never flush because sinks attach too late or reset unexpectedly."
+      - "Diagnostics baselines go stale and report old IDE problems as new regressions."
