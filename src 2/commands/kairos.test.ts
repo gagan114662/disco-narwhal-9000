@@ -7,6 +7,8 @@ import {
   getProjectRoot,
   setProjectRoot,
 } from '../bootstrap/state.js'
+import { createStateWriter } from '../daemon/kairos/stateWriter.js'
+import { writeCronTasks } from '../utils/cronTasks.js'
 import {
   __resetKairosCloudSyncDepsForTesting,
   __setKairosCloudSyncDepsForTesting,
@@ -30,6 +32,52 @@ function makeProjectDir(): string {
 
 function readJson(path: string): unknown {
   return JSON.parse(readFileSync(path, 'utf8'))
+}
+
+async function seedKairosProjectState(projectDir: string): Promise<void> {
+  const writer = await createStateWriter()
+  await writer.ensureProjectDir(projectDir)
+  await writer.writeGlobalStatus({
+    kind: 'kairos',
+    state: 'idle',
+    pid: 4242,
+    startedAt: '2026-04-22T12:00:00Z',
+    updatedAt: '2026-04-22T12:01:00Z',
+    projects: 1,
+    lastEventAt: '2026-04-22T12:01:30Z',
+  })
+  await writer.writeProjectStatus({
+    projectDir,
+    running: true,
+    dirty: true,
+    pendingCount: 2,
+    lastEvent: 'overlap_coalesced',
+    nextFireAt: 1_746_000_000_000,
+    updatedAt: '2026-04-22T12:01:15Z',
+  })
+  await writer.writeGlobalCosts({
+    totalUSD: 0.25,
+    totalTurns: 3,
+    runs: 2,
+    updatedAt: '2026-04-22T12:01:00Z',
+  })
+  await writer.writeProjectCosts(projectDir, {
+    totalUSD: 0.15,
+    totalTurns: 2,
+    runs: 1,
+    updatedAt: '2026-04-22T12:01:00Z',
+  })
+  await writeCronTasks(
+    [
+      {
+        id: 'demo1234',
+        cron: '5 12 22 4 *',
+        prompt: 'demo task',
+        createdAt: Date.now(),
+      },
+    ],
+    projectDir,
+  )
 }
 
 beforeEach(() => {
@@ -178,24 +226,21 @@ describe('/kairos command', () => {
   })
 
   test('status reports running daemon + pause state', async () => {
-    const stateDir = join(process.env.CLAUDE_CONFIG_DIR as string, 'kairos')
-    mkdirSync(stateDir, { recursive: true })
-    writeFileSync(
-      join(stateDir, 'status.json'),
-      JSON.stringify({
-        kind: 'kairos',
-        state: 'idle',
-        pid: 4242,
-        startedAt: '2026-04-22T12:00:00Z',
-        updatedAt: '2026-04-22T12:01:00Z',
-        projects: 1,
-      }),
-    )
+    const projectDir = makeProjectDir()
+    await runKairosCommand(`opt-in ${projectDir}`)
+    await seedKairosProjectState(projectDir)
 
     await runKairosCommand('pause')
     const out = await runKairosCommand('status')
     expect(out).toContain('pid 4242')
     expect(out).toContain('paused: yes')
+    expect(out).toContain(`project: ${projectDir}`)
+    expect(out).toContain('worker running: yes')
+    expect(out).toContain('overlap pending: yes')
+    expect(out).toContain('pending count: 2')
+    expect(out).toContain('queued tasks: 1')
+    expect(out).toContain('project cost: $0.1500')
+    expect(out).toContain('global cost: $0.2500')
   })
 
   test('dashboard respects KAIROS_DASHBOARD_URL override', async () => {

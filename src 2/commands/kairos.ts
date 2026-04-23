@@ -22,6 +22,7 @@ import {
   enqueueDemoTask,
   optInProject,
   optOutProject,
+  readDashboardSnapshot,
   setPauseState,
 } from '../daemon/dashboard/model.js'
 import { createProjectRegistry } from '../daemon/kairos/projectRegistry.js'
@@ -131,18 +132,31 @@ async function readJsonIfExists<T>(path: string): Promise<T | null> {
   }
 }
 
+function formatCurrency(value: number | undefined): string | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return null
+  }
+  return `$${value.toFixed(4)}`
+}
+
+function formatOptionalValue(value: string | number | null | undefined): string {
+  if (value === null || value === undefined || value === '') {
+    return '—'
+  }
+  return String(value)
+}
+
 async function handleStatus(): Promise<string> {
-  const [status, pause, registry] = await Promise.all([
-    readJsonIfExists<GlobalStatus>(getKairosStatusPath()),
-    readJsonIfExists<PauseState>(getKairosPausePath()),
-    createProjectRegistry(),
-  ])
-  const projects = await registry.read()
+  const snapshot = await readDashboardSnapshot()
+  const { status, pause, costs, projects } = snapshot.global
   const lines: string[] = []
   if (status) {
     lines.push(`daemon: ${status.state} (pid ${status.pid})`)
     lines.push(`started: ${status.startedAt}`)
     lines.push(`updated: ${status.updatedAt}`)
+    if (status.lastEventAt) {
+      lines.push(`last event at: ${status.lastEventAt}`)
+    }
   } else {
     lines.push('daemon: not running (no status file)')
   }
@@ -157,6 +171,36 @@ async function handleStatus(): Promise<string> {
     lines.push('paused: no')
   }
   lines.push(`projects: ${projects.length}`)
+  const globalCost = formatCurrency(costs?.totalUSD)
+  if (globalCost) {
+    lines.push(
+      `global cost: ${globalCost} across ${costs?.runs ?? 0} run(s) / ${costs?.totalTurns ?? 0} turn(s)`,
+    )
+  }
+  for (const project of snapshot.projects) {
+    lines.push(`project: ${project.projectDir}`)
+    lines.push(
+      `  worker running: ${project.status?.running === true ? 'yes' : 'no'}`,
+    )
+    lines.push(
+      `  overlap pending: ${project.status?.dirty === true ? 'yes' : 'no'}`,
+    )
+    lines.push(
+      `  pending count: ${formatOptionalValue(project.status?.pendingCount)}`,
+    )
+    lines.push(`  queued tasks: ${project.tasks.length}`)
+    lines.push(`  last event: ${formatOptionalValue(project.status?.lastEvent)}`)
+    lines.push(
+      `  next fire at: ${formatOptionalValue(project.status?.nextFireAt ?? null)}`,
+    )
+    lines.push(`  updated: ${formatOptionalValue(project.status?.updatedAt)}`)
+    const projectCost = formatCurrency(project.costs?.totalUSD)
+    if (projectCost) {
+      lines.push(
+        `  project cost: ${projectCost} across ${project.costs?.runs ?? 0} run(s) / ${project.costs?.totalTurns ?? 0} turn(s)`,
+      )
+    }
+  }
   return lines.join('\n')
 }
 
