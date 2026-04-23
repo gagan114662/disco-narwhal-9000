@@ -7,6 +7,7 @@ import { applySkillPatch, SkillPatchApplyError } from '../services/skillLearning
 import {
   listPendingPatches,
   loadPatchById,
+  recordPatchApproval,
   movePatchTo,
   renderPatchDiff,
 } from '../services/skillLearning/reviewQueue.js'
@@ -25,6 +26,10 @@ const HELP = `Usage:
 /kairos skill-improvements diff <id>
 /kairos skill-improvements accept <id>
 /kairos skill-improvements reject <id>`
+
+function getApprovalReviewer(): string {
+  return process.env.USER || process.env.USERNAME || 'unknown-reviewer'
+}
 
 export async function runSkillImprovementsCommand(args: string[]): Promise<string> {
   const [action, id] = args
@@ -73,7 +78,17 @@ async function handleAccept(id: string): Promise<string> {
     return `patch ${id} is already ${patch.status}`
   }
   try {
-    const applied = await applySkillPatch(patch.patch)
+    const approvedRecord = await recordPatchApproval(id, {
+      approvalId: id,
+      approvedAt: Date.now(),
+      approvedBy: getApprovalReviewer(),
+    })
+    if (!approvedRecord.approval) {
+      throw new SkillPatchApplyError(
+        `manual approval required: no review record for approvalId=${id}`,
+      )
+    }
+    const applied = await applySkillPatch(approvedRecord.patch, approvedRecord.approval)
     await movePatchTo(id, 'applied')
     return [
       `accepted ${id}`,
