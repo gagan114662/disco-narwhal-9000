@@ -14,6 +14,14 @@ export function isSnipBoundaryMessage(message: Message): boolean {
   )
 }
 
+export function isSnipRuntimeEnabled(): boolean {
+  return false
+}
+
+export function shouldNudgeForSnips(_messages: Message[]): boolean {
+  return false
+}
+
 export function snipCompactIfNeeded(
   messages: Message[],
   _options?: { force?: boolean },

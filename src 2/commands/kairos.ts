@@ -22,6 +22,7 @@ import {
   enqueueDemoTask,
   optInProject,
   optOutProject,
+  readDashboardSnapshot,
   setPauseState,
 } from '../daemon/dashboard/model.js'
 import { createProjectRegistry } from '../daemon/kairos/projectRegistry.js'
@@ -43,6 +44,7 @@ import {
   type ApplyKairosCloudStateBundleResult,
   type KairosCloudStateBundle,
 } from '../daemon/kairos/cloudSync.js'
+import { runKairosCloudLifecycleCommand } from '../daemon/kairos/cloudLifecycle.js'
 import { safeParseJSON } from '../utils/json.js'
 import type { GlobalStatus, PauseState } from '../daemon/kairos/stateWriter.js'
 
@@ -59,6 +61,9 @@ const HELP_TEXT = `Usage:
 /kairos resume
 /kairos dashboard
 /kairos logs [projectDir] [lines]
+/kairos cloud deploy --ssh-host <user@host> [--use-subscription | --anthropic-api-key-env <ENV_NAME>]
+/kairos cloud upgrade [--ssh-host <user@host>] [--use-subscription | --anthropic-api-key-env <ENV_NAME>]
+/kairos cloud destroy [--ssh-host <user@host>] --confirm
 /kairos cloud-sync <runtimeRoot>
 /kairos gateway telegram setup <bot-token>
 /kairos gateway telegram pair
@@ -81,6 +86,7 @@ type Subcommand =
   | 'resume'
   | 'dashboard'
   | 'logs'
+  | 'cloud'
   | 'cloud-sync'
   | 'gateway'
   | 'skills'
@@ -98,6 +104,7 @@ const SUBCOMMANDS = new Set<Subcommand>([
   'resume',
   'dashboard',
   'logs',
+  'cloud',
   'cloud-sync',
   'gateway',
   'skills',
@@ -131,18 +138,31 @@ async function readJsonIfExists<T>(path: string): Promise<T | null> {
   }
 }
 
+function formatCurrency(value: number | undefined): string | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return null
+  }
+  return `$${value.toFixed(4)}`
+}
+
+function formatOptionalValue(value: string | number | null | undefined): string {
+  if (value === null || value === undefined || value === '') {
+    return '—'
+  }
+  return String(value)
+}
+
 async function handleStatus(): Promise<string> {
-  const [status, pause, registry] = await Promise.all([
-    readJsonIfExists<GlobalStatus>(getKairosStatusPath()),
-    readJsonIfExists<PauseState>(getKairosPausePath()),
-    createProjectRegistry(),
-  ])
-  const projects = await registry.read()
+  const snapshot = await readDashboardSnapshot()
+  const { status, pause, costs, projects } = snapshot.global
   const lines: string[] = []
   if (status) {
     lines.push(`daemon: ${status.state} (pid ${status.pid})`)
     lines.push(`started: ${status.startedAt}`)
     lines.push(`updated: ${status.updatedAt}`)
+    if (status.lastEventAt) {
+      lines.push(`last event at: ${status.lastEventAt}`)
+    }
   } else {
     lines.push('daemon: not running (no status file)')
   }
@@ -157,6 +177,36 @@ async function handleStatus(): Promise<string> {
     lines.push('paused: no')
   }
   lines.push(`projects: ${projects.length}`)
+  const globalCost = formatCurrency(costs?.totalUSD)
+  if (globalCost) {
+    lines.push(
+      `global cost: ${globalCost} across ${costs?.runs ?? 0} run(s) / ${costs?.totalTurns ?? 0} turn(s)`,
+    )
+  }
+  for (const project of snapshot.projects) {
+    lines.push(`project: ${project.projectDir}`)
+    lines.push(
+      `  worker running: ${project.status?.running === true ? 'yes' : 'no'}`,
+    )
+    lines.push(
+      `  overlap pending: ${project.status?.dirty === true ? 'yes' : 'no'}`,
+    )
+    lines.push(
+      `  pending count: ${formatOptionalValue(project.status?.pendingCount)}`,
+    )
+    lines.push(`  queued tasks: ${project.tasks.length}`)
+    lines.push(`  last event: ${formatOptionalValue(project.status?.lastEvent)}`)
+    lines.push(
+      `  next fire at: ${formatOptionalValue(project.status?.nextFireAt ?? null)}`,
+    )
+    lines.push(`  updated: ${formatOptionalValue(project.status?.updatedAt)}`)
+    const projectCost = formatCurrency(project.costs?.totalUSD)
+    if (projectCost) {
+      lines.push(
+        `  project cost: ${projectCost} across ${project.costs?.runs ?? 0} run(s) / ${project.costs?.totalTurns ?? 0} turn(s)`,
+      )
+    }
+  }
   return lines.join('\n')
 }
 
@@ -247,13 +297,13 @@ async function handleGatewayTelegram(args: string[]): Promise<string> {
       const token = rest.join(' ').trim()
       if (!token) return 'Usage: /kairos gateway telegram setup <bot-token>'
       const result = await setupTelegram(token)
-      if (!result.ok) return `Setup failed: ${result.reason}`
+      if (result.ok === false) return `Setup failed: ${result.reason}`
       const who = result.botUsername ? ` as @${result.botUsername}` : ''
       return `Telegram gateway configured${who}. Now run \`/kairos gateway telegram pair\` to link your chat.`
     }
     case 'pair': {
       const result = await startPairing()
-      if (!result.ok) return result.reason
+      if (result.ok === false) return result.reason
       const who = result.botUsername ? `@${result.botUsername}` : 'your bot'
       return [
         `Pair code: ${result.code}`,
@@ -274,13 +324,13 @@ async function handleGatewayTelegram(args: string[]): Promise<string> {
       const target = rest[0]
       if (!target || target === 'all') {
         const r = await unpairTelegram('all')
-        if (!r.ok) return r.reason
+        if (r.ok === false) return r.reason
         return `Unpaired ${r.removed.length} chat(s). Allowlist cleared.`
       }
       const chatId = Number(target)
       if (!Number.isInteger(chatId)) return `Not a numeric chat id: ${target}`
       const r = await unpairTelegram(chatId)
-      if (!r.ok) return r.reason
+      if (r.ok === false) return r.reason
       return `Unpaired chat ${chatId}. Remaining: ${r.remaining.join(', ') || 'none'}`
     }
     default:
@@ -345,6 +395,10 @@ async function handleCloudSync(runtimeRootArg: string | undefined): Promise<stri
   }
 }
 
+async function handleCloud(rest: string[]): Promise<string> {
+  return runKairosCloudLifecycleCommand(rest)
+}
+
 export async function runKairosCommand(args: string): Promise<string> {
   const { sub, rest } = parseArgs(args)
   if (sub === null) {
@@ -367,6 +421,8 @@ export async function runKairosCommand(args: string): Promise<string> {
       return handleResume()
     case 'dashboard':
       return handleDashboard()
+    case 'cloud':
+      return handleCloud(rest)
     case 'cloud-sync':
       return handleCloudSync(rest.join(' ').trim() || undefined)
     case 'gateway':
@@ -400,7 +456,7 @@ const kairos = {
   name: 'kairos',
   description: 'Inspect and control the KAIROS background daemon',
   argumentHint:
-    'status|list|opt-in|opt-out|demo|pause|resume|dashboard|logs|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
+    'status|list|opt-in|opt-out|demo|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
   load: () => import('./kairos-ui.js'),
 } satisfies Command
 

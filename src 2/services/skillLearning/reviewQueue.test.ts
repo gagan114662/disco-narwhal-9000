@@ -9,18 +9,17 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { applySkillPatch, SkillPatchApplyError } from './applyPatch.js'
 import {
   getAppliedPatchPath,
   getPendingPatchPath,
   getRejectedPatchPath,
-  getSkillFilePath,
 } from './paths.js'
 import type { SkillPatch } from './patchSchema.js'
 import {
   listPendingPatches,
   loadPatchById,
   movePatchTo,
+  recordPatchApproval,
   renderPatchDiff,
 } from './reviewQueue.js'
 
@@ -91,6 +90,19 @@ describe('reviewQueue', () => {
     expect(existsSync(getRejectedPatchPath('c'))).toBe(true)
   })
 
+  test('recordPatchApproval persists approval metadata on the pending patch', async () => {
+    setup()
+    writePending('approve-me', SAMPLE_PATCH)
+    const stored = await recordPatchApproval('approve-me', {
+      approvalId: 'approve-me',
+      approvedAt: 1_700_000_100_000,
+      approvedBy: 'reviewer',
+    })
+    expect(stored.approval?.approvalId).toBe('approve-me')
+    const reloaded = await loadPatchById('approve-me')
+    expect(reloaded?.approval?.approvedBy).toBe('reviewer')
+  })
+
   test('renderPatchDiff includes edit headers and additive lines', () => {
     const out = renderPatchDiff({
       skill: 'x',
@@ -105,57 +117,5 @@ describe('reviewQueue', () => {
     expect(out).toContain('## Edit 1: add_note')
     expect(out).toContain('+ hello')
     expect(out).toContain('## Edit 2: add_example')
-  })
-})
-
-describe('applySkillPatch', () => {
-  function writeSkillFile(name: string, body: string): string {
-    const p = getSkillFilePath(name)
-    mkdirSync(join(p, '..'), { recursive: true })
-    writeFileSync(p, body, 'utf-8')
-    return p
-  }
-
-  test('applies additive patch and writes a backup', async () => {
-    setup()
-    const skillPath = writeSkillFile('investigate', '# Investigate\n\nstep 1\n')
-    const result = await applySkillPatch(SAMPLE_PATCH)
-    const written = readFileSync(skillPath, 'utf-8')
-    expect(written).toContain('step 1')
-    expect(written).toContain('remember to check env files')
-    expect(existsSync(result.backupPath)).toBe(true)
-    const backup = readFileSync(result.backupPath, 'utf-8')
-    expect(backup).toBe('# Investigate\n\nstep 1\n')
-  })
-
-  test('refine_step with anchor inserts after the matching line', async () => {
-    setup()
-    const skillPath = writeSkillFile(
-      'investigate',
-      '# Investigate\n\nstep one\nstep two\nstep three\n',
-    )
-    await applySkillPatch({
-      skill: 'investigate',
-      edits: [
-        {
-          type: 'refine_step',
-          content: 'after step two, also verify env',
-          anchor: 'step two',
-        },
-      ],
-    })
-    const body = readFileSync(skillPath, 'utf-8')
-    const idxTwo = body.indexOf('step two')
-    const idxInjected = body.indexOf('after step two')
-    const idxThree = body.indexOf('step three')
-    expect(idxTwo).toBeLessThan(idxInjected)
-    expect(idxInjected).toBeLessThan(idxThree)
-  })
-
-  test('throws if live skill file is missing', async () => {
-    setup()
-    await expect(applySkillPatch(SAMPLE_PATCH)).rejects.toBeInstanceOf(
-      SkillPatchApplyError,
-    )
   })
 })

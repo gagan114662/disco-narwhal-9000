@@ -10,6 +10,7 @@ import { isCoordinatorMode } from '../../coordinator/coordinatorMode.js';
 import { startAgentSummarization } from '../../services/AgentSummary/agentSummary.js';
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js';
 import { type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS, logEvent } from '../../services/analytics/index.js';
+import { emitWideAgentLifecycleEvent, emitWideTaskLifecycleEvent, getWideEventAgentFamily, getWideEventModelFamily } from '../../services/analytics/wideEvents.js';
 import { clearDumpState } from '../../services/api/dumpPrompts.js';
 import { completeAgentTask as completeAsyncAgent, createActivityDescriptionResolver, createProgressTracker, enqueueAgentNotification, failAgentTask as failAsyncAgent, getProgressUpdate, getTokenCountFromTracker, isLocalAgentTask, killAsyncAgent, registerAgentForeground, registerAsyncAgent, unregisterAgentForeground, updateAgentProgress as updateAsyncAgentProgress, updateProgressFromMessage } from '../../tasks/LocalAgentTask/LocalAgentTask.js';
 import { checkRemoteAgentEligibility, formatPreconditionError, getRemoteTaskSessionUrl, registerRemoteAgentTask } from '../../tasks/RemoteAgentTask/RemoteAgentTask.js';
@@ -58,6 +59,7 @@ import { renderGroupedAgentToolUse, renderToolResultMessage, renderToolUseErrorM
 /* eslint-disable @typescript-eslint/no-require-imports */
 const proactiveModule = feature('PROACTIVE') || feature('KAIROS') ? require('../../proactive/index.js') as typeof import('../../proactive/index.js') : null;
 /* eslint-enable @typescript-eslint/no-require-imports */
+const IS_ANT_BUILD = ('external' as string) === 'ant';
 
 // Progress display constants (for showing background hint)
 const PROGRESS_THRESHOLD_MS = 2000; // Show background hint after 2 seconds
@@ -96,7 +98,7 @@ const fullInputSchema = lazySchema(() => {
     mode: permissionModeSchema().optional().describe('Permission mode for spawned teammate (e.g., "plan" to require plan approval).')
   });
   return baseInputSchema().merge(multiAgentInputSchema).extend({
-    isolation: ("external" === 'ant' ? z.enum(['worktree', 'remote']) : z.enum(['worktree'])).optional().describe("external" === 'ant' ? 'Isolation mode. "worktree" creates a temporary git worktree so the agent works on an isolated copy of the repo. "remote" launches the agent in a remote CCR environment (always runs in background).' : 'Isolation mode. "worktree" creates a temporary git worktree so the agent works on an isolated copy of the repo.'),
+    isolation: (IS_ANT_BUILD ? z.enum(['worktree', 'remote']) : z.enum(['worktree'])).optional().describe(IS_ANT_BUILD ? 'Isolation mode. "worktree" creates a temporary git worktree so the agent works on an isolated copy of the repo. "remote" launches the agent in a remote CCR environment (always runs in background).' : 'Isolation mode. "worktree" creates a temporary git worktree so the agent works on an isolated copy of the repo.'),
     cwd: z.string().optional().describe('Absolute path to run the agent in. Overrides the working directory for all filesystem and shell operations within this agent. Mutually exclusive with isolation: "worktree".')
   });
 });
@@ -429,13 +431,23 @@ export const AgentTool = buildTool({
 
     // Resolve effective isolation mode (explicit param overrides agent def)
     const effectiveIsolation = isolation ?? selectedAgent.isolation;
+    const metadata = {
+      prompt,
+      resolvedAgentModel,
+      isBuiltInAgent: isBuiltInAgent(selectedAgent),
+      startTime,
+      agentType: selectedAgent.agentType,
+      isAsync: (run_in_background === true || selectedAgent.background === true) && !isBackgroundTasksDisabled
+    };
+    const wideAgentFamily = getWideEventAgentFamily(metadata.agentType, metadata.isBuiltInAgent);
+    const wideModelFamily = getWideEventModelFamily(resolvedAgentModel);
 
     // Remote isolation: delegate to CCR. Gated ant-only — the guard enables
     // dead code elimination of the entire block for external builds.
-    if ("external" === 'ant' && effectiveIsolation === 'remote') {
+    if (IS_ANT_BUILD && effectiveIsolation === 'remote') {
       const eligibility = await checkRemoteAgentEligibility();
       if (!eligibility.eligible) {
-        const reasons = eligibility.errors.map(formatPreconditionError).join('\n');
+        const reasons = ('errors' in eligibility ? eligibility.errors : []).map(formatPreconditionError).join('\n');
         throw new Error(`Cannot launch remote agent:\n${reasons}`);
       }
       let bundleFailHint: string | undefined;
@@ -461,7 +473,12 @@ export const AgentTool = buildTool({
         },
         command: prompt,
         context: toolUseContext,
-        toolUseId: toolUseContext.toolUseId
+        toolUseId: toolUseContext.toolUseId,
+        agentTelemetry: {
+          agentFamily: wideAgentFamily,
+          isBuiltInAgent: metadata.isBuiltInAgent,
+          modelFamily: wideModelFamily
+        }
       });
       logEvent('tengu_agent_tool_remote_launched', {
         agent_type: selectedAgent.agentType as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
@@ -499,7 +516,7 @@ export const AgentTool = buildTool({
         // Fallback: recompute. May diverge from parent's cached bytes if
         // GrowthBook state changed between parent turn-start and fork spawn.
         const mainThreadAgentDefinition = appState.agent ? appState.agentDefinitions.activeAgents.find(a => a.agentType === appState.agent) : undefined;
-        const additionalWorkingDirectories = Array.from(appState.toolPermissionContext.additionalWorkingDirectories.keys());
+        const additionalWorkingDirectories = Array.from(appState.toolPermissionContext.additionalWorkingDirectories.keys()) as string[];
         const defaultSystemPrompt = await getSystemPrompt(toolUseContext.options.tools, toolUseContext.options.mainLoopModel, additionalWorkingDirectories, toolUseContext.options.mcpClients);
         forkParentSystemPrompt = buildEffectiveSystemPrompt({
           mainThreadAgentDefinition,
@@ -512,7 +529,7 @@ export const AgentTool = buildTool({
       promptMessages = buildForkedMessages(prompt, assistantMessage);
     } else {
       try {
-        const additionalWorkingDirectories = Array.from(appState.toolPermissionContext.additionalWorkingDirectories.keys());
+        const additionalWorkingDirectories = Array.from(appState.toolPermissionContext.additionalWorkingDirectories.keys()) as string[];
 
         // All agents have getSystemPrompt - pass toolUseContext to all
         const agentPrompt = selectedAgent.getSystemPrompt({
@@ -522,7 +539,7 @@ export const AgentTool = buildTool({
         // Log agent memory loaded event for subagents
         if (selectedAgent.memory) {
           logEvent('tengu_agent_memory_loaded', {
-            ...("external" === 'ant' && {
+            ...(IS_ANT_BUILD && {
               agent_type: selectedAgent.agentType as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
             }),
             scope: selectedAgent.memory as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -539,14 +556,13 @@ export const AgentTool = buildTool({
         content: prompt
       })];
     }
-    const metadata = {
-      prompt,
-      resolvedAgentModel,
-      isBuiltInAgent: isBuiltInAgent(selectedAgent),
-      startTime,
-      agentType: selectedAgent.agentType,
-      isAsync: (run_in_background === true || selectedAgent.background === true) && !isBackgroundTasksDisabled
-    };
+    emitWideAgentLifecycleEvent({
+      lifecycle: 'started',
+      execution_mode: effectiveIsolation === 'remote' ? 'remote' : metadata.isAsync ? 'background' : 'foreground',
+      agent_family: wideAgentFamily,
+      model_family: wideModelFamily,
+      is_built_in_agent: metadata.isBuiltInAgent
+    });
 
     // Use inline env check instead of coordinatorModule to avoid circular
     // dependency issues during test module loading.
@@ -831,6 +847,13 @@ export const AgentTool = buildTool({
           }));
           cancelAutoBackground = registration.cancelAutoBackground;
         }
+        const shouldEmitForegroundWideTerminalEvent = () => {
+          if (!foregroundTaskId) {
+            return true;
+          }
+          const currentTask = toolUseContext.getAppState().tasks[foregroundTaskId];
+          return !isLocalAgentTask(currentTask) || currentTask.status === 'running';
+        };
 
         // Track if we've shown the background hint UI
         let backgroundHintShown = false;
@@ -1129,6 +1152,24 @@ export const AgentTool = buildTool({
           // AbortError should be re-thrown for proper interruption handling
           if (error instanceof AbortError) {
             wasAborted = true;
+            if (shouldEmitForegroundWideTerminalEvent()) {
+              emitWideTaskLifecycleEvent({
+                lifecycle: 'interrupted',
+                task_family: 'local_agent',
+                execution_mode: 'foreground',
+                has_tool_use_id: toolUseContext.toolUseId !== undefined,
+                duration_ms: Date.now() - agentStartTime
+              });
+              emitWideAgentLifecycleEvent({
+                lifecycle: 'stopped',
+                execution_mode: 'foreground',
+                agent_family: wideAgentFamily,
+                model_family: wideModelFamily,
+                is_built_in_agent: metadata.isBuiltInAgent,
+                duration_ms: Date.now() - agentStartTime,
+                result: 'interrupted'
+              });
+            }
             logEvent('tengu_agent_tool_terminated', {
               agent_type: metadata.agentType as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
               model: metadata.resolvedAgentModel as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -1206,6 +1247,24 @@ export const AgentTool = buildTool({
         // TODO: Find a cleaner way to express this
         const lastMessage = agentMessages.findLast(_ => _.type !== 'system' && _.type !== 'progress');
         if (lastMessage && isSyntheticMessage(lastMessage)) {
+          if (shouldEmitForegroundWideTerminalEvent()) {
+            emitWideTaskLifecycleEvent({
+              lifecycle: 'interrupted',
+              task_family: 'local_agent',
+              execution_mode: 'foreground',
+              has_tool_use_id: toolUseContext.toolUseId !== undefined,
+              duration_ms: Date.now() - agentStartTime
+            });
+            emitWideAgentLifecycleEvent({
+              lifecycle: 'stopped',
+              execution_mode: 'foreground',
+              agent_family: wideAgentFamily,
+              model_family: wideModelFamily,
+              is_built_in_agent: metadata.isBuiltInAgent,
+              duration_ms: Date.now() - agentStartTime,
+              result: 'interrupted'
+            });
+          }
           logEvent('tengu_agent_tool_terminated', {
             agent_type: metadata.agentType as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
             model: metadata.resolvedAgentModel as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -1225,6 +1284,24 @@ export const AgentTool = buildTool({
           const hasAssistantMessages = agentMessages.some(msg => msg.type === 'assistant');
           if (!hasAssistantMessages) {
             // No messages collected, re-throw the error
+            if (shouldEmitForegroundWideTerminalEvent()) {
+              emitWideTaskLifecycleEvent({
+                lifecycle: 'failed',
+                task_family: 'local_agent',
+                execution_mode: 'foreground',
+                has_tool_use_id: toolUseContext.toolUseId !== undefined,
+                duration_ms: Date.now() - agentStartTime
+              });
+              emitWideAgentLifecycleEvent({
+                lifecycle: 'stopped',
+                execution_mode: 'foreground',
+                agent_family: wideAgentFamily,
+                model_family: wideModelFamily,
+                is_built_in_agent: metadata.isBuiltInAgent,
+                duration_ms: Date.now() - agentStartTime,
+                result: 'failed'
+              });
+            }
             throw syncAgentError;
           }
 
@@ -1249,6 +1326,24 @@ export const AgentTool = buildTool({
               text: handoffWarning
             }, ...agentResult.content];
           }
+        }
+        if (shouldEmitForegroundWideTerminalEvent()) {
+          emitWideTaskLifecycleEvent({
+            lifecycle: syncAgentError ? 'failed' : 'completed',
+            task_family: 'local_agent',
+            execution_mode: 'foreground',
+            has_tool_use_id: toolUseContext.toolUseId !== undefined,
+            duration_ms: Date.now() - agentStartTime
+          });
+          emitWideAgentLifecycleEvent({
+            lifecycle: 'stopped',
+            execution_mode: 'foreground',
+            agent_family: wideAgentFamily,
+            model_family: wideModelFamily,
+            is_built_in_agent: metadata.isBuiltInAgent,
+            duration_ms: Date.now() - agentStartTime,
+            result: syncAgentError ? 'failed' : 'completed'
+          });
         }
         return {
           data: {
@@ -1283,8 +1378,8 @@ export const AgentTool = buildTool({
 
     // Only route through auto mode classifier when in auto mode
     // In all other modes, auto-approve sub-agent generation
-    // Note: "external" === 'ant' guard enables dead code elimination for external builds
-    if ("external" === 'ant' && appState.toolPermissionContext.mode === 'auto') {
+    // Note: the ant-build guard enables dead code elimination for external builds.
+    if (IS_ANT_BUILD && appState.toolPermissionContext.mode === 'auto') {
       return {
         behavior: 'passthrough',
         message: 'Agent tool requires permission to spawn sub-agents.'

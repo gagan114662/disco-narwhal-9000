@@ -30,6 +30,8 @@ export interface DiagnosticFile {
 export class DiagnosticTrackingService {
   private static instance: DiagnosticTrackingService | undefined
   private baseline: Map<string, Diagnostic[]> = new Map()
+  private backlogBaseline: Map<string, Diagnostic[]> = new Map()
+  private hasBacklogBaselineSnapshot = false
 
   private initialized = false
   private mcpClient: MCPServerConnection | undefined
@@ -61,6 +63,8 @@ export class DiagnosticTrackingService {
   async shutdown(): Promise<void> {
     this.initialized = false
     this.baseline.clear()
+    this.backlogBaseline.clear()
+    this.hasBacklogBaselineSnapshot = false
     this.rightFileDiagnosticsState.clear()
     this.lastProcessedTimestamps.clear()
   }
@@ -73,6 +77,10 @@ export class DiagnosticTrackingService {
     this.baseline.clear()
     this.rightFileDiagnosticsState.clear()
     this.lastProcessedTimestamps.clear()
+  }
+
+  getTrackedFileCount(): number {
+    return this.baseline.size
   }
 
   private normalizeFileUri(fileUri: string): string {
@@ -179,6 +187,79 @@ export class DiagnosticTrackingService {
     } catch (_error) {
       // Fail silently if IDE doesn't support diagnostics
     }
+  }
+
+  async getCurrentDiagnostics(): Promise<DiagnosticFile[]> {
+    if (
+      !this.initialized ||
+      !this.mcpClient ||
+      this.mcpClient.type !== 'connected'
+    ) {
+      return []
+    }
+
+    try {
+      const result = await callIdeRpc('getDiagnostics', {}, this.mcpClient)
+      return this.parseDiagnosticResult(result)
+    } catch (_error) {
+      return []
+    }
+  }
+
+  async snapshotCurrentDiagnostics(): Promise<{
+    fileCount: number
+    diagnosticCount: number
+  }> {
+    const currentDiagnostics = await this.getCurrentDiagnostics()
+    this.backlogBaseline.clear()
+    this.hasBacklogBaselineSnapshot = true
+
+    for (const file of currentDiagnostics) {
+      const normalizedPath = this.normalizeFileUri(file.uri)
+      this.backlogBaseline.set(normalizedPath, file.diagnostics)
+    }
+
+    return {
+      fileCount: currentDiagnostics.length,
+      diagnosticCount: currentDiagnostics.reduce(
+        (total, file) => total + file.diagnostics.length,
+        0,
+      ),
+    }
+  }
+
+  hasSnapshotCurrentDiagnostics(): boolean {
+    return this.hasBacklogBaselineSnapshot
+  }
+
+  async getNewDiagnosticsSinceSnapshot(): Promise<DiagnosticFile[]> {
+    if (!this.hasBacklogBaselineSnapshot) {
+      return []
+    }
+
+    const currentDiagnostics = await this.getCurrentDiagnostics()
+
+    return currentDiagnostics
+      .map(file => {
+        const normalizedPath = this.normalizeFileUri(file.uri)
+        const baselineDiagnostics = this.backlogBaseline.get(normalizedPath) || []
+        const newDiagnostics = file.diagnostics.filter(
+          diagnostic =>
+            !baselineDiagnostics.some(baselineDiagnostic =>
+              this.areDiagnosticsEqual(diagnostic, baselineDiagnostic),
+            ),
+        )
+
+        if (newDiagnostics.length === 0) {
+          return null
+        }
+
+        return {
+          uri: file.uri,
+          diagnostics: newDiagnostics,
+        }
+      })
+      .filter((file): file is DiagnosticFile => file !== null)
   }
 
   /**
