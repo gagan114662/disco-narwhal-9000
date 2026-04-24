@@ -1,3 +1,11 @@
 .DS_Store
+**/.DS_Store
+**/node_modules/
+**/dist/
+**/__pycache__/
+**/*.pyc
+coverage/
+*.log
+src 2/tmp-*.js
 .claude/scheduled_tasks.json
 .claude/issue-drafts/

@@ -86,6 +86,7 @@ export type RunKairosWorkerOptions = {
   allowedTools?: string[]
   maxTurns?: number
   timeoutMs?: number
+  onRpcServerStarted?: (socketPath: string) => void | Promise<void>
 }
 
 function formatLogLine(message: string, now: Date, pid: number): string {
@@ -434,6 +435,9 @@ export async function runKairosWorker(
   const rpcServer = rpcConfig.enabled
     ? await startToolsSocketServer(rpcConfig.socketPath)
     : null
+  if (rpcServer) {
+    await options.onRpcServerStarted?.(rpcServer.socketPath)
+  }
 
   const enableChildRuns = options.enableChildRuns ?? true
   const launcher: ChildLauncher | null = enableChildRuns

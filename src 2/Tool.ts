@@ -411,7 +411,7 @@ export type Tool<
    * - `'cancel'` — stop the tool and discard its result
    * - `'block'`  — keep running; the new message waits
    *
-   * Defaults to `'block'` when not implemented.
+   * Defaults to `'block'` when omitted.
    */
   interruptBehavior?(): 'cancel' | 'block'
   /**
@@ -509,7 +509,7 @@ export type Tool<
    * Prepare a matcher for hook `if` conditions (permission-rule patterns like
    * "git *" from "Bash(git *)"). Called once per hook-input pair; any
    * expensive parsing happens here. Returns a closure that is called per
-   * hook pattern. If not implemented, only tool-name-level matching works.
+   * hook pattern. If omitted, only tool-name-level matching works.
    */
   preparePermissionMatcher?(
     input: z.infer<Input>,

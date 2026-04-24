@@ -8,7 +8,8 @@ Today the repo is a Bun-based CLI/daemon codebase with KAIROS-specific work laye
 
 - The main application currently lives under `src 2/`, not `src/`.
 - The root of the repo is intentionally thin: GitHub/workspace metadata at the top level, product code under `src 2/`.
-- KAIROS daemon/dashboard work is present and test-covered, but some command registration and packaging paths are still in progress.
+- KAIROS daemon/dashboard work is present, test-covered, and reachable through direct CLI entry points.
+- Optional native/package integrations are loaded lazily so the core CLI can start without developer-only packages installed.
 
 If you are new to the repo, start in:
 
@@ -21,7 +22,7 @@ If you are new to the repo, start in:
 
 ## Prerequisites
 
-- Bun `1.2.23`
+- Bun `1.3.11`
 - macOS or Linux-like shell environment
 
 ## Quickstart
@@ -30,21 +31,25 @@ If you are new to the repo, start in:
 cd 'src 2'
 bun install --frozen-lockfile
 bun run smoke:cli
+bun ./entrypoints/cli.tsx kairos status
 ```
 
 Useful validation commands:
 
 ```bash
 cd 'src 2'
-bun test
 bun run pipeline
+bun run structural-fix:daily
+bun test
 ```
 
 For faster local iteration on KAIROS-specific work:
 
 ```bash
 cd 'src 2'
+bun run smoke:kairos
 bun test ./commands/kairos.test.ts
+bun test ./entrypoints/cli.test.ts
 bun test ./daemon/dashboard/server.test.ts
 ```
 
@@ -55,6 +60,14 @@ Start the daemon:
 ```bash
 cd 'src 2'
 bun ./entrypoints/cli.tsx daemon kairos
+```
+
+Check daemon status and available KAIROS commands:
+
+```bash
+cd 'src 2'
+bun ./entrypoints/cli.tsx kairos status
+bun ./entrypoints/cli.tsx kairos
 ```
 
 The KAIROS dashboard server starts with the daemon and defaults to:
@@ -90,6 +103,7 @@ Relevant implementation entry points:
 
 Main branch protections and checks already present in the repo include:
 
+- CI workflow in `.github/workflows/ci.yml` running install, pipeline, and tests
 - CODEOWNERS on trunk paths in `.github/CODEOWNERS`
 - trunk guard workflow in `.github/workflows/trunk-guard.yml`
 - daily structural-fix workflow in `.github/workflows/permanent-structural-fix-daily.yml`
@@ -99,5 +113,5 @@ If you are changing guarded architecture paths, expect extra review friction and
 ## Known Quirks
 
 - The source root is currently `src 2/`; the rename to `src/` is tracked separately because it is broad path churn.
-- There is a `tmp-recover-cli.js` artifact in `src 2/`; do not treat it as a primary source file.
 - Some KAIROS surfaces are intentionally implemented before full trunk registration so the codepaths can be iterated on safely.
+- The Agent SDK compatibility facade is partial. Tool/server helpers, query/session creation, session listing/info, rename/tag, and missed-task formatting are wired; `getSessionMessages`, `forkSession`, `watchScheduledTasks`, and `connectRemoteControl` fail explicitly with a rebuild-specific unsupported message.

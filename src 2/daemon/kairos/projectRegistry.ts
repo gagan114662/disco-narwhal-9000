@@ -1,4 +1,3 @@
-import type { FSWatcher } from 'chokidar'
 import { mkdir, readFile, writeFile } from 'fs/promises'
 import { join } from 'path'
 import { z } from 'zod/v4'
@@ -64,45 +63,30 @@ export async function createProjectRegistry(): Promise<ProjectRegistry> {
       await writeFile(path, `${jsonStringify(body, null, 2)}\n`, 'utf8')
     },
     async watch(onChange) {
-      const { default: chokidar } = await import('chokidar')
       let previous = await readProjectsFile(path)
+      let running = false
 
       const emitDiff = async () => {
-        const next = await readProjectsFile(path)
-        const previousSet = new Set(previous)
-        const nextSet = new Set(next)
-        const added = next.filter(project => !previousSet.has(project))
-        const removed = previous.filter(project => !nextSet.has(project))
-        previous = next
-        if (added.length === 0 && removed.length === 0) return
-        onChange({ added, removed, projects: next })
+        if (running) return
+        running = true
+        try {
+          const next = await readProjectsFile(path)
+          const previousSet = new Set(previous)
+          const nextSet = new Set(next)
+          const added = next.filter(project => !previousSet.has(project))
+          const removed = previous.filter(project => !nextSet.has(project))
+          previous = next
+          if (added.length === 0 && removed.length === 0) return
+          onChange({ added, removed, projects: next })
+        } finally {
+          running = false
+        }
       }
 
-      const watcher: FSWatcher = chokidar.watch(path, {
-        persistent: false,
-        ignoreInitial: true,
-        awaitWriteFinish: {
-          stabilityThreshold: WATCH_STABILITY_MS,
-        },
-      })
-
-      watcher.on('add', () => void emitDiff())
-      watcher.on('change', () => void emitDiff())
-      watcher.on('unlink', () =>
-        void (async () => {
-          const removed = previous
-          previous = []
-          if (removed.length === 0) return
-          onChange({ added: [], removed, projects: [] })
-        })(),
-      )
-      await new Promise<void>((resolve, reject) => {
-        watcher.once('ready', () => resolve())
-        watcher.once('error', reject)
-      })
+      const interval = setInterval(() => void emitDiff(), WATCH_STABILITY_MS)
 
       return async () => {
-        await watcher.close()
+        clearInterval(interval)
       }
     },
   }

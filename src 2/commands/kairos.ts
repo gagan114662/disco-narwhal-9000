@@ -5,8 +5,9 @@
 // and browser UIs stay in sync through the on-disk state (not a shared
 // in-memory singleton).
 //
-// Scope — this file intentionally does NOT register itself in commands.ts.
-// Trunk registration is Phase 5B (see epic #11).
+// Scope — this command is also routed directly from entrypoints/cli.tsx so
+// production `claude kairos ...` works even when upstream feature flags would
+// skip slash-command registration.
 
 import { readFile } from 'fs/promises'
 import { resolve } from 'path'
