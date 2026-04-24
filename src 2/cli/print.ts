@@ -644,12 +644,28 @@ export async function runHeadless(
 
   if (options.outputFormat === 'stream-json' && options.verbose) {
     registerHookEventHandler(event => {
-      const message: StdoutMessage = (() => {
+      // `hook_started` and `hook_progress` are project-specific system-message
+      // subtypes extending the SDK's SDKHookResponseMessage.
+      type ExtendedHookSystemMessage = {
+        type: 'system'
+        subtype: 'hook_started' | 'hook_progress' | 'hook_response'
+        hook_id: string
+        hook_name: string
+        hook_event: string
+        stdout?: string
+        stderr?: string
+        output?: unknown
+        exit_code?: number
+        outcome?: unknown
+        uuid: ReturnType<typeof randomUUID>
+        session_id: ReturnType<typeof getSessionId>
+      }
+      const message = ((): ExtendedHookSystemMessage => {
         switch (event.type) {
           case 'started':
             return {
-              type: 'system' as const,
-              subtype: 'hook_started' as const,
+              type: 'system',
+              subtype: 'hook_started',
               hook_id: event.hookId,
               hook_name: event.hookName,
               hook_event: event.hookEvent,
@@ -658,8 +674,8 @@ export async function runHeadless(
             }
           case 'progress':
             return {
-              type: 'system' as const,
-              subtype: 'hook_progress' as const,
+              type: 'system',
+              subtype: 'hook_progress',
               hook_id: event.hookId,
               hook_name: event.hookName,
               hook_event: event.hookEvent,
@@ -671,8 +687,8 @@ export async function runHeadless(
             }
           case 'response':
             return {
-              type: 'system' as const,
-              subtype: 'hook_response' as const,
+              type: 'system',
+              subtype: 'hook_response',
               hook_id: event.hookId,
               hook_name: event.hookName,
               hook_event: event.hookEvent,
@@ -686,7 +702,7 @@ export async function runHeadless(
             }
         }
       })()
-      void structuredIO.write(message)
+      void structuredIO.write(message as StdoutMessage)
     })
   }
   logForDebugging('[headless] after hook event registration check')
@@ -919,23 +935,28 @@ export async function runHeadless(
     // SDK-only system events are excluded so lastMessage stays at the result
     // (session_state_changed(idle) and any late task_notification drain after
     // result in the finally block).
+    // `streamlined_*`, `prompt_suggestion`, and extended system subtypes are
+    // project-specific extensions of the SDK's StdoutMessage union. Cast the
+    // discriminants to string for the overlap-free comparisons while keeping
+    // control-message narrowing via the native discriminant.
+    const widenedType = message.type as string
     if (
       message.type !== 'control_response' &&
       message.type !== 'control_request' &&
       message.type !== 'control_cancel_request' &&
       !(
         message.type === 'system' &&
-        (message.subtype === 'session_state_changed' ||
-          message.subtype === 'task_notification' ||
-          message.subtype === 'task_started' ||
-          message.subtype === 'task_progress' ||
-          message.subtype === 'post_turn_summary')
+        ((message.subtype as string) === 'session_state_changed' ||
+          (message.subtype as string) === 'task_notification' ||
+          (message.subtype as string) === 'task_started' ||
+          (message.subtype as string) === 'task_progress' ||
+          (message.subtype as string) === 'post_turn_summary')
       ) &&
       message.type !== 'stream_event' &&
       message.type !== 'keep_alive' &&
-      message.type !== 'streamlined_text' &&
-      message.type !== 'streamlined_tool_use_summary' &&
-      message.type !== 'prompt_suggestion'
+      widenedType !== 'streamlined_text' &&
+      widenedType !== 'streamlined_tool_use_summary' &&
+      widenedType !== 'prompt_suggestion'
     ) {
       if (needsFullArray) {
         messages.push(message)
@@ -1104,7 +1125,7 @@ function runHeadlessStreaming(
         permissionMode: newMode as PermissionMode,
         uuid: randomUUID(),
         session_id: getSessionId(),
-      })
+      } as StdoutMessage)
     }
   })
 
@@ -1164,7 +1185,7 @@ function runHeadlessStreaming(
         rate_limit_info: rateLimitInfo,
         uuid: randomUUID(),
         session_id: getSessionId(),
-      })
+      } as unknown as StdoutMessage)
     }
   }
   statusListeners.add(rateLimitListener)
@@ -1263,6 +1284,7 @@ function runHeadlessStreaming(
         typeof crumb.message.content === 'string' &&
         crumb.message.content.includes(`<${LOCAL_COMMAND_STDOUT_TAG}>`)
       ) {
+        // `timestamp` is a project-specific extension on replayed user msgs.
         output.enqueue({
           type: 'user',
           message: crumb.message,
@@ -1271,7 +1293,7 @@ function runHeadlessStreaming(
           uuid: crumb.uuid,
           timestamp: crumb.timestamp,
           isReplay: true,
-        } satisfies SDKUserMessageReplay)
+        } as unknown as SDKUserMessageReplay)
       }
     }
   }
@@ -1404,7 +1426,7 @@ function runHeadlessStreaming(
               elicitation_id: elicitationId,
               uuid: randomUUID(),
               session_id: getSessionId(),
-            })
+            } as unknown as StdoutMessage)
           },
         )
 
@@ -1650,7 +1672,7 @@ function runHeadlessStreaming(
       ...currentMcpClients.map(c => c.name),
       ...sdkClients.map(c => c.name),
     ])
-    return [
+    const result = [
       ...currentMcpClients,
       ...sdkClients,
       ...dynamicMcpState.clients.filter(c => !existingNames.has(c.name)),
@@ -1676,10 +1698,14 @@ function runHeadlessStreaming(
         connection.config.type === 'stdio' ||
         connection.config.type === undefined
       ) {
+        const stdio = connection.config as {
+          command: string
+          args: string[]
+        }
         config = {
           type: 'stdio' as const,
-          command: connection.config.command,
-          args: connection.config.args,
+          command: stdio.command,
+          args: stdio.args,
         }
       }
       const serverTools =
@@ -1728,6 +1754,7 @@ function runHeadlessStreaming(
         capabilities,
       }
     })
+    return result as unknown as McpServerStatus[]
   }
 
   // NOTE: Nested function required - needs closure access to applyMcpServerChanges and updateSdkMcp
@@ -1832,7 +1859,7 @@ function runHeadlessStreaming(
         type === 'http' ||
         type === 'sdk'
       ) {
-        supportedConfigs[name] = config
+        supportedConfigs[name] = config as McpServerConfigForProcessTransport
       }
     }
     for (const [name, config] of Object.entries(sdkMcpConfigs)) {
@@ -2118,7 +2145,7 @@ function runHeadlessStreaming(
                     : undefined,
                 session_id: getSessionId(),
                 uuid: randomUUID(),
-              })
+              } as unknown as StdoutMessage)
             }
             // No continue -- fall through to ask() so the model processes the result
           }
@@ -2254,7 +2281,7 @@ function runHeadlessStreaming(
               if (message.type === 'result') {
                 // Flush pending SDK events so they appear before result on the stream.
                 for (const event of drainSdkEvents()) {
-                  output.enqueue(event)
+                  output.enqueue(event as unknown as StdoutMessage)
                 }
 
                 // Hold-back: don't emit result while background agents are running
@@ -2276,7 +2303,7 @@ function runHeadlessStreaming(
                 // Flush SDK events (task_started, task_progress) so background
                 // agent progress is streamed in real-time, not batched until result.
                 for (const event of drainSdkEvents()) {
-                  output.enqueue(event)
+                  output.enqueue(event as unknown as StdoutMessage)
                 }
                 output.enqueue(message)
               }
@@ -2304,7 +2331,7 @@ function runHeadlessStreaming(
                   processed_at: new Date().toISOString(),
                   uuid: randomUUID(),
                   session_id: getSessionId(),
-                })
+                } as unknown as StdoutMessage)
               },
             )
           }
@@ -2369,7 +2396,7 @@ function runHeadlessStreaming(
                     }
                   } else {
                     suggestionState.lastEmitted = lastEmittedEntry
-                    output.enqueue(suggestionMsg)
+                    output.enqueue(suggestionMsg as unknown as StdoutMessage)
                   }
                 } catch (error) {
                   if (
@@ -2410,7 +2437,7 @@ function runHeadlessStreaming(
         // Drain SDK events (task_started, task_progress) before command queue
         // so progress events precede task_notification on the stream.
         for (const event of drainSdkEvents()) {
-          output.enqueue(event)
+          output.enqueue(event as unknown as StdoutMessage)
         }
 
         runPhase = 'draining_commands'
@@ -2447,7 +2474,9 @@ function runHeadlessStreaming(
         output.enqueue(heldBackResult)
         heldBackResult = null
         if (suggestionState.pendingSuggestion) {
-          output.enqueue(suggestionState.pendingSuggestion)
+          output.enqueue(
+            suggestionState.pendingSuggestion as unknown as StdoutMessage,
+          )
           // Now that the suggestion is actually delivered, record it for acceptance tracking
           if (suggestionState.pendingLastEmittedEntry) {
             suggestionState.lastEmitted = {
@@ -2485,7 +2514,7 @@ function runHeadlessStreaming(
             errorMessage(error),
             ...getInMemoryErrors().map(_ => _.error),
           ],
-        })
+        } as unknown as StdoutMessage)
       } catch {
         // If we can't emit the error result, continue with shutdown anyway
       }
@@ -2506,7 +2535,7 @@ function runHeadlessStreaming(
         // waitingForAgents; once we're here the next drain would be the
         // top of the next run(), which won't come if input is idle.
         for (const event of drainSdkEvents()) {
-          output.enqueue(event)
+          output.enqueue(event as unknown as StdoutMessage)
         }
       }
       running = false
@@ -2870,7 +2899,63 @@ function runHeadlessStreaming(
       }
 
       if (message.type === 'control_request') {
-        if (message.request.subtype === 'interrupt') {
+        // The SDK's SDKControlRequest union only covers a subset of control
+        // request subtypes; the CLI handles several project-specific ones
+        // (end_session, get_context_usage, mcp_*, claude_*, flag settings,
+        // side_question, remote_control, etc.). Narrowing `message.request`
+        // against those subtypes fails TS2367 unless we widen here first.
+        type ExtendedControlRequestUnion =
+          | Exclude<
+              SDKControlRequest['request'],
+              { subtype: 'initialize' } | { subtype: 'set_permission_mode' }
+            >
+          | (SDKControlInitializeRequest & {
+              promptSuggestions?: boolean
+              agentProgressSummaries?: boolean
+            })
+          | {
+              subtype: 'set_permission_mode'
+              mode: InternalPermissionMode
+              ultraplan?: boolean
+            }
+          | { subtype: 'end_session'; reason?: string }
+          | { subtype: 'get_context_usage' }
+          | { subtype: 'cancel_async_message'; message_uuid: string }
+          | { subtype: 'seed_read_state'; path: string; mtime: number }
+          | { subtype: 'reload_plugins' }
+          | { subtype: 'mcp_reconnect'; serverName: string }
+          | { subtype: 'mcp_toggle'; serverName: string; enabled: boolean }
+          | { subtype: 'channel_enable'; serverName: string }
+          | { subtype: 'mcp_authenticate'; serverName: string }
+          | {
+              subtype: 'mcp_oauth_callback_url'
+              serverName: string
+              callbackUrl: string
+            }
+          | { subtype: 'claude_authenticate'; loginWithClaudeAi?: boolean }
+          | {
+              subtype: 'claude_oauth_callback'
+              authorizationCode: string
+              state: string
+            }
+          | { subtype: 'claude_oauth_wait_for_completion' }
+          | { subtype: 'mcp_clear_auth'; serverName: string }
+          | {
+              subtype: 'apply_flag_settings'
+              settings: Record<string, unknown>
+            }
+          | { subtype: 'get_settings' }
+          | { subtype: 'stop_task'; task_id: string }
+          | {
+              subtype: 'generate_session_title'
+              description: string
+              persist?: boolean
+            }
+          | { subtype: 'side_question'; question: string }
+          | { subtype: 'remote_control'; enabled: boolean }
+          | { subtype: 'set_proactive'; enabled: boolean }
+        const request = message.request as ExtendedControlRequestUnion
+        if (request.subtype === 'interrupt') {
           // Track escapes for attribution (ant-only feature)
           if (feature('COMMIT_ATTRIBUTION')) {
             setAppState(prev => ({
@@ -2889,9 +2974,9 @@ function runHeadlessStreaming(
           suggestionState.lastEmitted = null
           suggestionState.pendingSuggestion = null
           sendControlResponseSuccess(message)
-        } else if (message.request.subtype === 'end_session') {
+        } else if (request.subtype === 'end_session') {
           logForDebugging(
-            `[print.ts] end_session received, reason=${message.request.reason ?? 'unspecified'}`,
+            `[print.ts] end_session received, reason=${request.reason ?? 'unspecified'}`,
           )
           if (abortController) {
             abortController.abort()
@@ -2902,14 +2987,14 @@ function runHeadlessStreaming(
           suggestionState.pendingSuggestion = null
           sendControlResponseSuccess(message)
           break // exits for-await → falls through to inputClosed=true drain below
-        } else if (message.request.subtype === 'initialize') {
+        } else if (request.subtype === 'initialize') {
           // SDK MCP server names from the initialize message
           // Populated by both browser and ProcessTransport sessions
           if (
-            message.request.sdkMcpServers &&
-            message.request.sdkMcpServers.length > 0
+            request.sdkMcpServers &&
+            request.sdkMcpServers.length > 0
           ) {
-            for (const serverName of message.request.sdkMcpServers) {
+            for (const serverName of request.sdkMcpServers) {
               // Create placeholder config for SDK MCP servers
               // The actual server connection is managed by the SDK Query class
               sdkMcpConfigs[serverName] = {
@@ -2920,7 +3005,7 @@ function runHeadlessStreaming(
           }
 
           await handleInitializeRequest(
-            message.request,
+            request,
             message.request_id,
             initialized,
             output,
@@ -2936,7 +3021,7 @@ function runHeadlessStreaming(
           // Enable prompt suggestions in AppState when SDK consumer opts in.
           // shouldEnablePromptSuggestion() returns false for non-interactive
           // sessions, but the SDK consumer explicitly requested suggestions.
-          if (message.request.promptSuggestions) {
+          if (request.promptSuggestions) {
             setAppState(prev => {
               if (prev.promptSuggestionEnabled) return prev
               return { ...prev, promptSuggestionEnabled: true }
@@ -2944,7 +3029,7 @@ function runHeadlessStreaming(
           }
 
           if (
-            message.request.agentProgressSummaries &&
+            request.agentProgressSummaries &&
             getFeatureValue_CACHED_MAY_BE_STALE('tengu_slate_prism', true)
           ) {
             setSdkAgentProgressSummariesEnabled(true)
@@ -2957,8 +3042,8 @@ function runHeadlessStreaming(
           if (hasCommandsInQueue()) {
             void run()
           }
-        } else if (message.request.subtype === 'set_permission_mode') {
-          const m = message.request // for typescript (TODO: use readonly types to avoid this)
+        } else if (request.subtype === 'set_permission_mode') {
+          const m = request // for typescript (TODO: use readonly types to avoid this)
           setAppState(prev => ({
             ...prev,
             toolPermissionContext: handleSetPermissionMode(
@@ -2972,8 +3057,8 @@ function runHeadlessStreaming(
           // handleSetPermissionMode sends the control_response; the
           // notifySessionMetadataChanged that used to follow here is
           // now fired by onChangeAppState (with externalized mode name).
-        } else if (message.request.subtype === 'set_model') {
-          const requestedModel = message.request.model ?? 'default'
+        } else if (request.subtype === 'set_model') {
+          const requestedModel = request.model ?? 'default'
           const model =
             requestedModel === 'default'
               ? getDefaultMainLoopModel()
@@ -2984,23 +3069,23 @@ function runHeadlessStreaming(
           injectModelSwitchBreadcrumbs(requestedModel, model)
 
           sendControlResponseSuccess(message)
-        } else if (message.request.subtype === 'set_max_thinking_tokens') {
-          if (message.request.max_thinking_tokens === null) {
+        } else if (request.subtype === 'set_max_thinking_tokens') {
+          if (request.max_thinking_tokens === null) {
             options.thinkingConfig = undefined
-          } else if (message.request.max_thinking_tokens === 0) {
+          } else if (request.max_thinking_tokens === 0) {
             options.thinkingConfig = { type: 'disabled' }
           } else {
             options.thinkingConfig = {
               type: 'enabled',
-              budgetTokens: message.request.max_thinking_tokens,
+              budgetTokens: request.max_thinking_tokens,
             }
           }
           sendControlResponseSuccess(message)
-        } else if (message.request.subtype === 'mcp_status') {
+        } else if (request.subtype === 'mcp_status') {
           sendControlResponseSuccess(message, {
             mcpServers: buildMcpServerStatuses(),
           })
-        } else if (message.request.subtype === 'get_context_usage') {
+        } else if (request.subtype === 'get_context_usage') {
           try {
             const appState = getAppState()
             const data = await collectContextData({
@@ -3018,9 +3103,9 @@ function runHeadlessStreaming(
           } catch (error) {
             sendControlResponseError(message, errorMessage(error))
           }
-        } else if (message.request.subtype === 'mcp_message') {
+        } else if (request.subtype === 'mcp_message') {
           // Handle MCP notifications from SDK servers
-          const mcpRequest = message.request
+          const mcpRequest = request
           const sdkClient = sdkClients.find(
             client => client.name === mcpRequest.server_name,
           )
@@ -3034,15 +3119,15 @@ function runHeadlessStreaming(
             sdkClient.client.transport.onmessage(mcpRequest.message)
           }
           sendControlResponseSuccess(message)
-        } else if (message.request.subtype === 'rewind_files') {
+        } else if (request.subtype === 'rewind_files') {
           const appState = getAppState()
           const result = await handleRewindFiles(
-            message.request.user_message_id as UUID,
+            request.user_message_id as UUID,
             appState,
             setAppState,
-            message.request.dry_run ?? false,
+            request.dry_run ?? false,
           )
-          if (result.canRewind || message.request.dry_run) {
+          if (result.canRewind || request.dry_run) {
             sendControlResponseSuccess(message, result)
           } else {
             sendControlResponseError(
@@ -3050,13 +3135,13 @@ function runHeadlessStreaming(
               result.error ?? 'Unexpected error',
             )
           }
-        } else if (message.request.subtype === 'cancel_async_message') {
-          const targetUuid = message.request.message_uuid
+        } else if (request.subtype === 'cancel_async_message') {
+          const targetUuid = request.message_uuid
           const removed = dequeueAllMatching(cmd => cmd.uuid === targetUuid)
           sendControlResponseSuccess(message, {
             cancelled: removed.length > 0,
           })
-        } else if (message.request.subtype === 'seed_read_state') {
+        } else if (request.subtype === 'seed_read_state') {
           // Client observed a Read that was later removed from context (e.g.
           // by snip), so transcript-based seeding missed it. Queued into
           // pendingSeeds; applied at the next clone-replace boundary.
@@ -3064,7 +3149,7 @@ function runHeadlessStreaming(
             // expandPath: all other readFileState writers normalize (~, relative,
             // session cwd vs process cwd). FileEditTool looks up by expandPath'd
             // key — a verbatim client path would miss.
-            const normalizedPath = expandPath(message.request.path)
+            const normalizedPath = expandPath(request.path)
             // Check disk mtime before reading content. If the file changed
             // since the client's observation, readFile would return C_current
             // but we'd store it with the client's M_observed — getChangedFiles
@@ -3074,7 +3159,7 @@ function runHeadlessStreaming(
             // makes Edit fail "file not read yet" → forces a fresh Read.
             // Math.floor matches FileReadTool and getFileModificationTime.
             const diskMtime = Math.floor((await stat(normalizedPath)).mtimeMs)
-            if (diskMtime <= message.request.mtime) {
+            if (diskMtime <= request.mtime) {
               const raw = await readFile(normalizedPath, 'utf-8')
               // Strip BOM + normalize CRLF→LF to match readFileInRange and
               // readFileSyncWithMetadata. FileEditTool's content-compare
@@ -3094,9 +3179,9 @@ function runHeadlessStreaming(
             // ENOENT etc — skip seeding but still succeed
           }
           sendControlResponseSuccess(message)
-        } else if (message.request.subtype === 'mcp_set_servers') {
+        } else if (request.subtype === 'mcp_set_servers') {
           const { response, sdkServersChanged } = await applyMcpServerChanges(
-            message.request.servers,
+            request.servers,
           )
           sendControlResponseSuccess(message, response)
 
@@ -3104,7 +3189,7 @@ function runHeadlessStreaming(
           if (sdkServersChanged) {
             void updateSdkMcp()
           }
-        } else if (message.request.subtype === 'reload_plugins') {
+        } else if (request.subtype === 'reload_plugins') {
           try {
             if (
               feature('DOWNLOAD_USER_SETTINGS') &&
@@ -3172,9 +3257,9 @@ function runHeadlessStreaming(
           } catch (error) {
             sendControlResponseError(message, errorMessage(error))
           }
-        } else if (message.request.subtype === 'mcp_reconnect') {
+        } else if (request.subtype === 'mcp_reconnect') {
           const currentAppState = getAppState()
-          const { serverName } = message.request
+          const { serverName } = request
           elicitationRegistered.delete(serverName)
           // Config-existence gate must cover the SAME sources as the
           // operations below. SDK-injected servers (query({mcpServers:{...}}))
@@ -3245,9 +3330,9 @@ function runHeadlessStreaming(
               sendControlResponseError(message, errorMessage)
             }
           }
-        } else if (message.request.subtype === 'mcp_toggle') {
+        } else if (request.subtype === 'mcp_toggle') {
           const currentAppState = getAppState()
-          const { serverName, enabled } = message.request
+          const { serverName, enabled } = request
           elicitationRegistered.delete(serverName)
           // Gate must match the client-lookup spread below (which
           // includes sdkClients and dynamicMcpState.clients). Same fix as
@@ -3336,11 +3421,11 @@ function runHeadlessStreaming(
               sendControlResponseError(message, errorMessage)
             }
           }
-        } else if (message.request.subtype === 'channel_enable') {
+        } else if (request.subtype === 'channel_enable') {
           const currentAppState = getAppState()
           handleChannelEnable(
             message.request_id,
-            message.request.serverName,
+            request.serverName,
             // Pool spread matches mcp_status — all three client sources.
             [
               ...currentAppState.mcp.clients,
@@ -3349,8 +3434,8 @@ function runHeadlessStreaming(
             ],
             output,
           )
-        } else if (message.request.subtype === 'mcp_authenticate') {
-          const { serverName } = message.request
+        } else if (request.subtype === 'mcp_authenticate') {
+          const { serverName } = request
           const currentAppState = getAppState()
           const config =
             getMcpConfigByName(serverName) ??
@@ -3502,8 +3587,8 @@ function runHeadlessStreaming(
               sendControlResponseError(message, errorMessage(error))
             }
           }
-        } else if (message.request.subtype === 'mcp_oauth_callback_url') {
-          const { serverName, callbackUrl } = message.request
+        } else if (request.subtype === 'mcp_oauth_callback_url') {
+          const { serverName, callbackUrl } = request
           const submit = oauthCallbackSubmitters.get(serverName)
           if (submit) {
             // Validate the callback URL before submitting. The submit
@@ -3553,13 +3638,13 @@ function runHeadlessStreaming(
               `No active OAuth flow for server: ${serverName}`,
             )
           }
-        } else if (message.request.subtype === 'claude_authenticate') {
+        } else if (request.subtype === 'claude_authenticate') {
           // Anthropic OAuth over the control channel. The SDK client owns
           // the user's browser (we're headless in -p mode); we hand back
           // both URLs and wait. Automatic URL → localhost listener catches
           // the redirect if the browser is on this host; manual URL → the
           // success page shows "code#state" for claude_oauth_callback.
-          const { loginWithClaudeAi } = message.request
+          const { loginWithClaudeAi } = request
 
           // Clean up any prior flow. cleanup() closes the localhost listener
           // and nulls the manual resolver. The prior `flow` promise is left
@@ -3648,8 +3733,8 @@ function runHeadlessStreaming(
             sendControlResponseError(message, errorMessage(error))
           }
         } else if (
-          message.request.subtype === 'claude_oauth_callback' ||
-          message.request.subtype === 'claude_oauth_wait_for_completion'
+          request.subtype === 'claude_oauth_callback' ||
+          request.subtype === 'claude_oauth_wait_for_completion'
         ) {
           if (!claudeOAuth) {
             sendControlResponseError(
@@ -3660,10 +3745,10 @@ function runHeadlessStreaming(
             // Inject the manual code synchronously — must happen in stdin
             // message order so a subsequent claude_authenticate doesn't
             // replace the service before this code lands.
-            if (message.request.subtype === 'claude_oauth_callback') {
+            if (request.subtype === 'claude_oauth_callback') {
               claudeOAuth.service.handleManualAuthCodeInput({
-                authorizationCode: message.request.authorizationCode,
-                state: message.request.state,
+                authorizationCode: request.authorizationCode,
+                state: request.state,
               })
             }
             // Detach the await — the stdin reader is serial and blocking
@@ -3690,8 +3775,8 @@ function runHeadlessStreaming(
                 sendControlResponseError(message, errorMessage(error)),
             )
           }
-        } else if (message.request.subtype === 'mcp_clear_auth') {
-          const { serverName } = message.request
+        } else if (request.subtype === 'mcp_clear_auth') {
+          const { serverName } = request
           const currentAppState = getAppState()
           const config =
             getMcpConfigByName(serverName) ??
@@ -3738,14 +3823,14 @@ function runHeadlessStreaming(
             }))
             sendControlResponseSuccess(message, {})
           }
-        } else if (message.request.subtype === 'apply_flag_settings') {
+        } else if (request.subtype === 'apply_flag_settings') {
           // Snapshot the current model before applying — we need to detect
           // model switches so we can inject breadcrumbs and notify listeners.
           const prevModel = getMainLoopModel()
 
           // Merge the provided settings into the in-memory flag settings
           const existing = getFlagSettingsInline() ?? {}
-          const incoming = message.request.settings
+          const incoming = request.settings
           // Shallow-merge top-level keys; getSettingsForSource handles
           // the deep merge with file-based flag settings via mergeWith.
           // JSON serialization drops `undefined`, so callers use `null`
@@ -3777,8 +3862,9 @@ function runHeadlessStreaming(
           // getMainLoopModel() returns the stale override and the model
           // change is silently ignored (matching set_model at :2811).
           if ('model' in incoming) {
-            if (incoming.model != null) {
-              setMainLoopModelOverride(String(incoming.model))
+            const incomingModel = (incoming as { model?: unknown }).model
+            if (incomingModel != null) {
+              setMainLoopModelOverride(String(incomingModel))
             } else {
               setMainLoopModelOverride(undefined)
             }
@@ -3789,13 +3875,14 @@ function runHeadlessStreaming(
           const newModel = getMainLoopModel()
           if (newModel !== prevModel) {
             activeUserSpecifiedModel = newModel
-            const modelArg = incoming.model ? String(incoming.model) : 'default'
+            const incomingModel = (incoming as { model?: unknown }).model
+            const modelArg = incomingModel ? String(incomingModel) : 'default'
             notifySessionMetadataChanged({ model: newModel })
             injectModelSwitchBreadcrumbs(modelArg, newModel)
           }
 
           sendControlResponseSuccess(message)
-        } else if (message.request.subtype === 'get_settings') {
+        } else if (request.subtype === 'get_settings') {
           const currentAppState = getAppState()
           const model = getMainLoopModel()
           // modelSupportsEffort gate matches claude.ts — applied.effort must
@@ -3811,8 +3898,8 @@ function runHeadlessStreaming(
               effort: typeof effort === 'string' ? effort : null,
             },
           })
-        } else if (message.request.subtype === 'stop_task') {
-          const { task_id: taskId } = message.request
+        } else if (request.subtype === 'stop_task') {
+          const { task_id: taskId } = request
           try {
             await stopTask(taskId, {
               getAppState,
@@ -3822,11 +3909,11 @@ function runHeadlessStreaming(
           } catch (error) {
             sendControlResponseError(message, errorMessage(error))
           }
-        } else if (message.request.subtype === 'generate_session_title') {
+        } else if (request.subtype === 'generate_session_title') {
           // Fire-and-forget so the Haiku call does not block the stdin loop
           // (which would delay processing of subsequent user messages /
           // interrupts for the duration of the API roundtrip).
-          const { description, persist } = message.request
+          const { description, persist } = request
           // Reuse the live controller only if it has not already been aborted
           // (e.g. by interrupt()); an aborted signal would cause queryHaiku to
           // immediately throw APIUserAbortError → {title: null}.
@@ -3854,7 +3941,7 @@ function runHeadlessStreaming(
               sendControlResponseError(message, errorMessage(e))
             }
           })()
-        } else if (message.request.subtype === 'side_question') {
+        } else if (request.subtype === 'side_question') {
           // Same fire-and-forget pattern as generate_session_title above —
           // the forked agent's API roundtrip must not block the stdin loop.
           //
@@ -3870,7 +3957,7 @@ function runHeadlessStreaming(
           // matches in the common case. May still miss the cache for
           // coordinator mode or memory-mechanics extras — acceptable, the
           // alternative is the side question failing entirely.
-          const { question } = message.request
+          const { question } = request
           void (async () => {
             try {
               const saved = getLastCacheSafeParams()
@@ -3931,8 +4018,8 @@ function runHeadlessStreaming(
             proactiveModule!.deactivateProactive()
           }
           sendControlResponseSuccess(message)
-        } else if (message.request.subtype === 'remote_control') {
-          if (message.request.enabled) {
+        } else if (request.subtype === 'remote_control') {
+          if (request.enabled) {
             if (bridgeHandle) {
               // Already connected
               sendControlResponseSuccess(message, {
@@ -4078,7 +4165,9 @@ function runHeadlessStreaming(
       } else if (message.type === 'keep_alive') {
         // Silently ignore keep-alive messages
         continue
-      } else if (message.type === 'update_environment_variables') {
+      } else if (
+        (message.type as string) === 'update_environment_variables'
+      ) {
         // Handled in structuredIO.ts, but TypeScript needs the type guard
         continue
       } else if (message.type === 'assistant' || message.type === 'system') {
@@ -4123,7 +4212,8 @@ function runHeadlessStreaming(
               session_id: sessionId,
               parent_tool_use_id: null,
               uuid: message.uuid,
-              timestamp: message.timestamp,
+              timestamp: (message as SDKUserMessage & { timestamp?: string })
+                .timestamp,
               isReplay: true,
             } as SDKUserMessageReplay)
           }
@@ -4147,7 +4237,9 @@ function runHeadlessStreaming(
         // Same-ref no-op when absent (no 'file_attachments' key).
         value: await resolveAndPrepend(message, message.message.content),
         uuid: message.uuid,
-        priority: message.priority,
+        priority: (
+          message as SDKUserMessage & { priority?: 'now' | 'next' | 'later' }
+        ).priority,
       })
       // Increment prompt count for attribution tracking and save snapshot
       // The snapshot persists promptCount so it survives compaction
@@ -4376,7 +4468,10 @@ export function getCanUseToolFn(
 }
 
 async function handleInitializeRequest(
-  request: SDKControlInitializeRequest,
+  request: SDKControlInitializeRequest & {
+    promptSuggestions?: boolean
+    agentProgressSummaries?: boolean
+  },
   requestId: string,
   initialized: boolean,
   output: Stream<StdoutMessage>,
@@ -4492,7 +4587,19 @@ async function handleInitializeRequest(
   if (request.jsonSchema) {
     setInitJsonSchema(request.jsonSchema)
   }
-  const initResponse: SDKControlInitializeResponse = {
+  type ExtendedInitResponse = SDKControlInitializeResponse & {
+    agents?: Array<{
+      name: string
+      description?: string
+      model?: string
+    }>
+    pid?: number
+    fast_mode_state?: ReturnType<typeof getFastModeState>
+    account: SDKControlInitializeResponse['account'] & {
+      apiProvider?: ReturnType<typeof getAPIProvider>
+    }
+  }
+  const initResponse: ExtendedInitResponse = {
     commands: commands
       .filter(cmd => cmd.userInvocable !== false)
       .map(cmd => ({
