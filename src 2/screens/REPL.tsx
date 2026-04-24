@@ -221,6 +221,12 @@ import { RemoteCallout } from '../components/RemoteCallout.js';
 const AntModelSwitchCallout = ("external" as string) === 'ant' ? require('../components/AntModelSwitchCallout.js').AntModelSwitchCallout : null;
 const shouldShowAntModelSwitch = ("external" as string) === 'ant' ? require('../components/AntModelSwitchCallout.js').shouldShowModelSwitchCallout : (): boolean => false;
 const UndercoverAutoCallout = ("external" as string) === 'ant' ? require('../components/UndercoverAutoCallout.js').UndercoverAutoCallout : null;
+// Ultraplan dialogs and companion observer are ant-only. External builds
+// eliminate the modules entirely via the feature() DCE sentinel.
+const UltraplanChoiceDialog = feature('ULTRAPLAN') ? require('../components/UltraplanChoiceDialog.js').UltraplanChoiceDialog : null;
+const UltraplanLaunchDialog = feature('ULTRAPLAN') ? require('../components/UltraplanLaunchDialog.js').UltraplanLaunchDialog : null;
+const fireCompanionObserver: (messages: unknown, onReaction: (reaction: string) => void) => Promise<void> = feature('BUDDY') ? require('../buddy/companionObserver.js').fireCompanionObserver : async () => {};
+import { launchUltraplan } from '../commands/ultraplan.js';
 /* eslint-enable custom-rules/no-process-env-top-level, @typescript-eslint/no-require-imports */
 import { activityManager } from '../utils/activityManager.js';
 import { createAbortController } from '../utils/abortController.js';
@@ -2605,7 +2611,7 @@ export function REPL({
         if (feature('PROACTIVE') || feature('KAIROS')) {
           proactiveModule?.setContextBlocked(false);
         }
-      } else if (newMessage.type === 'progress' && isEphemeralToolProgress(newMessage.data.type)) {
+      } else if ((newMessage as ProgressMessage).type === 'progress' && isEphemeralToolProgress((newMessage as ProgressMessage).data.type)) {
         // Replace the previous ephemeral progress tick for the same tool
         // call instead of appending. Sleep/Bash emit a tick per second and
         // only the last one is rendered; appending blows up the messages
@@ -2616,9 +2622,10 @@ export function REPL({
         // — each carries distinct state the UI needs (e.g. subagent tool
         // history). Replacing those leaves the AgentTool UI stuck at
         // "Initializing…" because it renders the full progress trail.
+        const progressMsg = newMessage as ProgressMessage;
         setMessages(oldMessages => {
           const last = oldMessages.at(-1);
-          if (last?.type === 'progress' && last.parentToolUseID === newMessage.parentToolUseID && last.data.type === newMessage.data.type) {
+          if (last?.type === 'progress' && last.parentToolUseID === progressMsg.parentToolUseID && last.data.type === progressMsg.data.type) {
             const copy = oldMessages.slice();
             copy[copy.length - 1] = newMessage;
             return copy;

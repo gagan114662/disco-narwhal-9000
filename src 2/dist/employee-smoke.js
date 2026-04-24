@@ -48466,7 +48466,7 @@ var require_package = __commonJS((exports, module) => {
 
 // node_modules/@aws-sdk/util-user-agent-node/dist-cjs/index.js
 var require_dist_cjs72 = __commonJS((exports) => {
-  var __dirname = "/Users/gaganarora/conductor/workspaces/again/toronto/src 2/node_modules/@aws-sdk/util-user-agent-node/dist-cjs";
+  var __dirname = "/Users/gaganarora/conductor/workspaces/again/stuttgart-v1/src 2/node_modules/@aws-sdk/util-user-agent-node/dist-cjs";
   var node_os = __require("os");
   var node_process = __require("process");
   var utilConfigProvider = require_dist_cjs57();
