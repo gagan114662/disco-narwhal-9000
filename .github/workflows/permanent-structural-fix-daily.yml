@@ -8,6 +8,8 @@ on:
 jobs:
   permanent-structural-fix:
     runs-on: ubuntu-latest
+    env:
+      ANTHROPIC_API_KEY: ci-test-key
     defaults:
       run:
         working-directory: "src 2"
