@@ -307,9 +307,7 @@ export class ITermBackend implements PaneBackend {
     _hasLeader: boolean,
   ): Promise<void> {
     // iTerm2 handles pane balancing automatically
-    logForDebugging(
-      '[ITermBackend] Pane rebalancing not implemented for iTerm2',
-    )
+    logForDebugging('[ITermBackend] Pane rebalancing delegated to iTerm2')
   }
 
   /**

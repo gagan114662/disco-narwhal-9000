@@ -179,6 +179,7 @@ subsystems:
     tests:
       files:
         - "src 2/commands/kairos.test.ts"
+        - "src 2/entrypoints/cli.test.ts"
         - "src 2/daemon/kairos/worker.test.ts"
         - "src 2/daemon/kairos/projectWorker.test.ts"
         - "src 2/daemon/kairos/childRunner.test.ts"
@@ -187,7 +188,7 @@ subsystems:
         - "bun test ./commands/kairos.test.ts ./daemon/kairos/worker.test.ts ./daemon/dashboard/server.test.ts"
     exercise:
       commands:
-        - "claude /kairos status"
+        - "claude kairos status"
         - "claude daemon kairos"
       tools: []
     common_failure_modes:

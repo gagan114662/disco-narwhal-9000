@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { computeSkillChecksum } from './shared.js'
-import { exportSkill } from './exportSkill.js'
+import { exportSkill, publishSkill } from './exportSkill.js'
 import { importSkill } from './importSkill.js'
 import { lintSkill } from './lintSkill.js'
 import {
@@ -80,6 +80,47 @@ describe('skill interop services', () => {
 
     const lintResult = await lintSkill(manifestText)
     expect(lintResult.ok).toBe(true)
+  })
+
+  test('publish writes a local discovery manifest artifact', async () => {
+    const projectDir = makeTempDir('kairos-skill-publish-')
+    setProjectRoot(projectDir)
+    writeSkill(
+      join(projectDir, '.claude', 'skills'),
+      'publish-me',
+      'Skill to publish into the local discovery directory.',
+      'Use this skill to verify deterministic local publication.',
+    )
+
+    const result = await publishSkill('publish-me', {
+      now: new Date('2026-04-24T12:00:00Z'),
+    })
+
+    const publishDir = join(
+      process.env.CLAUDE_CONFIG_DIR as string,
+      'kairos',
+      'skill-publications',
+      'publish-me',
+    )
+    const manifestPath = join(publishDir, 'discovery.json')
+    const publicationPath = join(publishDir, 'publication.json')
+    expect(result).toContain(manifestPath)
+    expect(existsSync(manifestPath)).toBe(true)
+    expect(existsSync(publicationPath)).toBe(true)
+
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
+      $schema: string
+      skills: Array<{ name: string }>
+    }
+    expect(manifest.$schema).toBe(AGENTSKILLS_DISCOVERY_SCHEMA_V0_2_0)
+    expect(manifest.skills[0]?.name).toBe('publish-me')
+
+    const publication = JSON.parse(readFileSync(publicationPath, 'utf8')) as {
+      publishedAt: string
+      skill: string
+    }
+    expect(publication.publishedAt).toBe('2026-04-24T12:00:00.000Z')
+    expect(publication.skill).toBe('publish-me')
   })
 
   test('local import previews suspicious patterns, then writes provenance and telemetry on confirmation', async () => {

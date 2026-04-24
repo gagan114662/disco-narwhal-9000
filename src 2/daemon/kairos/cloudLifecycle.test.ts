@@ -10,6 +10,7 @@ import {
 import { getKairosCloudDeployStatePath } from './paths.js'
 
 const TEMP_DIRS: string[] = []
+const ORIGINAL_ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY
 
 function makeTempDir(prefix: string): string {
   const dir = mkdtempSync(join(tmpdir(), prefix))
@@ -34,7 +35,11 @@ beforeEach(() => {
 afterEach(() => {
   __resetKairosCloudLifecycleDepsForTesting()
   delete process.env.CLAUDE_CONFIG_DIR
-  delete process.env.ANTHROPIC_API_KEY
+  if (ORIGINAL_ANTHROPIC_API_KEY === undefined) {
+    delete process.env.ANTHROPIC_API_KEY
+  } else {
+    process.env.ANTHROPIC_API_KEY = ORIGINAL_ANTHROPIC_API_KEY
+  }
   for (const dir of TEMP_DIRS.splice(0, TEMP_DIRS.length)) {
     rmSync(dir, { recursive: true, force: true })
   }

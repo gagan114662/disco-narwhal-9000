@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'fs'
+import { lstatSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { spawn } from 'child_process'
 import { join } from 'path'
 import { tmpdir } from 'os'
@@ -28,13 +28,26 @@ async function waitForPath(path: string, timeoutMs = 10_000): Promise<void> {
   const started = Date.now()
   while (Date.now() - started < timeoutMs) {
     try {
-      statSync(path)
+      lstatSync(path)
       return
     } catch {
       await Bun.sleep(50)
     }
   }
   throw new Error(`Timed out waiting for ${path}`)
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  message: string,
+  timeoutMs = 10_000,
+): Promise<T> {
+  return Promise.race([
+    promise,
+    Bun.sleep(timeoutMs).then(() => {
+      throw new Error(message)
+    }),
+  ])
 }
 
 describe('Kairos daemon worker', () => {
@@ -90,9 +103,18 @@ describe('Kairos daemon worker', () => {
     resetSettingsCache()
 
     const controller = new AbortController()
-    const running = runKairosWorker({ signal: controller.signal })
+    let resolveRpcStarted: (socketPath: string) => void = () => {}
+    const rpcStarted = new Promise<string>(resolve => {
+      resolveRpcStarted = resolve
+    })
+    const running = runKairosWorker({
+      signal: controller.signal,
+      onRpcServerStarted: resolveRpcStarted,
+    })
 
-    await waitForPath(getKairosToolsSocketPath())
+    await expect(
+      withTimeout(rpcStarted, 'Timed out waiting for RPC server startup'),
+    ).resolves.toBe(getKairosToolsSocketPath())
     controller.abort()
     expect(await running).toBe(0)
   })

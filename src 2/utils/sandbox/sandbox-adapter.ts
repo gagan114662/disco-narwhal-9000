@@ -15,14 +15,10 @@ import type {
   SandboxRuntimeConfig,
   SandboxViolationEvent,
 } from '@anthropic-ai/sandbox-runtime'
-import {
-  SandboxManager as BaseSandboxManager,
-  SandboxRuntimeConfigSchema,
-  SandboxViolationStore,
-} from '@anthropic-ai/sandbox-runtime'
 import { rmSync, statSync } from 'fs'
 import { readFile } from 'fs/promises'
 import { memoize } from 'lodash-es'
+import { createRequire } from 'module'
 import { join, resolve, sep } from 'path'
 import {
   getAdditionalDirectoriesForClaudeMd,
@@ -57,6 +53,129 @@ import { errorMessage } from '../errors.js'
 import { getClaudeTempDir } from '../permissions/filesystem.js'
 import type { PermissionRuleValue } from '../permissions/PermissionRule.js'
 import { ripgrepCommand } from '../ripgrep.js'
+
+type SandboxViolationSubscriber = (
+  violations: SandboxViolationEvent[],
+) => void
+
+type SandboxViolationStoreType = {
+  subscribe: (subscriber: SandboxViolationSubscriber) => () => void
+  getTotalCount: () => number
+}
+
+type RuntimeSandboxManager = {
+  checkDependencies?: (ripgrepConfig?: {
+    command: string
+    args: string[]
+  }) => SandboxDependencyCheck
+  isSupportedPlatform?: () => boolean
+  getSandboxViolationStore?: () => SandboxViolationStoreType
+  annotateStderrWithSandboxFailures?: (
+    command: string,
+    stderr: string,
+  ) => string
+  cleanupAfterCommand?: () => void
+  wrapWithSandbox?: (
+    command: string,
+    binShell?: string,
+    customConfig?: Partial<SandboxRuntimeConfig>,
+    abortSignal?: AbortSignal,
+  ) => Promise<string>
+  initialize?: (
+    runtimeConfig: SandboxRuntimeConfig,
+    sandboxAskCallback?: SandboxAskCallback,
+  ) => Promise<void>
+  updateConfig?: (runtimeConfig: SandboxRuntimeConfig) => void
+  reset?: () => Promise<void>
+  getFsReadConfig?: () => FsReadRestrictionConfig
+  getFsWriteConfig?: () => FsWriteRestrictionConfig
+  getNetworkRestrictionConfig?: () => NetworkRestrictionConfig
+  getIgnoreViolations?: () => IgnoreViolationsConfig | undefined
+  getAllowUnixSockets?: () => string[] | undefined
+  getAllowLocalBinding?: () => boolean | undefined
+  getEnableWeakerNestedSandbox?: () => boolean | undefined
+  getProxyPort?: () => number | undefined
+  getSocksProxyPort?: () => number | undefined
+  getLinuxHttpSocketPath?: () => string | undefined
+  getLinuxSocksSocketPath?: () => string | undefined
+  waitForNetworkInitialization?: () => Promise<boolean>
+}
+
+type SandboxRuntimeModule = {
+  SandboxManager?: RuntimeSandboxManager
+  SandboxRuntimeConfigSchema?: { parse: (value: unknown) => unknown }
+  SandboxViolationStore?: new () => SandboxViolationStoreType
+}
+
+class FallbackSandboxViolationStore implements SandboxViolationStoreType {
+  private violations: SandboxViolationEvent[] = []
+  private subscribers = new Set<SandboxViolationSubscriber>()
+
+  subscribe(subscriber: SandboxViolationSubscriber): () => void {
+    subscriber(this.violations)
+    this.subscribers.add(subscriber)
+    return () => {
+      this.subscribers.delete(subscriber)
+    }
+  }
+
+  getTotalCount(): number {
+    return this.violations.length
+  }
+}
+
+const fallbackSandboxViolationStore = new FallbackSandboxViolationStore()
+const require = createRequire(import.meta.url)
+
+function loadSandboxRuntime(): SandboxRuntimeModule | undefined {
+  try {
+    return require('@anthropic-ai/sandbox-runtime') as SandboxRuntimeModule
+  } catch (error) {
+    logForDebugging(`Sandbox runtime unavailable: ${errorMessage(error)}`)
+    return undefined
+  }
+}
+
+const sandboxRuntime = loadSandboxRuntime()
+const sandboxRuntimeMissingDependency =
+  '@anthropic-ai/sandbox-runtime is not installed'
+
+const SandboxViolationStore =
+  sandboxRuntime?.SandboxViolationStore ?? FallbackSandboxViolationStore
+const SandboxRuntimeConfigSchema = sandboxRuntime?.SandboxRuntimeConfigSchema ?? {
+  parse: (value: unknown) => value,
+}
+
+const BaseSandboxManager: RuntimeSandboxManager =
+  sandboxRuntime?.SandboxManager ?? {
+    checkDependencies: () => ({
+      errors: [sandboxRuntimeMissingDependency],
+      warnings: [],
+    }),
+    isSupportedPlatform: () => true,
+    wrapWithSandbox: async command => command,
+    getFsReadConfig: () =>
+      ({ denyOnly: [], allowWithinDeny: [] }) as FsReadRestrictionConfig,
+    getFsWriteConfig: () =>
+      ({ allowOnly: [], denyWithinAllow: [] }) as FsWriteRestrictionConfig,
+    getNetworkRestrictionConfig: () =>
+      ({ allowedHosts: [], deniedHosts: [] }) as NetworkRestrictionConfig,
+    getIgnoreViolations: () => undefined,
+    getAllowUnixSockets: () => undefined,
+    getAllowLocalBinding: () => undefined,
+    getEnableWeakerNestedSandbox: () => undefined,
+    getProxyPort: () => undefined,
+    getSocksProxyPort: () => undefined,
+    getLinuxHttpSocketPath: () => undefined,
+    getLinuxSocksSocketPath: () => undefined,
+    waitForNetworkInitialization: async () => false,
+    getSandboxViolationStore: () => fallbackSandboxViolationStore,
+    annotateStderrWithSandboxFailures: (_command, stderr) => stderr,
+    cleanupAfterCommand: () => undefined,
+    initialize: async () => undefined,
+    updateConfig: () => undefined,
+    reset: async () => undefined,
+  }
 
 // Local copies to avoid circular dependency
 // (permissions.ts imports SandboxManager, bashPermissions.ts imports permissions.ts)
@@ -659,9 +778,9 @@ function getLinuxGlobPatternWarnings(): string[] {
   }
 }
 
-function getSandboxViolationStore(): SandboxViolationStore {
+function getSandboxViolationStore(): SandboxViolationStoreType {
   if (typeof BaseSandboxManager.getSandboxViolationStore !== 'function') {
-    return new SandboxViolationStore()
+    return fallbackSandboxViolationStore
   }
   return BaseSandboxManager.getSandboxViolationStore()
 }
@@ -761,6 +880,10 @@ async function wrapWithSandbox(
     } else {
       throw new Error('Sandbox failed to initialize. ')
     }
+  }
+
+  if (typeof BaseSandboxManager.wrapWithSandbox !== 'function') {
+    return command
   }
 
   return BaseSandboxManager.wrapWithSandbox(
@@ -973,7 +1096,7 @@ export interface ISandboxManager {
     abortSignal?: AbortSignal,
   ): Promise<string>
   cleanupAfterCommand(): void
-  getSandboxViolationStore(): SandboxViolationStore
+  getSandboxViolationStore(): SandboxViolationStoreType
   annotateStderrWithSandboxFailures(command: string, stderr: string): string
   getLinuxGlobPatternWarnings(): string[]
   refreshConfig(): void
@@ -1002,20 +1125,28 @@ export const SandboxManager: ISandboxManager = {
   checkDependencies,
 
   // Forward to base sandbox manager
-  getFsReadConfig: BaseSandboxManager.getFsReadConfig,
-  getFsWriteConfig: BaseSandboxManager.getFsWriteConfig,
-  getNetworkRestrictionConfig: BaseSandboxManager.getNetworkRestrictionConfig,
-  getIgnoreViolations: BaseSandboxManager.getIgnoreViolations,
+  getFsReadConfig: () =>
+    BaseSandboxManager.getFsReadConfig?.() ??
+    ({ denyOnly: [], allowWithinDeny: [] } as FsReadRestrictionConfig),
+  getFsWriteConfig: () =>
+    BaseSandboxManager.getFsWriteConfig?.() ??
+    ({ allowOnly: [], denyWithinAllow: [] } as FsWriteRestrictionConfig),
+  getNetworkRestrictionConfig: () =>
+    BaseSandboxManager.getNetworkRestrictionConfig?.() ??
+    ({ allowedHosts: [], deniedHosts: [] } as NetworkRestrictionConfig),
+  getIgnoreViolations: () => BaseSandboxManager.getIgnoreViolations?.(),
   getLinuxGlobPatternWarnings,
   isSupportedPlatform,
-  getAllowUnixSockets: BaseSandboxManager.getAllowUnixSockets,
-  getAllowLocalBinding: BaseSandboxManager.getAllowLocalBinding,
-  getEnableWeakerNestedSandbox: BaseSandboxManager.getEnableWeakerNestedSandbox,
-  getProxyPort: BaseSandboxManager.getProxyPort,
-  getSocksProxyPort: BaseSandboxManager.getSocksProxyPort,
-  getLinuxHttpSocketPath: BaseSandboxManager.getLinuxHttpSocketPath,
-  getLinuxSocksSocketPath: BaseSandboxManager.getLinuxSocksSocketPath,
-  waitForNetworkInitialization: BaseSandboxManager.waitForNetworkInitialization,
+  getAllowUnixSockets: () => BaseSandboxManager.getAllowUnixSockets?.(),
+  getAllowLocalBinding: () => BaseSandboxManager.getAllowLocalBinding?.(),
+  getEnableWeakerNestedSandbox: () =>
+    BaseSandboxManager.getEnableWeakerNestedSandbox?.(),
+  getProxyPort: () => BaseSandboxManager.getProxyPort?.(),
+  getSocksProxyPort: () => BaseSandboxManager.getSocksProxyPort?.(),
+  getLinuxHttpSocketPath: () => BaseSandboxManager.getLinuxHttpSocketPath?.(),
+  getLinuxSocksSocketPath: () => BaseSandboxManager.getLinuxSocksSocketPath?.(),
+  waitForNetworkInitialization: () =>
+    BaseSandboxManager.waitForNetworkInitialization?.() ?? Promise.resolve(false),
   getSandboxViolationStore,
   annotateStderrWithSandboxFailures,
   cleanupAfterCommand,

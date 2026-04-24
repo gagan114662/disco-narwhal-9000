@@ -1,4 +1,4 @@
-import { exportSkill } from '../services/skillInterop/exportSkill.js'
+import { exportSkill, publishSkill } from '../services/skillInterop/exportSkill.js'
 import { importSkill } from '../services/skillInterop/importSkill.js'
 import { lintSkill } from '../services/skillInterop/lintSkill.js'
 import { formatViolations } from '../services/skillInterop/shared.js'
@@ -36,7 +36,7 @@ export async function runKairosSkillsInteropCommand(args: string): Promise<strin
       const parsed = parseExportArgs(restTokens)
       if (!parsed.reference) return HELP_TEXT
       if (parsed.publish) {
-        return 'Publishing adapter is not implemented yet. Run without --publish to emit the manifest JSON.'
+        return publishSkill(parsed.reference)
       }
       return exportSkill(parsed.reference)
     }
