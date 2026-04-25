@@ -8,6 +8,7 @@ import {
   createDraftNonGoals,
   createDraftRisks,
   createDraftTracerSlices,
+  createDraftUsers,
   deriveDraftTitle,
   renderDraftPrd,
 } from './draftBuild.js'
@@ -111,6 +112,14 @@ describe('draft build PRD rendering', () => {
     expect(createDraftNonGoals()).toEqual([
       'Native mobile application.',
       'Broad "any app" generation beyond the selected workflow.',
+    ])
+  })
+
+  test('creates deterministic users for vague briefs', () => {
+    expect(createDraftUsers()).toEqual([
+      'Primary operator',
+      'Reviewer or approver',
+      'Administrator',
     ])
   })
 

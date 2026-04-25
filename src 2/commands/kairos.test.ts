@@ -126,6 +126,7 @@ describe('/kairos command', () => {
     expect(out).toContain('/kairos build-risks')
     expect(out).toContain('/kairos build-goals')
     expect(out).toContain('/kairos build-non-goals')
+    expect(out).toContain('/kairos build-users')
     expect(out).toContain('/kairos cloud deploy')
     expect(out).toContain('/kairos cloud-sync')
   })
@@ -240,6 +241,11 @@ describe('/kairos command', () => {
       nonGoals: [
         'Native mobile application.',
         'Broad "any app" generation beyond the selected workflow.',
+      ],
+      users: [
+        'Primary operator',
+        'Reviewer or approver',
+        'Administrator',
       ],
       assumptions: [
         'The first build targets a browser-based internal workflow tool.',
@@ -547,6 +553,33 @@ describe('/kairos command', () => {
     expect(out).toBe(`No build missing-build found for ${projectDir}.`)
   })
 
+  test('build-users prints persisted draft users', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'users-build',
+      now: () => new Date('2026-04-25T19:19:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+
+    const out = await runKairosCommand(
+      `build-users ${projectDir} users-build`,
+    )
+    expect(out.split('\n')).toEqual([
+      'Users for users-build:',
+      '- Primary operator',
+      '- Reviewer or approver',
+      '- Administrator',
+    ])
+  })
+
+  test('build-users reports a missing build clearly', async () => {
+    const projectDir = makeProjectDir()
+    const out = await runKairosCommand(
+      `build-users ${projectDir} missing-build`,
+    )
+    expect(out).toBe(`No build missing-build found for ${projectDir}.`)
+  })
+
   test('build-summary prints compact PRD metadata counts', async () => {
     const projectDir = makeProjectDir()
     __setKairosBuildDepsForTesting({
@@ -564,6 +597,7 @@ describe('/kairos command', () => {
       'title: Leave Request App',
       'status: draft',
       'selected slice: TB-1',
+      'users: 3',
       'goals: 3',
       'non-goals: 2',
       'functional requirements: 4',

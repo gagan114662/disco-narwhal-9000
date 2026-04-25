@@ -122,6 +122,10 @@ export function createDraftNonGoals(): string[] {
   ]
 }
 
+export function createDraftUsers(): string[] {
+  return ['Primary operator', 'Reviewer or approver', 'Administrator']
+}
+
 export function createDraftFunctionalRequirements(): string[] {
   return [
     'Intake form or record creation flow.',
@@ -170,6 +174,7 @@ export function renderDraftPrd(brief: string): string {
   const trimmedBrief = brief.trim()
   const title = deriveDraftTitle(trimmedBrief)
   const tracerSlices = createDraftTracerSlices()
+  const users = createDraftUsers()
   const goals = createDraftGoals()
   const nonGoals = createDraftNonGoals()
   const functionalRequirements = createDraftFunctionalRequirements()
@@ -193,9 +198,7 @@ export function renderDraftPrd(brief: string): string {
     '',
     '## Users',
     '',
-    '- Primary operator',
-    '- Reviewer or approver',
-    '- Administrator',
+    ...users.map(user => `- ${user}`),
     '',
     '## Goals',
     '',
@@ -256,6 +259,7 @@ export async function createDraftBuild(
   const manifestPath = getProjectKairosBuildManifestPath(projectDir, buildId)
   const title = deriveDraftTitle(trimmedBrief)
   const tracerSlices = createDraftTracerSlices()
+  const users = createDraftUsers()
   const goals = createDraftGoals()
   const nonGoals = createDraftNonGoals()
   const functionalRequirements = createDraftFunctionalRequirements()
@@ -271,6 +275,7 @@ export async function createDraftBuild(
     tenantId: 'local',
     title,
     brief: trimmedBrief,
+    users,
     goals,
     nonGoals,
     functionalRequirements,
