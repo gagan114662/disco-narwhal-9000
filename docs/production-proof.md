@@ -14,6 +14,9 @@ bun run proof:production
 
 - Local production pipeline: typecheck, lint, builds, CLI smoke, bundle smoke,
   KAIROS smoke, and employee smoke.
+- Dependency reproducibility: `bun install --frozen-lockfile` completes without
+  modifying dependency resolution.
+- Supply-chain health: `bun audit` reports no known vulnerabilities.
 - Full local test suite: 411 tests across 65 files.
 - Test hygiene: no focused, skipped, pending, or expected-failing test
   modifiers across tracked test files.
@@ -49,6 +52,7 @@ The local proof result must end with:
 ```text
 411 pass
 0 fail
+No vulnerabilities found
 No focused, skipped, pending, or expected-failing tests found across 65 test files
 PRODUCTION PROOF PASSED
 ```

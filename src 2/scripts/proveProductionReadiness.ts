@@ -383,6 +383,14 @@ function main(): void {
     proveTrackedWorktreeClean(repoRoot)
   })
 
+  step('dependency lockfile installs reproducibly', () => {
+    run('bun', ['install', '--frozen-lockfile'], sourceRoot)
+  })
+
+  step('supply-chain audit has no known vulnerabilities', () => {
+    run('bun', ['audit'], sourceRoot)
+  })
+
   step('local production pipeline', () => {
     run('bun', ['run', 'pipeline'], sourceRoot)
   })
