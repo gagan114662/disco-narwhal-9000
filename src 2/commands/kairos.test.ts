@@ -912,6 +912,35 @@ describe('/kairos command', () => {
     ])
   })
 
+  test('build-readiness points unselected builds at select-next-prompt', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'readiness-build',
+      now: () => new Date('2026-04-25T20:55:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+
+    const out = await runKairosCommand(
+      `build-readiness ${projectDir} readiness-build`,
+    )
+    expect(out.split('\n')).toEqual([
+      'Build readiness for readiness-build:',
+      'selected slice: —',
+      'completed slices: 0/3',
+      'clarifying questions answered: 0/4',
+      'unanswered clarifying questions: 4',
+      'next command: /kairos build-select-next-prompt ' +
+        projectDir +
+        ' readiness-build',
+      'blockers:',
+      '- Select an incomplete tracer slice before running build-next.',
+      '- 1. Who are the exact user roles and approvers?',
+      '- 2. What fields are required, optional, or sensitive?',
+      '- 3. What notifications or integrations are required?',
+      '- 4. What retention, export, or compliance constraints apply?',
+    ])
+  })
+
   test('build-readiness reports ready when every question and slice is complete', async () => {
     const projectDir = makeProjectDir()
     __setKairosBuildDepsForTesting({

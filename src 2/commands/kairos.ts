@@ -941,18 +941,31 @@ async function handleBuildReadiness(rest: string[]): Promise<string> {
   const selectedSlice = manifest.tracerSlices?.find(
     slice => slice.id === manifest.selectedSliceId,
   )
+  const selectedSliceIsIncomplete =
+    selectedSlice !== undefined && !completedSliceIds.has(selectedSlice.id)
+  const hasIncompleteSlice = Boolean(
+    manifest.tracerSlices?.some(slice => !completedSliceIds.has(slice.id)),
+  )
   const selectedSliceLabel = selectedSlice
     ? `${selectedSlice.id} ${selectedSlice.title}`
     : '—'
-  const nextCommand =
-    selectedSlice && !completedSliceIds.has(selectedSlice.id)
-      ? `/kairos build-next ${manifest.projectDir} ${manifest.buildId}`
-      : '—'
+  let nextCommand = '—'
+  if (selectedSliceIsIncomplete) {
+    nextCommand = `/kairos build-next ${manifest.projectDir} ${manifest.buildId}`
+  } else if (hasIncompleteSlice) {
+    nextCommand = `/kairos build-select-next-prompt ${manifest.projectDir} ${manifest.buildId}`
+  }
   const questionReadiness = countAnsweredClarifyingQuestions(manifest)
   const unansweredQuestions = renderUnansweredClarifyingQuestions(manifest)
+  const blockers = [
+    ...(hasIncompleteSlice && !selectedSliceIsIncomplete
+      ? ['Select an incomplete tracer slice before running build-next.']
+      : []),
+    ...unansweredQuestions,
+  ]
   const blockerLines =
-    unansweredQuestions.length > 0
-      ? ['blockers:', ...unansweredQuestions.map(question => `- ${question}`)]
+    blockers.length > 0
+      ? ['blockers:', ...blockers.map(blocker => `- ${blocker}`)]
       : ['blockers: none']
 
   return [
