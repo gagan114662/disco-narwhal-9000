@@ -107,6 +107,7 @@ Main branch protections and checks already present in the repo include:
 - CODEOWNERS on trunk paths in `.github/CODEOWNERS`
 - trunk guard workflow in `.github/workflows/trunk-guard.yml`
 - daily structural-fix workflow in `.github/workflows/permanent-structural-fix-daily.yml`
+- Local proof command: `cd "src 2" && bun run proof:production`
 
 If you are changing guarded architecture paths, expect extra review friction and explicit approval requirements.
 
