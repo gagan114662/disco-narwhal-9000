@@ -336,12 +336,12 @@ function proveSdkStubs(sourceRoot: string): void {
   console.log(`Documented SDK unsupported surfaces: ${found.join(', ')}`)
 }
 
-function proveNoFocusedOrSkippedTests(repoRoot: string): void {
+function proveNoNonRunningTests(repoRoot: string): void {
   const testFiles = trackedFiles(repoRoot, 'src 2').filter(file =>
     /\.(test|spec)\.(cjs|cts|js|jsx|mjs|mts|ts|tsx)$/.test(file),
   )
   const modifierPattern =
-    /\b(?:describe|test|it)\s*\.\s*(?:only|skip)\b(?:\s*\.\s*each\b)?\s*\(/g
+    /\b(?:describe|test|it)\s*\.\s*(?:only|skip|todo|failing)\b(?:\s*\.\s*each\b)?\s*\(/g
   const findings: string[] = []
 
   for (const file of testFiles) {
@@ -356,11 +356,13 @@ function proveNoFocusedOrSkippedTests(repoRoot: string): void {
   }
 
   if (findings.length > 0) {
-    throw new Error(`Focused or skipped tests found:\n${findings.join('\n')}`)
+    throw new Error(
+      `Focused, skipped, pending, or expected-failing tests found:\n${findings.join('\n')}`,
+    )
   }
 
   console.log(
-    `No focused or skipped tests found across ${testFiles.length} test files`,
+    `No focused, skipped, pending, or expected-failing tests found across ${testFiles.length} test files`,
   )
 }
 
@@ -389,9 +391,12 @@ function main(): void {
     run('bun', ['test'], sourceRoot)
   })
 
-  step('test suite has no focused or skipped tests', () => {
-    proveNoFocusedOrSkippedTests(repoRoot)
-  })
+  step(
+    'test suite has no focused, skipped, pending, or expected-failing tests',
+    () => {
+      proveNoNonRunningTests(repoRoot)
+    },
+  )
 
   step('tracked worktree unchanged by proof run', () => {
     proveTrackedWorktreeClean(repoRoot)
