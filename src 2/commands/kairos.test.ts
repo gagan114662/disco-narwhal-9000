@@ -521,9 +521,11 @@ describe('/kairos command', () => {
     const answerOut = await runKairosCommand(
       `build-answer ${projectDir} questions-build 1 employee manager and HR approver`,
     )
-    expect(answerOut).toBe(
+    expect(answerOut.split('\n')).toEqual([
       'Answered question 1 for questions-build: employee manager and HR approver',
-    )
+      'unanswered clarifying questions remaining: 3',
+      `next command: /kairos build-unanswered ${projectDir} questions-build`,
+    ])
 
     const questionsOut = await runKairosCommand(
       `build-questions ${projectDir} questions-build`,

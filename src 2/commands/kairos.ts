@@ -736,14 +736,16 @@ async function handleBuildAnswer(rest: string[]): Promise<string> {
     return `No clarifying question ${parsed.questionNumber} found for ${parsed.buildId}. Valid question numbers are ${validRange}. Run \`/kairos build-questions ${parsed.projectDir} ${parsed.buildId}\` to inspect them.`
   }
 
-  await writer.writeBuildManifest(parsed.projectDir, {
+  const clarifyingQuestionAnswers = {
+    ...(manifest.clarifyingQuestionAnswers ?? {}),
+    [String(parsed.questionNumber)]: parsed.answer,
+  }
+  const updatedManifest = {
     ...manifest,
-    clarifyingQuestionAnswers: {
-      ...(manifest.clarifyingQuestionAnswers ?? {}),
-      [String(parsed.questionNumber)]: parsed.answer,
-    },
+    clarifyingQuestionAnswers,
     updatedAt: new Date().toISOString(),
-  })
+  }
+  await writer.writeBuildManifest(parsed.projectDir, updatedManifest)
   await writer.appendBuildEvent(parsed.projectDir, parsed.buildId, {
     version: 1,
     kind: 'clarifying_question_answered',
@@ -755,7 +757,13 @@ async function handleBuildAnswer(rest: string[]): Promise<string> {
     answer: parsed.answer,
   })
 
-  return `Answered question ${parsed.questionNumber} for ${parsed.buildId}: ${parsed.answer}`
+  const remainingQuestions =
+    renderUnansweredClarifyingQuestions(updatedManifest).length
+  return [
+    `Answered question ${parsed.questionNumber} for ${parsed.buildId}: ${parsed.answer}`,
+    `unanswered clarifying questions remaining: ${remainingQuestions}`,
+    `next command: /kairos build-unanswered ${parsed.projectDir} ${parsed.buildId}`,
+  ].join('\n')
 }
 
 async function handleBuildUnanswered(rest: string[]): Promise<string> {
