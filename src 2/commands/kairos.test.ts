@@ -199,6 +199,8 @@ describe('/kairos command', () => {
       buildId: 'build-test-1',
       projectDir,
       tenantId: 'local',
+      title: 'Leave Request Approval App',
+      brief: 'leave request approval app for hourly workers',
       status: 'draft',
       createdAt: '2026-04-25T18:30:00.000Z',
       updatedAt: '2026-04-25T18:30:00.000Z',
@@ -237,8 +239,8 @@ describe('/kairos command', () => {
     const out = await runKairosCommand(`builds ${projectDir}`)
     expect(out.split('\n')).toEqual([
       `Builds for ${projectDir}:`,
-      '- newer-build [draft] updated=2026-04-25T18:35:00.000Z',
-      '- older-build [draft] updated=2026-04-25T18:30:00.000Z',
+      '- newer-build [draft] Leave Request Approval App updated=2026-04-25T18:35:00.000Z',
+      '- older-build [draft] Vendor Onboarding Form updated=2026-04-25T18:30:00.000Z',
     ])
   })
 

@@ -17,6 +17,8 @@ export const kairosBuildManifestSchema = z.object({
   buildId: z.string().min(1),
   projectDir: z.string().min(1),
   tenantId: z.string().min(1),
+  title: z.string().min(1).optional(),
+  brief: z.string().min(1).optional(),
   status: kairosBuildStatusSchema,
   createdAt: z.string().min(1),
   updatedAt: z.string().min(1),

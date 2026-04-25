@@ -307,8 +307,10 @@ async function handleBuilds(projectDir: string): Promise<string> {
   return [
     `Builds for ${projectDir}:`,
     ...builds.map(
-      build =>
-        `- ${build.buildId} [${build.status}] updated=${build.updatedAt}`,
+      build => {
+        const title = build.title ? ` ${build.title}` : ''
+        return `- ${build.buildId} [${build.status}]${title} updated=${build.updatedAt}`
+      },
     ),
   ].join('\n')
 }

@@ -146,12 +146,15 @@ export async function createDraftBuild(
   const writer = await createWriter()
   const specPath = getProjectKairosBuildSpecPath(projectDir, buildId)
   const manifestPath = getProjectKairosBuildManifestPath(projectDir, buildId)
+  const title = deriveDraftTitle(trimmedBrief)
 
   await writer.writeBuildManifest(projectDir, {
     version: KAIROS_BUILD_STATE_VERSION,
     buildId,
     projectDir,
     tenantId: 'local',
+    title,
+    brief: trimmedBrief,
     status: 'draft',
     createdAt: timestamp,
     updatedAt: timestamp,
