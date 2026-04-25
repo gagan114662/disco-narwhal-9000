@@ -959,7 +959,10 @@ describe('/kairos command', () => {
     const out = await runKairosCommand(
       `build-summary ${projectDir} missing-build`,
     )
-    expect(out).toBe(`No build missing-build found for ${projectDir}.`)
+    expect(out.split('\n')).toEqual([
+      `No build missing-build found for ${projectDir}.`,
+      `builds command: /kairos builds ${projectDir}`,
+    ])
   })
 
   test('build-progress prints selected, completed, and pending tracer bullets', async () => {
