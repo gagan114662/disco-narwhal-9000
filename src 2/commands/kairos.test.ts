@@ -118,6 +118,7 @@ describe('/kairos command', () => {
     expect(out).toContain('/kairos build-slices')
     expect(out).toContain('/kairos build-select')
     expect(out).toContain('/kairos build-next')
+    expect(out).toContain('/kairos build-acceptance')
     expect(out).toContain('/kairos cloud deploy')
     expect(out).toContain('/kairos cloud-sync')
   })
@@ -206,6 +207,12 @@ describe('/kairos command', () => {
       tenantId: 'local',
       title: 'Leave Request Approval App',
       brief: 'leave request approval app for hourly workers',
+      acceptanceChecks: [
+        'A user can create a valid record from the primary form.',
+        'A reviewer can find and act on pending records.',
+        'Invalid or incomplete data is rejected with clear feedback.',
+        'Important changes are visible in an audit trail.',
+      ],
       tracerSlices: [
         {
           id: 'TB-1',
@@ -360,6 +367,34 @@ describe('/kairos command', () => {
   test('build-slices reports a missing build clearly', async () => {
     const projectDir = makeProjectDir()
     const out = await runKairosCommand(`build-slices ${projectDir} missing-build`)
+    expect(out).toBe(`No build missing-build found for ${projectDir}.`)
+  })
+
+  test('build-acceptance prints persisted acceptance checks', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'acceptance-build',
+      now: () => new Date('2026-04-25T19:05:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+
+    const out = await runKairosCommand(
+      `build-acceptance ${projectDir} acceptance-build`,
+    )
+    expect(out.split('\n')).toEqual([
+      'Acceptance checks for acceptance-build:',
+      '- A user can create a valid record from the primary form.',
+      '- A reviewer can find and act on pending records.',
+      '- Invalid or incomplete data is rejected with clear feedback.',
+      '- Important changes are visible in an audit trail.',
+    ])
+  })
+
+  test('build-acceptance reports a missing build clearly', async () => {
+    const projectDir = makeProjectDir()
+    const out = await runKairosCommand(
+      `build-acceptance ${projectDir} missing-build`,
+    )
     expect(out).toBe(`No build missing-build found for ${projectDir}.`)
   })
 

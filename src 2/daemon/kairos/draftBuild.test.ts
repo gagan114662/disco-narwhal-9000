@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import {
+  createDraftAcceptanceChecks,
   createDraftTracerSlices,
   deriveDraftTitle,
   renderDraftPrd,
@@ -62,6 +63,15 @@ describe('draft build PRD rendering', () => {
         implement:
           'add required-field validation and role checks at the command boundary',
       },
+    ])
+  })
+
+  test('creates deterministic acceptance checks for eval seeding', () => {
+    expect(createDraftAcceptanceChecks()).toEqual([
+      'A user can create a valid record from the primary form.',
+      'A reviewer can find and act on pending records.',
+      'Invalid or incomplete data is rejected with clear feedback.',
+      'Important changes are visible in an audit trail.',
     ])
   })
 })

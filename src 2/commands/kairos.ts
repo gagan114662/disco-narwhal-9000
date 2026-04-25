@@ -74,6 +74,7 @@ const HELP_TEXT = `Usage:
 /kairos build-slices [projectDir] <buildId>
 /kairos build-select [projectDir] <buildId> <sliceId>
 /kairos build-next [projectDir] <buildId>
+/kairos build-acceptance [projectDir] <buildId>
 /kairos pause
 /kairos resume
 /kairos dashboard
@@ -106,6 +107,7 @@ type Subcommand =
   | 'build-slices'
   | 'build-select'
   | 'build-next'
+  | 'build-acceptance'
   | 'pause'
   | 'resume'
   | 'dashboard'
@@ -131,6 +133,7 @@ const SUBCOMMANDS = new Set<Subcommand>([
   'build-slices',
   'build-select',
   'build-next',
+  'build-acceptance',
   'pause',
   'resume',
   'dashboard',
@@ -497,6 +500,30 @@ async function handleBuildSlices(rest: string[]): Promise<string> {
   ].join('\n')
 }
 
+async function handleBuildAcceptance(rest: string[]): Promise<string> {
+  const parsed = parseBuildShowArgs(rest)
+  if (parsed === null) {
+    return 'Usage: /kairos build-acceptance [projectDir] <buildId>'
+  }
+
+  const writer = await createStateWriter()
+  const manifest = await writer.readBuildManifest(
+    parsed.projectDir,
+    parsed.buildId,
+  )
+  if (!manifest) {
+    return `No build ${parsed.buildId} found for ${parsed.projectDir}.`
+  }
+  if (!manifest.acceptanceChecks || manifest.acceptanceChecks.length === 0) {
+    return `No acceptance checks found for ${parsed.buildId} in ${parsed.projectDir}.`
+  }
+
+  return [
+    `Acceptance checks for ${parsed.buildId}:`,
+    ...manifest.acceptanceChecks.map(check => `- ${check}`),
+  ].join('\n')
+}
+
 async function handleBuildSelect(rest: string[]): Promise<string> {
   const parsed = parseBuildSelectArgs(rest)
   if (parsed === null) {
@@ -786,6 +813,8 @@ export async function runKairosCommand(args: string): Promise<string> {
       return handleBuildSelect(rest)
     case 'build-next':
       return handleBuildNext(rest)
+    case 'build-acceptance':
+      return handleBuildAcceptance(rest)
     case 'pause':
       return handlePause()
     case 'resume':
@@ -827,7 +856,7 @@ const kairos = {
   name: 'kairos',
   description: 'Inspect and control the KAIROS background daemon',
   argumentHint:
-    'status|list|opt-in|opt-out|demo|build|builds|build-show|build-events|build-slices|build-select|build-next|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
+    'status|list|opt-in|opt-out|demo|build|builds|build-show|build-events|build-slices|build-select|build-next|build-acceptance|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
   load: () => import('./kairos-ui.js'),
 } satisfies Command
 

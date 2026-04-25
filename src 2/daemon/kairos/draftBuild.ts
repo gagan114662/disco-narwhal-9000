@@ -98,6 +98,15 @@ export function createDraftTracerSlices(): KairosBuildTracerSlice[] {
   ]
 }
 
+export function createDraftAcceptanceChecks(): string[] {
+  return [
+    'A user can create a valid record from the primary form.',
+    'A reviewer can find and act on pending records.',
+    'Invalid or incomplete data is rejected with clear feedback.',
+    'Important changes are visible in an audit trail.',
+  ]
+}
+
 function renderTracerSlices(slices: KairosBuildTracerSlice[]): string[] {
   return slices.flatMap((slice, index) => [
     `${index + 1}. ${slice.id}: ${slice.title}`,
@@ -110,6 +119,7 @@ export function renderDraftPrd(brief: string): string {
   const trimmedBrief = brief.trim()
   const title = deriveDraftTitle(trimmedBrief)
   const tracerSlices = createDraftTracerSlices()
+  const acceptanceChecks = createDraftAcceptanceChecks()
   return [
     `# ${title}`,
     '',
@@ -150,10 +160,7 @@ export function renderDraftPrd(brief: string): string {
     '',
     '## Acceptance Checks',
     '',
-    '- A user can create a valid record from the primary form.',
-    '- A reviewer can find and act on pending records.',
-    '- Invalid or incomplete data is rejected with clear feedback.',
-    '- Important changes are visible in an audit trail.',
+    ...acceptanceChecks.map(check => `- ${check}`),
     '',
     '## Tracer Bullet Slices',
     '',
@@ -193,6 +200,7 @@ export async function createDraftBuild(
   const manifestPath = getProjectKairosBuildManifestPath(projectDir, buildId)
   const title = deriveDraftTitle(trimmedBrief)
   const tracerSlices = createDraftTracerSlices()
+  const acceptanceChecks = createDraftAcceptanceChecks()
 
   await writer.writeBuildManifest(projectDir, {
     version: KAIROS_BUILD_STATE_VERSION,
@@ -201,6 +209,7 @@ export async function createDraftBuild(
     tenantId: 'local',
     title,
     brief: trimmedBrief,
+    acceptanceChecks,
     tracerSlices,
     status: 'draft',
     createdAt: timestamp,
