@@ -128,6 +128,7 @@ describe('/kairos command', () => {
     expect(out).toContain('/kairos build-non-goals')
     expect(out).toContain('/kairos build-users')
     expect(out).toContain('/kairos build-problem')
+    expect(out).toContain('/kairos build-traceability')
     expect(out).toContain('/kairos cloud deploy')
     expect(out).toContain('/kairos cloud-sync')
   })
@@ -250,6 +251,13 @@ describe('/kairos command', () => {
       ],
       problem:
         'Capture the business problem, affected users, and current workflow pain.',
+      traceabilitySeeds: [
+        {
+          id: 'BRIEF-1',
+          source: 'brief',
+          text: 'leave request approval app for hourly workers',
+        },
+      ],
       assumptions: [
         'The first build targets a browser-based internal workflow tool.',
         'A human reviewer will confirm roles, fields, and compliance constraints before implementation.',
@@ -608,6 +616,31 @@ describe('/kairos command', () => {
     expect(out).toBe(`No build missing-build found for ${projectDir}.`)
   })
 
+  test('build-traceability prints persisted draft traceability seeds', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'traceability-build',
+      now: () => new Date('2026-04-25T19:22:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+
+    const out = await runKairosCommand(
+      `build-traceability ${projectDir} traceability-build`,
+    )
+    expect(out.split('\n')).toEqual([
+      'Traceability seeds for traceability-build:',
+      '- BRIEF-1 [brief] leave request app',
+    ])
+  })
+
+  test('build-traceability reports a missing build clearly', async () => {
+    const projectDir = makeProjectDir()
+    const out = await runKairosCommand(
+      `build-traceability ${projectDir} missing-build`,
+    )
+    expect(out).toBe(`No build missing-build found for ${projectDir}.`)
+  })
+
   test('build-summary prints compact PRD metadata counts', async () => {
     const projectDir = makeProjectDir()
     __setKairosBuildDepsForTesting({
@@ -635,6 +668,7 @@ describe('/kairos command', () => {
       'assumptions: 4',
       'risks: 4',
       'tracer slices: 3',
+      'traceability seeds: 1',
       'brief: leave request app',
     ])
   })

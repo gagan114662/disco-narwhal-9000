@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto'
 import {
   KAIROS_BUILD_STATE_VERSION,
+  type KairosBuildTraceabilitySeed,
   type KairosBuildTracerSlice,
 } from './buildState.js'
 import {
@@ -98,6 +99,18 @@ export function createDraftTracerSlices(): KairosBuildTracerSlice[] {
   ]
 }
 
+export function createDraftTraceabilitySeeds(
+  brief: string,
+): KairosBuildTraceabilitySeed[] {
+  return [
+    {
+      id: 'BRIEF-1',
+      source: 'brief',
+      text: brief.trim(),
+    },
+  ]
+}
+
 export function createDraftAcceptanceChecks(): string[] {
   return [
     'A user can create a valid record from the primary form.',
@@ -178,6 +191,7 @@ export function renderDraftPrd(brief: string): string {
   const trimmedBrief = brief.trim()
   const title = deriveDraftTitle(trimmedBrief)
   const tracerSlices = createDraftTracerSlices()
+  const traceabilitySeeds = createDraftTraceabilitySeeds(trimmedBrief)
   const users = createDraftUsers()
   const problem = createDraftProblem()
   const goals = createDraftGoals()
@@ -239,7 +253,7 @@ export function renderDraftPrd(brief: string): string {
     '',
     '## Traceability Seed',
     '',
-    `- BRIEF-1: ${trimmedBrief}`,
+    ...traceabilitySeeds.map(seed => `- ${seed.id}: ${seed.text}`),
     '',
   ].join('\n')
 }
@@ -264,6 +278,7 @@ export async function createDraftBuild(
   const manifestPath = getProjectKairosBuildManifestPath(projectDir, buildId)
   const title = deriveDraftTitle(trimmedBrief)
   const tracerSlices = createDraftTracerSlices()
+  const traceabilitySeeds = createDraftTraceabilitySeeds(trimmedBrief)
   const users = createDraftUsers()
   const problem = createDraftProblem()
   const goals = createDraftGoals()
@@ -291,6 +306,7 @@ export async function createDraftBuild(
     assumptions,
     risks,
     tracerSlices,
+    traceabilitySeeds,
     status: 'draft',
     createdAt: timestamp,
     updatedAt: timestamp,

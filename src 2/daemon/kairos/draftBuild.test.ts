@@ -8,6 +8,7 @@ import {
   createDraftNonGoals,
   createDraftProblem,
   createDraftRisks,
+  createDraftTraceabilitySeeds,
   createDraftTracerSlices,
   createDraftUsers,
   deriveDraftTitle,
@@ -70,6 +71,16 @@ describe('draft build PRD rendering', () => {
           'incomplete records are rejected and unauthorized actions are blocked',
         implement:
           'add required-field validation and role checks at the command boundary',
+      },
+    ])
+  })
+
+  test('creates deterministic traceability seeds from the source brief', () => {
+    expect(createDraftTraceabilitySeeds(' vendor onboarding form ')).toEqual([
+      {
+        id: 'BRIEF-1',
+        source: 'brief',
+        text: 'vendor onboarding form',
       },
     ])
   })

@@ -19,6 +19,12 @@ export const kairosBuildTracerSliceSchema = z.object({
   implement: z.string().min(1),
 })
 
+export const kairosBuildTraceabilitySeedSchema = z.object({
+  id: z.string().min(1),
+  source: z.string().min(1),
+  text: z.string().min(1),
+})
+
 export const kairosBuildManifestSchema = z.object({
   version: z.literal(KAIROS_BUILD_STATE_VERSION),
   buildId: z.string().min(1),
@@ -36,6 +42,7 @@ export const kairosBuildManifestSchema = z.object({
   assumptions: z.array(z.string().min(1)).optional(),
   risks: z.array(z.string().min(1)).optional(),
   tracerSlices: z.array(kairosBuildTracerSliceSchema).optional(),
+  traceabilitySeeds: z.array(kairosBuildTraceabilitySeedSchema).optional(),
   selectedSliceId: z.string().min(1).optional(),
   status: kairosBuildStatusSchema,
   createdAt: z.string().min(1),
@@ -113,6 +120,9 @@ export const kairosBuildResultSchema = z.object({
 
 export type KairosBuildStatus = z.infer<typeof kairosBuildStatusSchema>
 export type KairosBuildTracerSlice = z.infer<typeof kairosBuildTracerSliceSchema>
+export type KairosBuildTraceabilitySeed = z.infer<
+  typeof kairosBuildTraceabilitySeedSchema
+>
 export type KairosBuildManifest = z.infer<typeof kairosBuildManifestSchema>
 export type KairosBuildEvent = z.infer<typeof kairosBuildEventSchema>
 export type KairosBuildResult = z.infer<typeof kairosBuildResultSchema>
