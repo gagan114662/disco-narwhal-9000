@@ -1623,7 +1623,11 @@ async function handleBuildCompleteSlice(rest: string[]): Promise<string> {
     return `Selected tracer slice ${manifest.selectedSliceId} is missing for ${parsed.buildId}.`
   }
   if ((manifest.completedSliceIds ?? []).includes(slice.id)) {
-    return `Tracer slice ${slice.id} is already complete for ${parsed.buildId}: ${slice.title}`
+    return [
+      `Tracer slice ${slice.id} is already complete for ${parsed.buildId}: ${slice.title}`,
+      `progress command: /kairos build-progress ${parsed.projectDir} ${parsed.buildId}`,
+      `readiness command: /kairos build-readiness ${parsed.projectDir} ${parsed.buildId}`,
+    ].join('\n')
   }
 
   const updatedAt = new Date().toISOString()

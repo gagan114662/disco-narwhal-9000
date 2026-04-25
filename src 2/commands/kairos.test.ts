@@ -1532,9 +1532,11 @@ describe('/kairos command', () => {
     const out = await runKairosCommand(
       `build-complete-slice ${projectDir} complete-build`,
     )
-    expect(out).toBe(
+    expect(out.split('\n')).toEqual([
       'Tracer slice TB-1 is already complete for complete-build: Record intake skeleton',
-    )
+      `progress command: /kairos build-progress ${projectDir} complete-build`,
+      `readiness command: /kairos build-readiness ${projectDir} complete-build`,
+    ])
 
     const eventsOut = await runKairosCommand(
       `build-events ${projectDir} complete-build`,
