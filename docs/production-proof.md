@@ -32,6 +32,10 @@ bun run proof:production
   status checks, includes administrators, and blocks force pushes/deletions.
 - Repository Actions defaults grant read-only workflow tokens and forbid
   workflow tokens from approving pull requests.
+- Repository security settings keep Dependabot security updates, secret
+  scanning, and secret scanning push protection enabled.
+- Dependabot version-update policy watches Bun dependencies under `src 2/` and
+  GitHub Actions weekly, with a bounded open-PR limit.
 - Current open PR check rollups have no red latest checks.
 - Workflow checkout actions stay pinned to Node 24-ready `actions/checkout@v5`.
 - GitHub `ci` and `permanent-structural-fix-daily` workflows keep
@@ -70,6 +74,8 @@ permanent-structural-fix-daily hosted steps verified
 Main branch protection verified
 Workflow token permissions verified
 Repository Actions default workflow permissions verified
+Repository security settings verified
+Dependabot update policy verified
 PRODUCTION PROOF PASSED
 ```
 
@@ -81,8 +87,9 @@ bun run proof:static
 
 That CI-friendly proof mode verifies test hygiene, workflow pins, workflow
 supply-chain/static-proof gates, least-privilege token permissions,
-incomplete-marker scanning, disabled command stub bounds, and SDK
-unsupported-surface bounds without requiring GitHub API access.
+Dependabot update-policy config, incomplete-marker scanning, disabled command
+stub bounds, and SDK unsupported-surface bounds without requiring GitHub API
+access.
 
 ## 8090 Comparison Boundary
 

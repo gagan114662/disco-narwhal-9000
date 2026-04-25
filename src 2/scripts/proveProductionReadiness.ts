@@ -1,6 +1,7 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import { spawnSync } from 'child_process'
+import { parse } from 'yaml'
 
 type RunResult = {
   databaseId: number
@@ -43,6 +44,33 @@ type BranchProtection = {
 type ActionsWorkflowPermissions = {
   default_workflow_permissions: string
   can_approve_pull_request_reviews: boolean
+}
+
+type RepositorySecurityAnalysis = {
+  dependabot_security_updates?: { status?: string }
+  secret_scanning?: { status?: string }
+  secret_scanning_push_protection?: { status?: string }
+}
+
+type RepositoryDetails = {
+  security_and_analysis?: RepositorySecurityAnalysis
+}
+
+type DependabotUpdate = {
+  'package-ecosystem'?: string
+  directory?: string
+  schedule?: {
+    interval?: string
+    day?: string
+    time?: string
+    timezone?: string
+  }
+  'open-pull-requests-limit'?: number
+}
+
+type DependabotConfig = {
+  version?: number
+  updates?: DependabotUpdate[]
 }
 
 type PullRequestCheck = {
@@ -112,6 +140,19 @@ const requiredHostedWorkflowSteps: Record<string, string[]> = {
 }
 
 const requiredMainBranchChecks = ['block-trunk-changes', 'verify']
+
+const requiredDependabotUpdates = [
+  {
+    ecosystem: 'bun',
+    directory: '/src 2',
+    time: '10:00',
+  },
+  {
+    ecosystem: 'github-actions',
+    directory: '/',
+    time: '10:30',
+  },
+]
 
 const allowedDisabledCommandStubs = [
   'src 2/commands/ant-trace/index.js',
@@ -376,6 +417,38 @@ function proveActionsDefaultWorkflowPermissions(repoRoot: string): void {
   console.log('Repository Actions default workflow permissions verified: read')
 }
 
+function proveRepositorySecuritySettings(repoRoot: string): void {
+  const repo = json<RepositoryDetails>(
+    'gh',
+    ['api', `repos/${repoSlug(repoRoot)}`],
+    repoRoot,
+  )
+  const security = repo.security_and_analysis
+  const failures: string[] = []
+
+  if (security?.dependabot_security_updates?.status !== 'enabled') {
+    failures.push('Dependabot security updates must be enabled')
+  }
+  if (security?.secret_scanning?.status !== 'enabled') {
+    failures.push('secret scanning must be enabled')
+  }
+  if (security?.secret_scanning_push_protection?.status !== 'enabled') {
+    failures.push('secret scanning push protection must be enabled')
+  }
+
+  if (failures.length > 0) {
+    throw new Error(
+      `Repository security settings are not production-ready:\n${failures.join(
+        '\n',
+      )}`,
+    )
+  }
+
+  console.log(
+    'Repository security settings verified: Dependabot security updates, secret scanning, push protection',
+  )
+}
+
 function proveOpenPrs(repoRoot: string): void {
   const prs = json<PullRequest[]>(
     'gh',
@@ -407,6 +480,70 @@ function proveOpenPrs(repoRoot: string): void {
     throw new Error(`Open PR checks are not green:\n${failures.join('\n')}`)
   }
   console.log(`Open PRs checked: ${prs.length}`)
+}
+
+function proveDependabotPolicy(repoRoot: string): void {
+  const config = parse(
+    readFileSync(join(repoRoot, '.github', 'dependabot.yml'), 'utf8'),
+  ) as DependabotConfig
+  const failures: string[] = []
+
+  if (config.version !== 2) {
+    failures.push('Dependabot config must use version: 2')
+  }
+
+  for (const required of requiredDependabotUpdates) {
+    const update = (config.updates ?? []).find(
+      candidate =>
+        candidate['package-ecosystem'] === required.ecosystem &&
+        candidate.directory === required.directory,
+    )
+
+    if (!update) {
+      failures.push(
+        `Dependabot must watch ${required.ecosystem} in ${required.directory}`,
+      )
+      continue
+    }
+
+    if (update.schedule?.interval !== 'weekly') {
+      failures.push(
+        `${required.ecosystem} updates must run on a weekly schedule`,
+      )
+    }
+    if (update.schedule?.day !== 'monday') {
+      failures.push(`${required.ecosystem} updates must run on monday`)
+    }
+    if (update.schedule?.timezone !== 'America/Toronto') {
+      failures.push(
+        `${required.ecosystem} updates must use America/Toronto timezone`,
+      )
+    }
+    if (update.schedule?.time !== required.time) {
+      failures.push(
+        `${required.ecosystem} updates must run at ${required.time}`,
+      )
+    }
+    if (update['open-pull-requests-limit'] !== 5) {
+      failures.push(
+        `${required.ecosystem} updates must cap open PRs at 5`,
+      )
+    }
+  }
+
+  if (failures.length > 0) {
+    throw new Error(
+      `Dependabot update policy is not production-ready:\n${failures.join(
+        '\n',
+      )}`,
+    )
+  }
+
+  console.log(
+    `Dependabot update policy verified: ${requiredDependabotUpdates
+      .map(update => `${update.ecosystem} ${update.directory}`)
+      .join(', ')}`,
+  )
 }
 
 function proveWorkflowActionPins(repoRoot: string): void {
@@ -690,6 +827,10 @@ function proveStaticGates(repoRoot: string, sourceRoot: string): void {
     proveWorkflowTokenPermissions(repoRoot)
   })
 
+  step('Dependabot update policy is enabled', () => {
+    proveDependabotPolicy(repoRoot)
+  })
+
   step('live incomplete markers are absent', () => {
     proveNoLiveIncompleteMarkers(repoRoot)
   })
@@ -779,6 +920,10 @@ function main(): void {
 
   step('repository Actions default permissions are read-only', () => {
     proveActionsDefaultWorkflowPermissions(repoRoot)
+  })
+
+  step('repository security settings are enabled', () => {
+    proveRepositorySecuritySettings(repoRoot)
   })
 
   step('open PR check rollups have no current red checks', () => {
