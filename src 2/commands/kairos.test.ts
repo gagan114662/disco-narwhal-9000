@@ -1396,6 +1396,25 @@ describe('/kairos command', () => {
     )
   })
 
+  test('build-select-next points the last selected tracer bullet at build-next', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'last-selected-build',
+      now: () => new Date('2026-04-25T19:49:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+    await runKairosCommand(`build-select ${projectDir} last-selected-build TB-3`)
+
+    const out = await runKairosCommand(
+      `build-select-next ${projectDir} last-selected-build`,
+    )
+    expect(out.split('\n')).toEqual([
+      'No next tracer slice found after TB-3 for last-selected-build.',
+      `next command: /kairos build-next ${projectDir} last-selected-build`,
+      `progress command: /kairos build-progress ${projectDir} last-selected-build`,
+    ])
+  })
+
   test('build-select-next reports when no incomplete tracer bullet remains', async () => {
     const projectDir = makeProjectDir()
     __setKairosBuildDepsForTesting({
