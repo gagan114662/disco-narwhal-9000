@@ -336,6 +336,34 @@ function proveSdkStubs(sourceRoot: string): void {
   console.log(`Documented SDK unsupported surfaces: ${found.join(', ')}`)
 }
 
+function proveNoFocusedOrSkippedTests(repoRoot: string): void {
+  const testFiles = trackedFiles(repoRoot, 'src 2').filter(file =>
+    /\.(test|spec)\.(cjs|cts|js|jsx|mjs|mts|ts|tsx)$/.test(file),
+  )
+  const modifierPattern =
+    /\b(?:describe|test|it)\s*\.\s*(?:only|skip)\b(?:\s*\.\s*each\b)?\s*\(/g
+  const findings: string[] = []
+
+  for (const file of testFiles) {
+    const content = readFileSync(join(repoRoot, file), 'utf8')
+    const lines = content.split('\n')
+    lines.forEach((line, index) => {
+      if (modifierPattern.test(line)) {
+        findings.push(`${file}:${index + 1}: ${line.trim()}`)
+      }
+      modifierPattern.lastIndex = 0
+    })
+  }
+
+  if (findings.length > 0) {
+    throw new Error(`Focused or skipped tests found:\n${findings.join('\n')}`)
+  }
+
+  console.log(
+    `No focused or skipped tests found across ${testFiles.length} test files`,
+  )
+}
+
 function proveTrackedWorktreeClean(repoRoot: string): void {
   if (process.env.PROOF_ALLOW_DIRTY === '1') {
     console.log('Skipped because PROOF_ALLOW_DIRTY=1')
@@ -359,6 +387,10 @@ function main(): void {
 
   step('full local test suite', () => {
     run('bun', ['test'], sourceRoot)
+  })
+
+  step('test suite has no focused or skipped tests', () => {
+    proveNoFocusedOrSkippedTests(repoRoot)
   })
 
   step('tracked worktree unchanged by proof run', () => {
