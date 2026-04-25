@@ -978,8 +978,15 @@ async function handleBuildSelectNext(rest: string[]): Promise<string> {
         slice => slice.id === manifest.selectedSliceId,
       )
     : -1
-  const nextSlice = manifest.tracerSlices[currentIndex + 1]
+  const completedSliceIds = new Set(manifest.completedSliceIds ?? [])
+  const nextSlice = manifest.tracerSlices.find(
+    (slice, index) => index > currentIndex && !completedSliceIds.has(slice.id),
+  )
   if (!nextSlice) {
+    if (completedSliceIds.size > 0) {
+      const after = manifest.selectedSliceId ?? 'the beginning'
+      return `No incomplete tracer slice found after ${after} for ${parsed.buildId}.`
+    }
     return `No next tracer slice found for ${parsed.buildId}.`
   }
 

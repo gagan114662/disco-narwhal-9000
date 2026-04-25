@@ -886,6 +886,61 @@ describe('/kairos command', () => {
     })
   })
 
+  test('build-select-next skips completed tracer bullets', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'select-next-build',
+      now: () => new Date('2026-04-25T19:48:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+    await runKairosCommand(`build-select ${projectDir} select-next-build TB-1`)
+    await runKairosCommand(
+      `build-complete-slice ${projectDir} select-next-build`,
+    )
+    await runKairosCommand(`build-select ${projectDir} select-next-build TB-2`)
+    await runKairosCommand(
+      `build-complete-slice ${projectDir} select-next-build`,
+    )
+    await runKairosCommand(`build-select ${projectDir} select-next-build TB-1`)
+
+    const out = await runKairosCommand(
+      `build-select-next ${projectDir} select-next-build`,
+    )
+    expect(out).toContain(
+      'Selected TB-3 for select-next-build: Validation and role guardrails',
+    )
+    expect(readJson(getProjectKairosBuildManifestPath(projectDir, 'select-next-build'))).toMatchObject(
+      {
+        selectedSliceId: 'TB-3',
+        completedSliceIds: ['TB-1', 'TB-2'],
+      },
+    )
+  })
+
+  test('build-select-next reports when no incomplete tracer bullet remains', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'all-complete-build',
+      now: () => new Date('2026-04-25T19:50:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+    for (const sliceId of ['TB-1', 'TB-2', 'TB-3']) {
+      await runKairosCommand(
+        `build-select ${projectDir} all-complete-build ${sliceId}`,
+      )
+      await runKairosCommand(
+        `build-complete-slice ${projectDir} all-complete-build`,
+      )
+    }
+
+    const out = await runKairosCommand(
+      `build-select-next ${projectDir} all-complete-build`,
+    )
+    expect(out).toBe(
+      'No incomplete tracer slice found after TB-3 for all-complete-build.',
+    )
+  })
+
   test('build-select-next reports a missing build clearly', async () => {
     const projectDir = makeProjectDir()
     const out = await runKairosCommand(
