@@ -336,9 +336,22 @@ function proveSdkStubs(sourceRoot: string): void {
   console.log(`Documented SDK unsupported surfaces: ${found.join(', ')}`)
 }
 
+function proveTrackedWorktreeClean(repoRoot: string): void {
+  if (process.env.PROOF_ALLOW_DIRTY === '1') {
+    console.log('Skipped because PROOF_ALLOW_DIRTY=1')
+    return
+  }
+  run('git', ['diff', '--exit-code'], repoRoot, true)
+  run('git', ['diff', '--cached', '--exit-code'], repoRoot, true)
+}
+
 function main(): void {
   const repoRoot = run('git', ['rev-parse', '--show-toplevel'], process.cwd(), true)
   const sourceRoot = join(repoRoot, 'src 2')
+
+  step('tracked worktree clean before proof run', () => {
+    proveTrackedWorktreeClean(repoRoot)
+  })
 
   step('local production pipeline', () => {
     run('bun', ['run', 'pipeline'], sourceRoot)
@@ -349,12 +362,7 @@ function main(): void {
   })
 
   step('tracked worktree unchanged by proof run', () => {
-    if (process.env.PROOF_ALLOW_DIRTY === '1') {
-      console.log('Skipped because PROOF_ALLOW_DIRTY=1')
-      return
-    }
-    run('git', ['diff', '--exit-code'], repoRoot, true)
-    run('git', ['diff', '--cached', '--exit-code'], repoRoot, true)
+    proveTrackedWorktreeClean(repoRoot)
   })
 
   step('workflow checkout actions are Node 24 ready', () => {
