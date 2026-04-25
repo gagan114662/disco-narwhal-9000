@@ -113,6 +113,7 @@ describe('/kairos command', () => {
     expect(out).toContain('/kairos demo')
     expect(out).toContain('/kairos build')
     expect(out).toContain('/kairos builds')
+    expect(out).toContain('/kairos build-show')
     expect(out).toContain('/kairos cloud deploy')
     expect(out).toContain('/kairos cloud-sync')
   })
@@ -248,6 +249,30 @@ describe('/kairos command', () => {
     const projectDir = makeProjectDir()
     const out = await runKairosCommand(`builds ${projectDir}`)
     expect(out).toBe(`No builds found for ${projectDir}.`)
+  })
+
+  test('build-show prints one persisted build with its draft spec', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'show-build',
+      now: () => new Date('2026-04-25T18:40:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} vendor onboarding form`)
+
+    const out = await runKairosCommand(`build-show ${projectDir} show-build`)
+    expect(out).toContain('Build: show-build')
+    expect(out).toContain(`project: ${projectDir}`)
+    expect(out).toContain('title: Vendor Onboarding Form')
+    expect(out).toContain('status: draft')
+    expect(out).toContain('brief: vendor onboarding form')
+    expect(out).toContain('--- spec ---')
+    expect(out).toContain('# Vendor Onboarding Form')
+  })
+
+  test('build-show reports a missing build clearly', async () => {
+    const projectDir = makeProjectDir()
+    const out = await runKairosCommand(`build-show ${projectDir} missing-build`)
+    expect(out).toBe(`No build missing-build found for ${projectDir}.`)
   })
 
   test('pause writes pause.json and resume clears it', async () => {

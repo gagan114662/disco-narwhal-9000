@@ -68,6 +68,7 @@ const HELP_TEXT = `Usage:
 /kairos demo [projectDir]
 /kairos build [projectDir] <brief>
 /kairos builds [projectDir]
+/kairos build-show [projectDir] <buildId>
 /kairos pause
 /kairos resume
 /kairos dashboard
@@ -95,6 +96,7 @@ type Subcommand =
   | 'demo'
   | 'build'
   | 'builds'
+  | 'build-show'
   | 'pause'
   | 'resume'
   | 'dashboard'
@@ -115,6 +117,7 @@ const SUBCOMMANDS = new Set<Subcommand>([
   'demo',
   'build',
   'builds',
+  'build-show',
   'pause',
   'resume',
   'dashboard',
@@ -261,15 +264,19 @@ export function __resetKairosBuildDepsForTesting(): void {
   kairosBuildDeps = {}
 }
 
+function isPathLike(token: string): boolean {
+  return (
+    token.startsWith('/') ||
+    token.startsWith('.') ||
+    token.startsWith('~') ||
+    token.includes('\\')
+  )
+}
+
 function parseBuildArgs(rest: string[]): { projectDir: string; brief: string } | null {
   if (rest.length === 0) return null
   const [first, ...remaining] = rest
-  const firstLooksLikePath =
-    first.startsWith('/') ||
-    first.startsWith('.') ||
-    first.startsWith('~') ||
-    first.includes('\\')
-  if (firstLooksLikePath) {
+  if (isPathLike(first)) {
     const brief = remaining.join(' ').trim()
     if (!brief) return null
     return { projectDir: resolveProjectDir(first), brief }
@@ -277,6 +284,18 @@ function parseBuildArgs(rest: string[]): { projectDir: string; brief: string } |
   const brief = rest.join(' ').trim()
   if (!brief) return null
   return { projectDir: resolveProjectDir(undefined), brief }
+}
+
+function parseBuildShowArgs(
+  rest: string[],
+): { projectDir: string; buildId: string } | null {
+  if (rest.length === 0) return null
+  const [first, second] = rest
+  if (isPathLike(first)) {
+    if (!second) return null
+    return { projectDir: resolveProjectDir(first), buildId: second }
+  }
+  return { projectDir: resolveProjectDir(undefined), buildId: first }
 }
 
 async function handleBuild(rest: string[]): Promise<string> {
@@ -312,6 +331,35 @@ async function handleBuilds(projectDir: string): Promise<string> {
         return `- ${build.buildId} [${build.status}]${title} updated=${build.updatedAt}`
       },
     ),
+  ].join('\n')
+}
+
+async function handleBuildShow(rest: string[]): Promise<string> {
+  const parsed = parseBuildShowArgs(rest)
+  if (parsed === null) {
+    return 'Usage: /kairos build-show [projectDir] <buildId>'
+  }
+
+  const writer = await createStateWriter()
+  const manifest = await writer.readBuildManifest(
+    parsed.projectDir,
+    parsed.buildId,
+  )
+  if (!manifest) {
+    return `No build ${parsed.buildId} found for ${parsed.projectDir}.`
+  }
+  const spec = await writer.readBuildSpec(parsed.projectDir, parsed.buildId)
+  return [
+    `Build: ${manifest.buildId}`,
+    `project: ${manifest.projectDir}`,
+    `title: ${formatOptionalValue(manifest.title)}`,
+    `status: ${manifest.status}`,
+    `brief: ${formatOptionalValue(manifest.brief)}`,
+    `created: ${manifest.createdAt}`,
+    `updated: ${manifest.updatedAt}`,
+    `spec: ${formatOptionalValue(manifest.specPath)}`,
+    '--- spec ---',
+    spec ?? '(spec not found)',
   ].join('\n')
 }
 
@@ -500,6 +548,8 @@ export async function runKairosCommand(args: string): Promise<string> {
       return handleBuild(rest)
     case 'builds':
       return handleBuilds(resolveProjectDir(rest[0]))
+    case 'build-show':
+      return handleBuildShow(rest)
     case 'pause':
       return handlePause()
     case 'resume':
@@ -541,7 +591,7 @@ const kairos = {
   name: 'kairos',
   description: 'Inspect and control the KAIROS background daemon',
   argumentHint:
-    'status|list|opt-in|opt-out|demo|build|builds|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
+    'status|list|opt-in|opt-out|demo|build|builds|build-show|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
   load: () => import('./kairos-ui.js'),
 } satisfies Command
 

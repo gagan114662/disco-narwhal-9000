@@ -74,6 +74,9 @@ describe('Kairos state writer build state', () => {
     expect(readFileSync(join(buildDir, 'spec.md'), 'utf8')).toBe(
       '# Leave Request App\n',
     )
+    expect(await writer.readBuildSpec(projectDir, buildId)).toBe(
+      '# Leave Request App\n',
+    )
     expect(readFileSync(join(buildDir, 'transcript-pointer.txt'), 'utf8')).toBe(
       'session-abc\n',
     )

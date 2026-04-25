@@ -282,6 +282,19 @@ export async function createStateWriter() {
         await writeFile(path, spec, 'utf8')
       })
     },
+    async readBuildSpec(
+      projectDir: string,
+      buildId: string,
+    ): Promise<string | null> {
+      try {
+        return await readFile(
+          getProjectKairosBuildSpecPath(projectDir, buildId),
+          'utf8',
+        )
+      } catch {
+        return null
+      }
+    },
     async appendBuildEvent(
       projectDir: string,
       buildId: string,
