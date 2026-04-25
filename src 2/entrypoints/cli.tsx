@@ -208,6 +208,29 @@ async function main(): Promise<void> {
     return;
   }
 
+  // KAIROS is this rebuilt distribution's primary product surface. Keep this
+  // path outside feature flags so the documented CLI works in production.
+  if (args[0] === 'kairos') {
+    profileCheckpoint('cli_kairos_path');
+    const {
+      enableConfigs
+    } = await import('../utils/config.js');
+    enableConfigs();
+    const {
+      initSinks
+    } = await import('../utils/sinks.js');
+    initSinks();
+    const {
+      runKairosCommand
+    } = await import('../commands/kairos.js');
+    const result = await runKairosCommand(args.slice(1).join(' '));
+    if (result) {
+      // biome-ignore lint/suspicious/noConsole:: intentional CLI output
+      console.log(result);
+    }
+    return;
+  }
+
   // Fast-path for `--daemon-worker=<kind>` (internal — supervisor spawns this).
   // Must come before the daemon subcommand check: spawned per-worker, so
   // perf-sensitive. No enableConfigs(), no analytics sinks at this layer —
@@ -278,7 +301,9 @@ async function main(): Promise<void> {
   }
 
   // Fast-path for `claude daemon [subcommand]`: long-running supervisor.
-  if (feature('DAEMON') && args[0] === 'daemon') {
+  // This rebuilt distribution documents `claude daemon kairos`; do not hide it
+  // behind the upstream DAEMON bundle flag.
+  if (args[0] === 'daemon') {
     profileCheckpoint('cli_daemon_path');
     const {
       enableConfigs
@@ -291,7 +316,14 @@ async function main(): Promise<void> {
     const {
       daemonMain
     } = await import('../daemon/main.js');
-    await daemonMain(args.slice(1));
+    try {
+      await daemonMain(args.slice(1));
+    } catch (error) {
+      const {
+        exitWithError
+      } = await import('../utils/process.js');
+      exitWithError(error instanceof Error ? error.message : String(error));
+    }
     return;
   }
 

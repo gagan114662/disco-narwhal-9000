@@ -1,5 +1,6 @@
 import { createServer, type Server, type Socket } from 'net'
-import { chmod, mkdir, rm } from 'fs/promises'
+import { mkdir, rm } from 'fs/promises'
+import { spawn } from 'child_process'
 import { dirname } from 'path'
 import { createAbortController } from '../../utils/abortController.js'
 import { createFileStateCacheWithSizeLimit } from '../../utils/fileStateCache.js'
@@ -40,6 +41,39 @@ const callCounts = new Map<string, number>()
 export type ToolsSocketServerHandle = {
   socketPath: string
   stop(): Promise<void>
+}
+
+async function chmodSocketPath(path: string, mode: number): Promise<void> {
+  if (process.platform === 'win32') {
+    return
+  }
+
+  await runSocketPathCommand('chmod', [mode.toString(8), path])
+}
+
+async function removeSocketPath(path: string): Promise<void> {
+  if (process.platform === 'win32') {
+    await rm(path, { force: true })
+    return
+  }
+
+  await runSocketPathCommand('rm', ['-f', path])
+}
+
+async function runSocketPathCommand(command: string, args: string[]): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(command, args, {
+      stdio: 'ignore',
+    })
+    child.once('error', reject)
+    child.once('exit', code => {
+      if (code === 0) {
+        resolve()
+      } else {
+        reject(new Error(`${command} exited with code ${code ?? 'unknown'}`))
+      }
+    })
+  })
 }
 
 function createToolUseContext(permissionContext: ReturnType<typeof deserializeToolPermissionContext>, tools: Tool[]): ToolUseContext {
@@ -243,7 +277,7 @@ export async function startToolsSocketServer(socketPath: string): Promise<ToolsS
   await ensureRpcGrantDir()
   await cleanupExpiredRpcGrants()
   await mkdir(dirname(socketPath), { recursive: true })
-  await rm(socketPath, { force: true })
+  await removeSocketPath(socketPath)
 
   let server: Server | null = createServer(socket => {
     let buffer = ''
@@ -296,7 +330,7 @@ export async function startToolsSocketServer(socketPath: string): Promise<ToolsS
     server?.once('error', reject)
     server?.listen(socketPath, () => resolve())
   })
-  await chmod(socketPath, 0o600)
+  await chmodSocketPath(socketPath, 0o600)
 
   return {
     socketPath,
@@ -308,7 +342,7 @@ export async function startToolsSocketServer(socketPath: string): Promise<ToolsS
           activeServer.close(error => (error ? reject(error) : resolve()))
         })
       }
-      await rm(socketPath, { force: true })
+      await removeSocketPath(socketPath)
     },
   }
 }

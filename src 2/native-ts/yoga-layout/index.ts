@@ -30,7 +30,7 @@
  * Also implemented for spec parity (not used by Ink):
  *   - baseline alignment (align-items/align-self: baseline)
  *
- * Not implemented (not used by Ink):
+ * Intentionally omitted because Ink does not use them:
  *   - aspect-ratio
  *   - box-sizing: content-box
  *   - RTL direction (Ink always passes Direction.LTR)
@@ -809,7 +809,7 @@ export class Node {
     this.markDirty()
   }
   setBoxSizing(_: BoxSizing): void {
-    // Not implemented — Ink doesn't use content-box
+    // Ink does not use content-box; keep the default point-box behavior.
   }
 
   // -- Style setters: spacing

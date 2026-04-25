@@ -13,6 +13,22 @@ import type {
   CallToolResult,
   ToolAnnotations,
 } from '@modelcontextprotocol/sdk/types.js'
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { randomUUID } from 'crypto'
+import { appendFile, writeFile } from 'fs/promises'
+import { dirname, join } from 'path'
+import {
+  listSessionsImpl,
+  parseSessionInfoFromLite,
+  type SessionInfo,
+} from '../utils/listSessionsImpl.js'
+import {
+  readSessionLite,
+  readTranscriptForLoad,
+  resolveSessionFilePath,
+} from '../utils/sessionStoragePortable.js'
+import { cronToHuman } from '../utils/cron.js'
+import { parseJSONL } from '../utils/json.js'
 
 // Control protocol types for SDK builders (bridge subpath consumers)
 /** @alpha */
@@ -37,54 +53,286 @@ export * from './sdk/toolTypes.js'
 import type {
   SDKMessage,
   SDKResultMessage,
-  SDKSessionInfo,
   SDKUserMessage,
 } from './sdk/coreTypes.js'
 // Import types needed for function signatures
 import type {
   AnyZodRawShape,
-  ForkSessionOptions,
-  ForkSessionResult,
-  GetSessionInfoOptions,
-  GetSessionMessagesOptions,
   InferShape,
-  InternalOptions,
-  InternalQuery,
-  ListSessionsOptions,
   McpSdkServerConfigWithInstance,
   Options,
   Query,
   SDKSession,
   SDKSessionOptions,
   SdkMcpToolDefinition,
-  SessionMessage,
-  SessionMutationOptions,
 } from './sdk/runtimeTypes.js'
 
-export type {
-  ListSessionsOptions,
-  GetSessionInfoOptions,
-  SessionMutationOptions,
-  ForkSessionOptions,
-  ForkSessionResult,
-  SDKSessionInfo,
+type InternalOptions = Options
+type InternalQuery = Query
+
+export type SDKSessionInfo = SessionInfo
+
+export type ListSessionsOptions = {
+  dir?: string
+  limit?: number
+  offset?: number
+  includeWorktrees?: boolean
+}
+
+export type GetSessionInfoOptions = {
+  dir?: string
+}
+
+export type GetSessionMessagesOptions = {
+  dir?: string
+  limit?: number
+  offset?: number
+  includeSystemMessages?: boolean
+}
+
+export type SessionMutationOptions = {
+  dir?: string
+}
+
+export type ForkSessionOptions = {
+  dir?: string
+  upToMessageId?: string
+  title?: string
+}
+
+export type ForkSessionResult = {
+  sessionId: string
+}
+
+export type SessionMessage = {
+  type: string
+  uuid: string
+  parentUuid: string | null
+  logicalParentUuid?: string | null
+  sessionId?: string
+  timestamp?: string
+  isSidechain?: boolean
+  message?: unknown
+  [key: string]: unknown
+}
+
+type ContentReplacementEntry = {
+  type: 'content-replacement'
+  sessionId: string
+  replacements: unknown[]
+}
+
+function unsupportedSdkApi(name: string): never {
+  throw new Error(
+    `${name} is not available in this rebuilt CLI distribution yet. The KAIROS CLI and daemon are supported; the public Agent SDK compatibility layer is partial.`,
+  )
+}
+
+function sessionDir(options: unknown): string | undefined {
+  return (options as { dir?: string } | undefined)?.dir
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function isSessionMessage(entry: unknown): entry is SessionMessage {
+  if (!isRecord(entry)) return false
+  if (typeof entry.type !== 'string') return false
+  if (typeof entry.uuid !== 'string') return false
+  return entry.parentUuid === null || typeof entry.parentUuid === 'string'
+}
+
+function isConversationMessage(
+  entry: SessionMessage,
+  includeSystemMessages: boolean,
+): boolean {
+  return (
+    entry.type === 'user' ||
+    entry.type === 'assistant' ||
+    entry.type === 'attachment' ||
+    (includeSystemMessages && entry.type === 'system')
+  )
+}
+
+function parseTranscriptMessages(buf: Buffer): Map<string, SessionMessage> {
+  const messages = new Map<string, SessionMessage>()
+  const progressBridge = new Map<string, string | null>()
+
+  for (const entry of parseJSONL<unknown>(buf)) {
+    if (
+      isRecord(entry) &&
+      entry.type === 'progress' &&
+      typeof entry.uuid === 'string'
+    ) {
+      const parentUuid =
+        entry.parentUuid === null || typeof entry.parentUuid === 'string'
+          ? (entry.parentUuid as string | null)
+          : null
+      const uuid = entry.uuid
+      progressBridge.set(
+        uuid,
+        parentUuid && progressBridge.has(parentUuid)
+          ? (progressBridge.get(parentUuid) ?? null)
+          : parentUuid,
+      )
+      continue
+    }
+
+    if (!isSessionMessage(entry)) continue
+    if (
+      !['user', 'assistant', 'attachment', 'system'].includes(entry.type) ||
+      entry.isSidechain === true
+    ) {
+      continue
+    }
+
+    if (entry.parentUuid && progressBridge.has(entry.parentUuid)) {
+      entry.parentUuid = progressBridge.get(entry.parentUuid) ?? null
+    }
+    messages.set(entry.uuid, entry)
+  }
+
+  return messages
+}
+
+function findLatestLeaf(
+  messages: Iterable<SessionMessage>,
+): SessionMessage | undefined {
+  const all = [...messages]
+  const parentUuids = new Set(
+    all
+      .map(message => message.parentUuid)
+      .filter((uuid): uuid is string => typeof uuid === 'string'),
+  )
+
+  let latest: SessionMessage | undefined
+  let maxTime = -Infinity
+  for (let index = 0; index < all.length; index++) {
+    const message = all[index]!
+    if (parentUuids.has(message.uuid)) continue
+    const timestamp =
+      typeof message.timestamp === 'string'
+        ? Date.parse(message.timestamp)
+        : NaN
+    const time = Number.isFinite(timestamp) ? timestamp : index
+    if (time > maxTime) {
+      maxTime = time
+      latest = message
+    }
+  }
+  return latest
+}
+
+function buildSessionChain(
+  messages: Map<string, SessionMessage>,
+  leaf: SessionMessage,
+): SessionMessage[] {
+  const chain: SessionMessage[] = []
+  const seen = new Set<string>()
+  let current: SessionMessage | undefined = leaf
+
+  while (current && !seen.has(current.uuid)) {
+    seen.add(current.uuid)
+    chain.push(current)
+    current = current.parentUuid ? messages.get(current.parentUuid) : undefined
+  }
+
+  chain.reverse()
+  return chain
+}
+
+function contentReplacementRecordsFor(
+  buf: Buffer,
+  sessionId: string,
+): unknown[] {
+  return parseJSONL<unknown>(buf).flatMap(entry => {
+    if (!isRecord(entry)) return []
+    if (entry.type !== 'content-replacement') return []
+    if (entry.sessionId !== sessionId) return []
+    if (!Array.isArray(entry.replacements)) return []
+    return (entry as ContentReplacementEntry).replacements
+  })
+}
+
+function cloneForkMessage(
+  entry: SessionMessage,
+  sourceSessionId: string,
+  forkSessionId: string,
+  uuidMap: Map<string, string>,
+): SessionMessage {
+  const originalUuid = entry.uuid
+  const forkedUuid = uuidMap.get(originalUuid)
+  if (!forkedUuid) {
+    throw new Error(
+      `Unable to fork message without UUID mapping: ${originalUuid}`,
+    )
+  }
+
+  return {
+    ...entry,
+    uuid: forkedUuid,
+    parentUuid: entry.parentUuid
+      ? (uuidMap.get(entry.parentUuid) ?? null)
+      : null,
+    logicalParentUuid: entry.logicalParentUuid
+      ? (uuidMap.get(entry.logicalParentUuid) ?? null)
+      : entry.logicalParentUuid,
+    sessionId: forkSessionId,
+    isSidechain: false,
+    forkedFrom: {
+      sessionId: sourceSessionId,
+      messageUuid: originalUuid,
+    },
+  }
+}
+
+function findForkBoundary(
+  chain: SessionMessage[],
+  upToMessageId: string | undefined,
+): number {
+  if (!upToMessageId) return chain.length
+  const index = chain.findIndex(message => message.uuid === upToMessageId)
+  if (index === -1) {
+    throw new Error(`Message not found in session chain: ${upToMessageId}`)
+  }
+  return index + 1
+}
+
+async function resolveMutableSessionFile(
+  sessionId: string,
+  options: unknown,
+): Promise<string> {
+  const resolved = await resolveSessionFilePath(sessionId, sessionDir(options))
+  if (!resolved) {
+    throw new Error(`Session not found: ${sessionId}`)
+  }
+  return resolved.filePath
 }
 
 export function tool<Schema extends AnyZodRawShape>(
-  _name: string,
-  _description: string,
-  _inputSchema: Schema,
-  _handler: (
+  name: string,
+  description: string,
+  inputSchema: Schema,
+  handler: (
     args: InferShape<Schema>,
     extra: unknown,
   ) => Promise<CallToolResult>,
-  _extras?: {
+  extras?: {
     annotations?: ToolAnnotations
     searchHint?: string
     alwaysLoad?: boolean
   },
 ): SdkMcpToolDefinition<Schema> {
-  throw new Error('not implemented')
+  const definition = {
+    name,
+    description,
+    inputSchema,
+    handler,
+  } satisfies SdkMcpToolDefinition<Schema>
+  return extras
+    ? ({ ...definition, ...extras } as SdkMcpToolDefinition<Schema>)
+    : definition
 }
 
 type CreateSdkMcpServerOptions = {
@@ -101,24 +349,50 @@ type CreateSdkMcpServerOptions = {
  * If your SDK MCP calls will run longer than 60s, override CLAUDE_CODE_STREAM_CLOSE_TIMEOUT
  */
 export function createSdkMcpServer(
-  _options: CreateSdkMcpServerOptions,
+  options: CreateSdkMcpServerOptions,
 ): McpSdkServerConfigWithInstance {
-  throw new Error('not implemented')
+  const server = new McpServer(
+    {
+      name: options.name,
+      version: options.version ?? '1.0.0',
+    },
+    {
+      capabilities: {
+        tools: options.tools ? {} : undefined,
+      },
+    },
+  )
+  for (const toolDef of options.tools ?? []) {
+    server.tool(
+      toolDef.name,
+      toolDef.description,
+      toolDef.inputSchema,
+      toolDef.handler,
+    )
+  }
+  return {
+    type: 'sdk',
+    name: options.name,
+    instance: server,
+  } as McpSdkServerConfigWithInstance
 }
 
 export class AbortError extends Error {}
 
 /** @internal */
-export function query(_params: {
+export function query(params: {
   prompt: string | AsyncIterable<SDKUserMessage>
   options?: InternalOptions
 }): InternalQuery
-export function query(_params: {
+export function query(params: {
   prompt: string | AsyncIterable<SDKUserMessage>
   options?: Options
 }): Query
-export function query(): Query {
-  throw new Error('query is not implemented in the SDK')
+export function query(params: {
+  prompt: string | AsyncIterable<SDKUserMessage>
+  options?: InternalOptions | Options
+}): Query {
+  unsupportedSdkApi('query')
 }
 
 /**
@@ -127,9 +401,9 @@ export function query(): Query {
  * @alpha
  */
 export function unstable_v2_createSession(
-  _options: SDKSessionOptions,
+  options: SDKSessionOptions,
 ): SDKSession {
-  throw new Error('unstable_v2_createSession is not implemented in the SDK')
+  unsupportedSdkApi('unstable_v2_createSession')
 }
 
 /**
@@ -138,10 +412,10 @@ export function unstable_v2_createSession(
  * @alpha
  */
 export function unstable_v2_resumeSession(
-  _sessionId: string,
-  _options: SDKSessionOptions,
+  sessionId: string,
+  options: SDKSessionOptions,
 ): SDKSession {
-  throw new Error('unstable_v2_resumeSession is not implemented in the SDK')
+  unsupportedSdkApi('unstable_v2_resumeSession')
 }
 
 // @[MODEL LAUNCH]: Update the example model ID in this docstring.
@@ -158,10 +432,10 @@ export function unstable_v2_resumeSession(
  * ```
  */
 export async function unstable_v2_prompt(
-  _message: string,
-  _options: SDKSessionOptions,
+  message: string,
+  options: SDKSessionOptions,
 ): Promise<SDKResultMessage> {
-  throw new Error('unstable_v2_prompt is not implemented in the SDK')
+  unsupportedSdkApi('unstable_v2_prompt')
 }
 
 /**
@@ -176,10 +450,28 @@ export async function unstable_v2_prompt(
  * @returns Array of messages, or empty array if session not found
  */
 export async function getSessionMessages(
-  _sessionId: string,
-  _options?: GetSessionMessagesOptions,
+  sessionId: string,
+  options?: GetSessionMessagesOptions,
 ): Promise<SessionMessage[]> {
-  throw new Error('getSessionMessages is not implemented in the SDK')
+  const resolved = await resolveSessionFilePath(sessionId, sessionDir(options))
+  if (!resolved) return []
+
+  const { postBoundaryBuf } = await readTranscriptForLoad(
+    resolved.filePath,
+    resolved.fileSize,
+  )
+  const messages = parseTranscriptMessages(postBoundaryBuf)
+  const leaf = findLatestLeaf(messages.values())
+  if (!leaf) return []
+
+  const includeSystemMessages = options?.includeSystemMessages === true
+  const offset = Math.max(0, options?.offset ?? 0)
+  const limit = options?.limit ?? 0
+  const chain = buildSessionChain(messages, leaf).filter(message =>
+    isConversationMessage(message, includeSystemMessages),
+  )
+  const page = chain.slice(offset)
+  return limit > 0 ? page.slice(0, limit) : page
 }
 
 /**
@@ -202,9 +494,9 @@ export async function getSessionMessages(
  * ```
  */
 export async function listSessions(
-  _options?: ListSessionsOptions,
+  options?: ListSessionsOptions,
 ): Promise<SDKSessionInfo[]> {
-  throw new Error('listSessions is not implemented in the SDK')
+  return (await listSessionsImpl(options)) as SDKSessionInfo[]
 }
 
 /**
@@ -217,10 +509,16 @@ export async function listSessions(
  * @param options - `{ dir?: string }` project path; omit to search all project directories
  */
 export async function getSessionInfo(
-  _sessionId: string,
-  _options?: GetSessionInfoOptions,
+  sessionId: string,
+  options?: GetSessionInfoOptions,
 ): Promise<SDKSessionInfo | undefined> {
-  throw new Error('getSessionInfo is not implemented in the SDK')
+  const resolved = await resolveSessionFilePath(sessionId, sessionDir(options))
+  if (!resolved) return undefined
+  const lite = await readSessionLite(resolved.filePath)
+  if (!lite) return undefined
+  return (
+    parseSessionInfoFromLite(sessionId, lite, resolved.projectPath) ?? undefined
+  ) as SDKSessionInfo | undefined
 }
 
 /**
@@ -230,11 +528,20 @@ export async function getSessionInfo(
  * @param options - `{ dir?: string }` project path; omit to search all projects
  */
 export async function renameSession(
-  _sessionId: string,
-  _title: string,
-  _options?: SessionMutationOptions,
+  sessionId: string,
+  title: string,
+  options?: SessionMutationOptions,
 ): Promise<void> {
-  throw new Error('renameSession is not implemented in the SDK')
+  if (title.trim().length === 0) {
+    throw new Error('Session title cannot be empty')
+  }
+  const filePath = await resolveMutableSessionFile(sessionId, options)
+  await appendFile(
+    filePath,
+    JSON.stringify({ type: 'custom-title', customTitle: title, sessionId }) +
+      '\n',
+    'utf8',
+  )
 }
 
 /**
@@ -244,11 +551,16 @@ export async function renameSession(
  * @param options - `{ dir?: string }` project path; omit to search all projects
  */
 export async function tagSession(
-  _sessionId: string,
-  _tag: string | null,
-  _options?: SessionMutationOptions,
+  sessionId: string,
+  tag: string | null,
+  options?: SessionMutationOptions,
 ): Promise<void> {
-  throw new Error('tagSession is not implemented in the SDK')
+  const filePath = await resolveMutableSessionFile(sessionId, options)
+  await appendFile(
+    filePath,
+    JSON.stringify({ type: 'tag', tag: tag ?? '', sessionId }) + '\n',
+    'utf8',
+  )
 }
 
 /**
@@ -266,10 +578,72 @@ export async function tagSession(
  * @returns `{ sessionId }` — UUID of the new forked session
  */
 export async function forkSession(
-  _sessionId: string,
-  _options?: ForkSessionOptions,
+  sessionId: string,
+  options?: ForkSessionOptions,
 ): Promise<ForkSessionResult> {
-  throw new Error('forkSession is not implemented in the SDK')
+  if (options?.title !== undefined && options.title.trim().length === 0) {
+    throw new Error('Session title cannot be empty')
+  }
+
+  const resolved = await resolveSessionFilePath(sessionId, sessionDir(options))
+  if (!resolved) {
+    throw new Error(`Session not found: ${sessionId}`)
+  }
+
+  const { postBoundaryBuf } = await readTranscriptForLoad(
+    resolved.filePath,
+    resolved.fileSize,
+  )
+  const messages = parseTranscriptMessages(postBoundaryBuf)
+  const leaf = findLatestLeaf(messages.values())
+  if (!leaf) {
+    throw new Error(`No messages to fork: ${sessionId}`)
+  }
+
+  const sourceChain = buildSessionChain(messages, leaf)
+  const forkBoundary = findForkBoundary(sourceChain, options?.upToMessageId)
+  const forkSource = sourceChain.slice(0, forkBoundary)
+  if (forkSource.length === 0) {
+    throw new Error(`No messages to fork: ${sessionId}`)
+  }
+
+  const forkSessionId = randomUUID()
+  const uuidMap = new Map(
+    forkSource.map(message => [message.uuid, randomUUID()] as const),
+  )
+  const forkedMessages = forkSource.map(message =>
+    cloneForkMessage(message, sessionId, forkSessionId, uuidMap),
+  )
+  const lines = forkedMessages.map(message => JSON.stringify(message))
+
+  if (options?.title) {
+    lines.push(
+      JSON.stringify({
+        type: 'custom-title',
+        customTitle: options.title.trim(),
+        sessionId: forkSessionId,
+      }),
+    )
+  }
+
+  const replacements = contentReplacementRecordsFor(postBoundaryBuf, sessionId)
+  if (replacements.length > 0) {
+    lines.push(
+      JSON.stringify({
+        type: 'content-replacement',
+        sessionId: forkSessionId,
+        replacements,
+      }),
+    )
+  }
+
+  const forkPath = join(dirname(resolved.filePath), `${forkSessionId}.jsonl`)
+  await writeFile(forkPath, lines.join('\n') + '\n', {
+    encoding: 'utf8',
+    mode: 0o600,
+  })
+
+  return { sessionId: forkSessionId }
 }
 
 // ============================================================================
@@ -352,7 +726,7 @@ export function watchScheduledTasks(_opts: {
   signal: AbortSignal
   getJitterConfig?: () => CronJitterConfig
 }): ScheduledTasksHandle {
-  throw new Error('not implemented')
+  unsupportedSdkApi('watchScheduledTasks')
 }
 
 /**
@@ -361,7 +735,26 @@ export function watchScheduledTasks(_opts: {
  * @internal
  */
 export function buildMissedTaskNotification(_missed: CronTask[]): string {
-  throw new Error('not implemented')
+  const plural = _missed.length > 1
+  const header =
+    `The following one-shot scheduled task${plural ? 's were' : ' was'} missed while Claude was not running. ` +
+    `${plural ? 'They have' : 'It has'} already been removed from .claude/scheduled_tasks.json.\n\n` +
+    `Do NOT execute ${plural ? 'these prompts' : 'this prompt'} yet. ` +
+    `First use the AskUserQuestion tool to ask whether to run ${plural ? 'each one' : 'it'} now. ` +
+    `Only execute if the user confirms.`
+
+  const blocks = _missed.map(t => {
+    const meta = `[${cronToHuman(t.cron)}, created ${new Date(t.createdAt).toLocaleString()}]`
+    const backtickRuns = t.prompt.match(/`+/g) ?? []
+    let longestRun = 0
+    for (const run of backtickRuns) {
+      longestRun = Math.max(longestRun, run.length)
+    }
+    const fence = '`'.repeat(Math.max(3, longestRun + 1))
+    return `${meta}\n${fence}\n${t.prompt}\n${fence}`
+  })
+
+  return `${header}\n\n${blocks.join('\n\n')}`
 }
 
 /**
@@ -439,5 +832,5 @@ export type RemoteControlHandle = {
 export async function connectRemoteControl(
   _opts: ConnectRemoteControlOptions,
 ): Promise<RemoteControlHandle | null> {
-  throw new Error('not implemented')
+  unsupportedSdkApi('connectRemoteControl')
 }

@@ -1,12 +1,18 @@
-name: permanent-structural-fix-daily
+name: ci
 
 on:
-  schedule:
-    - cron: '17 9 * * *'
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  permanent-structural-fix:
+  verify:
     runs-on: ubuntu-latest
     env:
       ANTHROPIC_API_KEY: ci-test-key
@@ -26,8 +32,11 @@ jobs:
       - name: Audit dependencies
         run: bun audit
 
-      - name: Run permanent structural fix loop
-        run: bun run structural-fix:daily
+      - name: Run production pipeline
+        run: bun run pipeline
+
+      - name: Run full test suite
+        run: bun test
 
       - name: Run static production proof gates
         run: bun run proof:static

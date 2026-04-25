@@ -73,7 +73,7 @@ describe('resolveBrowserHarnessCommand', () => {
     const dir = makeTempDir()
     makeExecutable(dir, 'browser-harness')
     delete process.env[BROWSER_HARNESS_PATH_ENV]
-    process.env.PATH = dir
+    process.env.PATH = [dir, ORIGINAL_SYSTEM_PATH].filter(Boolean).join(':')
 
     const resolved = await resolveBrowserHarnessCommand()
     expect(resolved).not.toBeNull()

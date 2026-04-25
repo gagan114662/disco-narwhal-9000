@@ -1,6 +1,5 @@
 import {
   type ClaudeForChromeContext,
-  createClaudeForChromeMcpServer,
   type Logger,
   type PermissionMode,
 } from '@ant/claude-for-chrome-mcp'
@@ -20,6 +19,9 @@ import { logForDebugging } from '../debug.js'
 import { isEnvTruthy } from '../envUtils.js'
 import { sideQuery } from '../sideQuery.js'
 import { getAllSocketPaths, getSecureSocketPath } from './common.js'
+import { createClaudeForChromeMcpServerFromOptionalPackage } from './package.js'
+
+export { createClaudeForChromeMcpServerFromOptionalPackage } from './package.js'
 
 const EXTENSION_DOWNLOAD_URL = 'https://claude.ai/chrome'
 const BUG_REPORT_URL =
@@ -250,7 +252,7 @@ export async function runClaudeInChromeMcpServer(): Promise<void> {
   initializeAnalyticsSink()
   const context = createChromeContext()
 
-  const server = createClaudeForChromeMcpServer(context)
+  const server = createClaudeForChromeMcpServerFromOptionalPackage(context)
   const transport = new StdioServerTransport()
 
   // Exit when parent process dies (stdin pipe closes).
