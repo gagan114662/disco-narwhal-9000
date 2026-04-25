@@ -537,13 +537,17 @@ async function handleBuilds(projectDir: string): Promise<string> {
   }
   return [
     `Builds for ${projectDir}:`,
-    ...builds.map(
+    ...builds.flatMap(
       build => {
         const title = build.title ? ` ${build.title}` : ''
         const selected = build.selectedSliceId
           ? ` selected=${build.selectedSliceId}`
           : ''
-        return `- ${build.buildId} [${build.status}]${title}${selected} updated=${build.updatedAt}`
+        return [
+          `- ${build.buildId} [${build.status}]${title}${selected} updated=${build.updatedAt}`,
+          `  show command: /kairos build-show ${build.projectDir} ${build.buildId}`,
+          `  summary command: /kairos build-summary ${build.projectDir} ${build.buildId}`,
+        ]
       },
     ),
   ].join('\n')

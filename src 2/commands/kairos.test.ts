@@ -332,7 +332,19 @@ describe('/kairos command', () => {
       '- newer-build [draft] Leave Request Approval App selected=TB-2 updated=',
     )
     expect(lines[2]).toBe(
+      `  show command: /kairos build-show ${projectDir} newer-build`,
+    )
+    expect(lines[3]).toBe(
+      `  summary command: /kairos build-summary ${projectDir} newer-build`,
+    )
+    expect(lines[4]).toBe(
       '- older-build [draft] Vendor Onboarding Form updated=2026-04-25T18:30:00.000Z',
+    )
+    expect(lines[5]).toBe(
+      `  show command: /kairos build-show ${projectDir} older-build`,
+    )
+    expect(lines[6]).toBe(
+      `  summary command: /kairos build-summary ${projectDir} older-build`,
     )
   })
 
