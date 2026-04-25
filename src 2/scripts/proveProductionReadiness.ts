@@ -1,6 +1,7 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import { spawnSync } from 'child_process'
+import { parse } from 'yaml'
 
 type RunResult = {
   databaseId: number
@@ -38,6 +39,42 @@ type BranchProtection = {
   enforce_admins?: { enabled: boolean }
   allow_force_pushes?: { enabled: boolean }
   allow_deletions?: { enabled: boolean }
+}
+
+type ActionsWorkflowPermissions = {
+  default_workflow_permissions: string
+  can_approve_pull_request_reviews: boolean
+}
+
+type RepositorySecurityAnalysis = {
+  dependabot_security_updates?: { status?: string }
+  secret_scanning?: { status?: string }
+  secret_scanning_push_protection?: { status?: string }
+}
+
+type RepositoryDetails = {
+  security_and_analysis?: RepositorySecurityAnalysis
+}
+
+type DependabotUpdate = {
+  'package-ecosystem'?: string
+  directory?: string
+  schedule?: {
+    interval?: string
+    day?: string
+    time?: string
+    timezone?: string
+  }
+  'open-pull-requests-limit'?: number
+  ignore?: Array<{
+    'dependency-name'?: string
+    versions?: string[]
+  }>
+}
+
+type DependabotConfig = {
+  version?: number
+  updates?: DependabotUpdate[]
 }
 
 type PullRequestCheck = {
@@ -81,6 +118,15 @@ const workflowStaticProofFiles = [
   '.github/workflows/permanent-structural-fix-daily.yml',
 ]
 
+const requiredWorkflowPermissions: Record<string, string[]> = {
+  '.github/workflows/ci.yml': ['contents: read'],
+  '.github/workflows/permanent-structural-fix-daily.yml': ['contents: read'],
+  '.github/workflows/trunk-guard.yml': [
+    'contents: read',
+    'pull-requests: read',
+  ],
+}
+
 const requiredHostedWorkflowSteps: Record<string, string[]> = {
   ci: [
     'Install dependencies',
@@ -98,6 +144,27 @@ const requiredHostedWorkflowSteps: Record<string, string[]> = {
 }
 
 const requiredMainBranchChecks = ['block-trunk-changes', 'verify']
+
+const requiredDependabotUpdates = [
+  {
+    ecosystem: 'bun',
+    directory: '/src 2',
+    time: '10:00',
+    ignoredVersions: [
+      { dependency: 'eslint', versions: ['>=10'] },
+      { dependency: 'ink', versions: ['>=7'] },
+      { dependency: 'typescript', versions: ['>=6'] },
+    ],
+  },
+  {
+    ecosystem: 'github-actions',
+    directory: '/',
+    time: '10:30',
+    ignoredVersions: [
+      { dependency: 'actions/checkout', versions: ['>=6'] },
+    ],
+  },
+]
 
 const allowedDisabledCommandStubs = [
   'src 2/commands/ant-trace/index.js',
@@ -335,6 +402,65 @@ function proveMainBranchProtection(repoRoot: string): void {
   )
 }
 
+function proveActionsDefaultWorkflowPermissions(repoRoot: string): void {
+  const permissions = json<ActionsWorkflowPermissions>(
+    'gh',
+    ['api', `repos/${repoSlug(repoRoot)}/actions/permissions/workflow`],
+    repoRoot,
+  )
+  const failures: string[] = []
+
+  if (permissions.default_workflow_permissions !== 'read') {
+    failures.push(
+      `default workflow token permissions are ${permissions.default_workflow_permissions}, expected read`,
+    )
+  }
+
+  if (permissions.can_approve_pull_request_reviews !== false) {
+    failures.push('workflow token must not be able to approve pull requests')
+  }
+
+  if (failures.length > 0) {
+    throw new Error(
+      `Repository Actions workflow permissions are not production-ready:\n${failures.join('\n')}`,
+    )
+  }
+
+  console.log('Repository Actions default workflow permissions verified: read')
+}
+
+function proveRepositorySecuritySettings(repoRoot: string): void {
+  const repo = json<RepositoryDetails>(
+    'gh',
+    ['api', `repos/${repoSlug(repoRoot)}`],
+    repoRoot,
+  )
+  const security = repo.security_and_analysis
+  const failures: string[] = []
+
+  if (security?.dependabot_security_updates?.status !== 'enabled') {
+    failures.push('Dependabot security updates must be enabled')
+  }
+  if (security?.secret_scanning?.status !== 'enabled') {
+    failures.push('secret scanning must be enabled')
+  }
+  if (security?.secret_scanning_push_protection?.status !== 'enabled') {
+    failures.push('secret scanning push protection must be enabled')
+  }
+
+  if (failures.length > 0) {
+    throw new Error(
+      `Repository security settings are not production-ready:\n${failures.join(
+        '\n',
+      )}`,
+    )
+  }
+
+  console.log(
+    'Repository security settings verified: Dependabot security updates, secret scanning, push protection',
+  )
+}
+
 function proveOpenPrs(repoRoot: string): void {
   const prs = json<PullRequest[]>(
     'gh',
@@ -366,6 +492,90 @@ function proveOpenPrs(repoRoot: string): void {
     throw new Error(`Open PR checks are not green:\n${failures.join('\n')}`)
   }
   console.log(`Open PRs checked: ${prs.length}`)
+}
+
+function proveDependabotPolicy(repoRoot: string): void {
+  const config = parse(
+    readFileSync(join(repoRoot, '.github', 'dependabot.yml'), 'utf8'),
+  ) as DependabotConfig
+  const failures: string[] = []
+
+  if (config.version !== 2) {
+    failures.push('Dependabot config must use version: 2')
+  }
+
+  for (const required of requiredDependabotUpdates) {
+    const update = (config.updates ?? []).find(
+      candidate =>
+        candidate['package-ecosystem'] === required.ecosystem &&
+        candidate.directory === required.directory,
+    )
+
+    if (!update) {
+      failures.push(
+        `Dependabot must watch ${required.ecosystem} in ${required.directory}`,
+      )
+      continue
+    }
+
+    if (update.schedule?.interval !== 'weekly') {
+      failures.push(
+        `${required.ecosystem} updates must run on a weekly schedule`,
+      )
+    }
+    if (update.schedule?.day !== 'monday') {
+      failures.push(`${required.ecosystem} updates must run on monday`)
+    }
+    if (update.schedule?.timezone !== 'America/Toronto') {
+      failures.push(
+        `${required.ecosystem} updates must use America/Toronto timezone`,
+      )
+    }
+    if (update.schedule?.time !== required.time) {
+      failures.push(
+        `${required.ecosystem} updates must run at ${required.time}`,
+      )
+    }
+    if (update['open-pull-requests-limit'] !== 5) {
+      failures.push(
+        `${required.ecosystem} updates must cap open PRs at 5`,
+      )
+    }
+
+    for (const ignored of required.ignoredVersions) {
+      const ignoreRule = (update.ignore ?? []).find(
+        candidate => candidate['dependency-name'] === ignored.dependency,
+      )
+      if (!ignoreRule) {
+        failures.push(
+          `${required.ecosystem} updates must ignore known-breaking ${ignored.dependency} versions`,
+        )
+        continue
+      }
+
+      for (const version of ignored.versions) {
+        if (!(ignoreRule.versions ?? []).includes(version)) {
+          failures.push(
+            `${required.ecosystem} updates must ignore ${ignored.dependency} ${version}`,
+          )
+        }
+      }
+    }
+  }
+
+  if (failures.length > 0) {
+    throw new Error(
+      `Dependabot update policy is not production-ready:\n${failures.join(
+        '\n',
+      )}`,
+    )
+  }
+
+  console.log(
+    `Dependabot update policy verified: ${requiredDependabotUpdates
+      .map(update => `${update.ecosystem} ${update.directory}`)
+      .join(', ')}`,
+  )
 }
 
 function proveWorkflowActionPins(repoRoot: string): void {
@@ -439,6 +649,40 @@ function proveWorkflowStaticProofGates(repoRoot: string): void {
 
   console.log(
     `Workflow static production proof gates verified: ${workflowStaticProofFiles.join(', ')}`,
+  )
+}
+
+function proveWorkflowTokenPermissions(repoRoot: string): void {
+  const failures: string[] = []
+  const writePermissionPattern = /^\s*[a-z-]+:\s*write\s*$/m
+
+  for (const [file, permissions] of Object.entries(requiredWorkflowPermissions)) {
+    const workflow = readFileSync(join(repoRoot, file), 'utf8')
+    const expectedBlock = `permissions:\n${permissions
+      .map(permission => `  ${permission}`)
+      .join('\n')}`
+
+    if (!workflow.includes(expectedBlock)) {
+      failures.push(`${file}: missing exact least-privilege permissions block`)
+    }
+    if (/^\s*permissions:\s*(?:read-all|write-all)\s*$/m.test(workflow)) {
+      failures.push(`${file}: must not use broad read-all/write-all permissions`)
+    }
+    if (writePermissionPattern.test(workflow)) {
+      failures.push(`${file}: must not request write token permissions`)
+    }
+  }
+
+  if (failures.length > 0) {
+    throw new Error(
+      `Workflow token permissions are not least-privilege:\n${failures.join('\n')}`,
+    )
+  }
+
+  console.log(
+    `Workflow token permissions verified: ${Object.keys(
+      requiredWorkflowPermissions,
+    ).join(', ')}`,
   )
 }
 
@@ -611,6 +855,14 @@ function proveStaticGates(repoRoot: string, sourceRoot: string): void {
     proveWorkflowStaticProofGates(repoRoot)
   })
 
+  step('workflow token permissions are least-privilege', () => {
+    proveWorkflowTokenPermissions(repoRoot)
+  })
+
+  step('Dependabot update policy is enabled', () => {
+    proveDependabotPolicy(repoRoot)
+  })
+
   step('live incomplete markers are absent', () => {
     proveNoLiveIncompleteMarkers(repoRoot)
   })
@@ -678,6 +930,10 @@ function main(): void {
     proveWorkflowStaticProofGates(repoRoot)
   })
 
+  step('workflow token permissions are least-privilege', () => {
+    proveWorkflowTokenPermissions(repoRoot)
+  })
+
   step('live incomplete markers are absent', () => {
     proveNoLiveIncompleteMarkers(repoRoot)
   })
@@ -692,6 +948,14 @@ function main(): void {
 
   step('main branch protection requires green checks', () => {
     proveMainBranchProtection(repoRoot)
+  })
+
+  step('repository Actions default permissions are read-only', () => {
+    proveActionsDefaultWorkflowPermissions(repoRoot)
+  })
+
+  step('repository security settings are enabled', () => {
+    proveRepositorySecuritySettings(repoRoot)
   })
 
   step('open PR check rollups have no current red checks', () => {
