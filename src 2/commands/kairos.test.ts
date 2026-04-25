@@ -119,6 +119,7 @@ describe('/kairos command', () => {
     expect(out).toContain('/kairos build-select')
     expect(out).toContain('/kairos build-next')
     expect(out).toContain('/kairos build-acceptance')
+    expect(out).toContain('/kairos build-questions')
     expect(out).toContain('/kairos cloud deploy')
     expect(out).toContain('/kairos cloud-sync')
   })
@@ -212,6 +213,12 @@ describe('/kairos command', () => {
         'A reviewer can find and act on pending records.',
         'Invalid or incomplete data is rejected with clear feedback.',
         'Important changes are visible in an audit trail.',
+      ],
+      clarifyingQuestions: [
+        'Who are the exact user roles and approvers?',
+        'What fields are required, optional, or sensitive?',
+        'What notifications or integrations are required?',
+        'What retention, export, or compliance constraints apply?',
       ],
       tracerSlices: [
         {
@@ -394,6 +401,34 @@ describe('/kairos command', () => {
     const projectDir = makeProjectDir()
     const out = await runKairosCommand(
       `build-acceptance ${projectDir} missing-build`,
+    )
+    expect(out).toBe(`No build missing-build found for ${projectDir}.`)
+  })
+
+  test('build-questions prints persisted clarifying questions', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'questions-build',
+      now: () => new Date('2026-04-25T19:10:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+
+    const out = await runKairosCommand(
+      `build-questions ${projectDir} questions-build`,
+    )
+    expect(out.split('\n')).toEqual([
+      'Clarifying questions for questions-build:',
+      '1. Who are the exact user roles and approvers?',
+      '2. What fields are required, optional, or sensitive?',
+      '3. What notifications or integrations are required?',
+      '4. What retention, export, or compliance constraints apply?',
+    ])
+  })
+
+  test('build-questions reports a missing build clearly', async () => {
+    const projectDir = makeProjectDir()
+    const out = await runKairosCommand(
+      `build-questions ${projectDir} missing-build`,
     )
     expect(out).toBe(`No build missing-build found for ${projectDir}.`)
   })

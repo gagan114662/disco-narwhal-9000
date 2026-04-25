@@ -107,6 +107,15 @@ export function createDraftAcceptanceChecks(): string[] {
   ]
 }
 
+export function createDraftClarifyingQuestions(): string[] {
+  return [
+    'Who are the exact user roles and approvers?',
+    'What fields are required, optional, or sensitive?',
+    'What notifications or integrations are required?',
+    'What retention, export, or compliance constraints apply?',
+  ]
+}
+
 function renderTracerSlices(slices: KairosBuildTracerSlice[]): string[] {
   return slices.flatMap((slice, index) => [
     `${index + 1}. ${slice.id}: ${slice.title}`,
@@ -120,6 +129,7 @@ export function renderDraftPrd(brief: string): string {
   const title = deriveDraftTitle(trimmedBrief)
   const tracerSlices = createDraftTracerSlices()
   const acceptanceChecks = createDraftAcceptanceChecks()
+  const clarifyingQuestions = createDraftClarifyingQuestions()
   return [
     `# ${title}`,
     '',
@@ -168,10 +178,7 @@ export function renderDraftPrd(brief: string): string {
     '',
     '## Clarifying Questions',
     '',
-    '1. Who are the exact user roles and approvers?',
-    '2. What fields are required, optional, or sensitive?',
-    '3. What notifications or integrations are required?',
-    '4. What retention, export, or compliance constraints apply?',
+    ...clarifyingQuestions.map((question, index) => `${index + 1}. ${question}`),
     '',
     '## Traceability Seed',
     '',
@@ -201,6 +208,7 @@ export async function createDraftBuild(
   const title = deriveDraftTitle(trimmedBrief)
   const tracerSlices = createDraftTracerSlices()
   const acceptanceChecks = createDraftAcceptanceChecks()
+  const clarifyingQuestions = createDraftClarifyingQuestions()
 
   await writer.writeBuildManifest(projectDir, {
     version: KAIROS_BUILD_STATE_VERSION,
@@ -210,6 +218,7 @@ export async function createDraftBuild(
     title,
     brief: trimmedBrief,
     acceptanceChecks,
+    clarifyingQuestions,
     tracerSlices,
     status: 'draft',
     createdAt: timestamp,

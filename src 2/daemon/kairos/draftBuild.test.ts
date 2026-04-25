@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import {
   createDraftAcceptanceChecks,
+  createDraftClarifyingQuestions,
   createDraftTracerSlices,
   deriveDraftTitle,
   renderDraftPrd,
@@ -72,6 +73,15 @@ describe('draft build PRD rendering', () => {
       'A reviewer can find and act on pending records.',
       'Invalid or incomplete data is rejected with clear feedback.',
       'Important changes are visible in an audit trail.',
+    ])
+  })
+
+  test('creates deterministic clarifying questions for vague briefs', () => {
+    expect(createDraftClarifyingQuestions()).toEqual([
+      'Who are the exact user roles and approvers?',
+      'What fields are required, optional, or sensitive?',
+      'What notifications or integrations are required?',
+      'What retention, export, or compliance constraints apply?',
     ])
   })
 })
