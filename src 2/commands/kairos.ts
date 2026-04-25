@@ -762,6 +762,16 @@ async function handleBuildPrdOutline(rest: string[]): Promise<string> {
     manifest.functionalRequirements,
   )
   appendBulletSection(lines, 'acceptance checks', manifest.acceptanceChecks)
+  appendBulletSection(lines, 'assumptions', manifest.assumptions)
+  appendBulletSection(lines, 'risks', manifest.risks)
+  if (manifest.clarifyingQuestions && manifest.clarifyingQuestions.length > 0) {
+    lines.push(
+      'clarifying questions:',
+      ...manifest.clarifyingQuestions.map(
+        (question, index) => `${index + 1}. ${question}`,
+      ),
+    )
+  }
   if (manifest.traceabilitySeeds && manifest.traceabilitySeeds.length > 0) {
     lines.push(
       'traceability seeds:',
