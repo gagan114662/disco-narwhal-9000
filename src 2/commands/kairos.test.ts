@@ -124,6 +124,7 @@ describe('/kairos command', () => {
     expect(out).toContain('/kairos build-summary')
     expect(out).toContain('/kairos build-assumptions')
     expect(out).toContain('/kairos build-risks')
+    expect(out).toContain('/kairos build-goals')
     expect(out).toContain('/kairos cloud deploy')
     expect(out).toContain('/kairos cloud-sync')
   })
@@ -229,6 +230,11 @@ describe('/kairos command', () => {
         'List/detail views for submitted records.',
         'Role-aware approval or status workflow where applicable.',
         'Audit trail for important state changes.',
+      ],
+      goals: [
+        'Convert the brief into a buildable internal workflow app.',
+        'Preserve spec clauses as future eval and audit anchors.',
+        'Identify missing compliance, data, and approval requirements before build.',
       ],
       assumptions: [
         'The first build targets a browser-based internal workflow tool.',
@@ -483,6 +489,33 @@ describe('/kairos command', () => {
     expect(out).toBe(`No build missing-build found for ${projectDir}.`)
   })
 
+  test('build-goals prints persisted draft goals', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'goals-build',
+      now: () => new Date('2026-04-25T19:17:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+
+    const out = await runKairosCommand(
+      `build-goals ${projectDir} goals-build`,
+    )
+    expect(out.split('\n')).toEqual([
+      'Goals for goals-build:',
+      '- Convert the brief into a buildable internal workflow app.',
+      '- Preserve spec clauses as future eval and audit anchors.',
+      '- Identify missing compliance, data, and approval requirements before build.',
+    ])
+  })
+
+  test('build-goals reports a missing build clearly', async () => {
+    const projectDir = makeProjectDir()
+    const out = await runKairosCommand(
+      `build-goals ${projectDir} missing-build`,
+    )
+    expect(out).toBe(`No build missing-build found for ${projectDir}.`)
+  })
+
   test('build-summary prints compact PRD metadata counts', async () => {
     const projectDir = makeProjectDir()
     __setKairosBuildDepsForTesting({
@@ -500,6 +533,7 @@ describe('/kairos command', () => {
       'title: Leave Request App',
       'status: draft',
       'selected slice: TB-1',
+      'goals: 3',
       'functional requirements: 4',
       'acceptance checks: 4',
       'clarifying questions: 4',

@@ -107,6 +107,14 @@ export function createDraftAcceptanceChecks(): string[] {
   ]
 }
 
+export function createDraftGoals(): string[] {
+  return [
+    'Convert the brief into a buildable internal workflow app.',
+    'Preserve spec clauses as future eval and audit anchors.',
+    'Identify missing compliance, data, and approval requirements before build.',
+  ]
+}
+
 export function createDraftFunctionalRequirements(): string[] {
   return [
     'Intake form or record creation flow.',
@@ -155,6 +163,7 @@ export function renderDraftPrd(brief: string): string {
   const trimmedBrief = brief.trim()
   const title = deriveDraftTitle(trimmedBrief)
   const tracerSlices = createDraftTracerSlices()
+  const goals = createDraftGoals()
   const functionalRequirements = createDraftFunctionalRequirements()
   const acceptanceChecks = createDraftAcceptanceChecks()
   const clarifyingQuestions = createDraftClarifyingQuestions()
@@ -182,9 +191,7 @@ export function renderDraftPrd(brief: string): string {
     '',
     '## Goals',
     '',
-    '- Convert the brief into a buildable internal workflow app.',
-    '- Preserve spec clauses as future eval and audit anchors.',
-    '- Identify missing compliance, data, and approval requirements before build.',
+    ...goals.map(goal => `- ${goal}`),
     '',
     '## Assumptions',
     '',
@@ -242,6 +249,7 @@ export async function createDraftBuild(
   const manifestPath = getProjectKairosBuildManifestPath(projectDir, buildId)
   const title = deriveDraftTitle(trimmedBrief)
   const tracerSlices = createDraftTracerSlices()
+  const goals = createDraftGoals()
   const functionalRequirements = createDraftFunctionalRequirements()
   const acceptanceChecks = createDraftAcceptanceChecks()
   const clarifyingQuestions = createDraftClarifyingQuestions()
@@ -255,6 +263,7 @@ export async function createDraftBuild(
     tenantId: 'local',
     title,
     brief: trimmedBrief,
+    goals,
     functionalRequirements,
     acceptanceChecks,
     clarifyingQuestions,

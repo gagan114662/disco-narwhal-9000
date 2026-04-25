@@ -4,6 +4,7 @@ import {
   createDraftAssumptions,
   createDraftClarifyingQuestions,
   createDraftFunctionalRequirements,
+  createDraftGoals,
   createDraftRisks,
   createDraftTracerSlices,
   deriveDraftTitle,
@@ -94,6 +95,14 @@ describe('draft build PRD rendering', () => {
       'List/detail views for submitted records.',
       'Role-aware approval or status workflow where applicable.',
       'Audit trail for important state changes.',
+    ])
+  })
+
+  test('creates deterministic goals for vague briefs', () => {
+    expect(createDraftGoals()).toEqual([
+      'Convert the brief into a buildable internal workflow app.',
+      'Preserve spec clauses as future eval and audit anchors.',
+      'Identify missing compliance, data, and approval requirements before build.',
     ])
   })
 
