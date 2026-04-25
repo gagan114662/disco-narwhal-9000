@@ -1415,9 +1415,11 @@ describe('/kairos command', () => {
     const out = await runKairosCommand(
       `build-select-next ${projectDir} all-complete-build`,
     )
-    expect(out).toBe(
+    expect(out.split('\n')).toEqual([
       'No incomplete tracer slice found after TB-3 for all-complete-build.',
-    )
+      `progress command: /kairos build-progress ${projectDir} all-complete-build`,
+      `readiness command: /kairos build-readiness ${projectDir} all-complete-build`,
+    ])
   })
 
   test('build-select-next reports a missing build clearly', async () => {

@@ -1470,7 +1470,11 @@ async function handleBuildSelectNext(rest: string[]): Promise<string> {
   if (!nextSlice) {
     if (completedSliceIds.size > 0) {
       const after = manifest.selectedSliceId ?? 'the beginning'
-      return `No incomplete tracer slice found after ${after} for ${parsed.buildId}.`
+      return [
+        `No incomplete tracer slice found after ${after} for ${parsed.buildId}.`,
+        `progress command: /kairos build-progress ${parsed.projectDir} ${parsed.buildId}`,
+        `readiness command: /kairos build-readiness ${parsed.projectDir} ${parsed.buildId}`,
+      ].join('\n')
     }
     return `No next tracer slice found for ${parsed.buildId}.`
   }
