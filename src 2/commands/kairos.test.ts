@@ -883,6 +883,83 @@ describe('/kairos command', () => {
     expect(out).toBe('Usage: /kairos build-progress [projectDir] <buildId>')
   })
 
+  test('build-readiness summarizes selected slice and question blockers', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'readiness-build',
+      now: () => new Date('2026-04-25T20:48:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+    await runKairosCommand(
+      `build-answer ${projectDir} readiness-build 1 employee manager and HR approver`,
+    )
+    await runKairosCommand(`build-select ${projectDir} readiness-build TB-1`)
+
+    const out = await runKairosCommand(
+      `build-readiness ${projectDir} readiness-build`,
+    )
+    expect(out.split('\n')).toEqual([
+      'Build readiness for readiness-build:',
+      'selected slice: TB-1 Record intake skeleton',
+      'completed slices: 0/3',
+      'clarifying questions answered: 1/4',
+      'unanswered clarifying questions: 3',
+      'next command: /kairos build-next ' + projectDir + ' readiness-build',
+      'blockers:',
+      '- 2. What fields are required, optional, or sensitive?',
+      '- 3. What notifications or integrations are required?',
+      '- 4. What retention, export, or compliance constraints apply?',
+    ])
+  })
+
+  test('build-readiness reports ready when every question and slice is complete', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'readiness-build',
+      now: () => new Date('2026-04-25T20:49:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+    for (const [questionNumber, answer] of [
+      [1, 'employee manager and HR approver'],
+      [2, 'dates reason and sensitive notes'],
+      [3, 'email notifications only'],
+      [4, 'retain records for seven years'],
+    ] as const) {
+      await runKairosCommand(
+        `build-answer ${projectDir} readiness-build ${questionNumber} ${answer}`,
+      )
+    }
+    for (const sliceId of ['TB-1', 'TB-2', 'TB-3']) {
+      await runKairosCommand(
+        `build-select ${projectDir} readiness-build ${sliceId}`,
+      )
+      await runKairosCommand(
+        `build-complete-slice ${projectDir} readiness-build`,
+      )
+    }
+
+    const out = await runKairosCommand(
+      `build-readiness ${projectDir} readiness-build`,
+    )
+    expect(out.split('\n')).toEqual([
+      'Build readiness for readiness-build:',
+      'selected slice: TB-3 Validation and role guardrails',
+      'completed slices: 3/3',
+      'clarifying questions answered: 4/4',
+      'unanswered clarifying questions: 0',
+      'next command: —',
+      'blockers: none',
+    ])
+  })
+
+  test('build-readiness reports a missing build clearly', async () => {
+    const projectDir = makeProjectDir()
+    const out = await runKairosCommand(
+      `build-readiness ${projectDir} missing-build`,
+    )
+    expect(out).toBe(`No build missing-build found for ${projectDir}.`)
+  })
+
   test('build-prd-outline prints persisted PRD sections in canonical order', async () => {
     const projectDir = makeProjectDir()
     __setKairosBuildDepsForTesting({
