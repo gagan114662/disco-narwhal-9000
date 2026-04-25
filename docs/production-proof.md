@@ -27,6 +27,8 @@ bun run proof:production
   and successful for the exact main commit.
 - Current open PR check rollups have no red latest checks.
 - Workflow checkout actions stay pinned to Node 24-ready `actions/checkout@v5`.
+- GitHub `ci` and `permanent-structural-fix-daily` workflows keep
+  frozen-lockfile install and supply-chain audit gates enabled.
 - Live incomplete markers are absent across tracked source files.
 - Disabled command stubs are explicit and bounded.
 - SDK unsupported surfaces are explicit and bounded.
