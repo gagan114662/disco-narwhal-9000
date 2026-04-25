@@ -710,10 +710,18 @@ async function handleBuildQuestions(rest: string[]): Promise<string> {
   if (!manifest.clarifyingQuestions || manifest.clarifyingQuestions.length === 0) {
     return `No clarifying questions found for ${parsed.buildId} in ${parsed.projectDir}.`
   }
+  const firstUnansweredQuestionNumber =
+    findFirstUnansweredClarifyingQuestionNumber(manifest)
+  const nextCommand =
+    firstUnansweredQuestionNumber > 0
+      ? `/kairos build-answer ${manifest.projectDir} ${manifest.buildId} ${firstUnansweredQuestionNumber} <answer>`
+      : `/kairos build-readiness ${manifest.projectDir} ${manifest.buildId}`
 
   return [
     `Clarifying questions for ${parsed.buildId}:`,
     ...renderClarifyingQuestions(manifest),
+    `unanswered command: /kairos build-unanswered ${manifest.projectDir} ${manifest.buildId}`,
+    `next command: ${nextCommand}`,
   ].join('\n')
 }
 

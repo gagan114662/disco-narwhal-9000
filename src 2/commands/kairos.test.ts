@@ -509,6 +509,8 @@ describe('/kairos command', () => {
       '2. What fields are required, optional, or sensitive?',
       '3. What notifications or integrations are required?',
       '4. What retention, export, or compliance constraints apply?',
+      `unanswered command: /kairos build-unanswered ${projectDir} questions-build`,
+      `next command: /kairos build-answer ${projectDir} questions-build 1 <answer>`,
     ])
   })
 
@@ -539,6 +541,8 @@ describe('/kairos command', () => {
       '2. What fields are required, optional, or sensitive?',
       '3. What notifications or integrations are required?',
       '4. What retention, export, or compliance constraints apply?',
+      `unanswered command: /kairos build-unanswered ${projectDir} questions-build`,
+      `next command: /kairos build-answer ${projectDir} questions-build 2 <answer>`,
     ])
 
     const eventsOut = await runKairosCommand(
