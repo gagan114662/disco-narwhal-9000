@@ -703,11 +703,20 @@ async function handleBuildProgress(rest: string[]): Promise<string> {
   ).length
   const totalCount = manifest.tracerSlices.length
   const remainingCount = totalCount - completedCount
+  const nextSlice =
+    manifest.tracerSlices.find(
+      slice =>
+        slice.id === manifest.selectedSliceId &&
+        !completedSliceIds.has(slice.id),
+    ) ??
+    manifest.tracerSlices.find(slice => !completedSliceIds.has(slice.id))
+  const nextSliceLabel = nextSlice ? `${nextSlice.id} ${nextSlice.title}` : '—'
   return [
     `Build progress for ${parsed.buildId}:`,
     `selected slice: ${formatOptionalValue(manifest.selectedSliceId)}`,
     `completed slices: ${completedCount}/${totalCount}`,
     `remaining slices: ${remainingCount}`,
+    `next slice: ${nextSliceLabel}`,
     ...manifest.tracerSlices.map(slice =>
       formatTracerSliceProgress(
         slice,

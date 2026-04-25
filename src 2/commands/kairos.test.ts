@@ -708,10 +708,35 @@ describe('/kairos command', () => {
       'selected slice: TB-2',
       'completed slices: 1/3',
       'remaining slices: 2',
+      'next slice: TB-2 Review workflow path',
       '- TB-1 Record intake skeleton [complete]',
       '- TB-2 Review workflow path [selected]',
       '- TB-3 Validation and role guardrails [pending]',
     ])
+  })
+
+  test('build-progress reports no next slice when all tracer bullets are complete', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'progress-build',
+      now: () => new Date('2026-04-25T19:58:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+    for (const sliceId of ['TB-1', 'TB-2', 'TB-3']) {
+      await runKairosCommand(
+        `build-select ${projectDir} progress-build ${sliceId}`,
+      )
+      await runKairosCommand(
+        `build-complete-slice ${projectDir} progress-build`,
+      )
+    }
+
+    const out = await runKairosCommand(
+      `build-progress ${projectDir} progress-build`,
+    )
+    expect(out).toContain('completed slices: 3/3')
+    expect(out).toContain('remaining slices: 0')
+    expect(out).toContain('next slice: —')
   })
 
   test('build-progress reports a missing build clearly', async () => {
