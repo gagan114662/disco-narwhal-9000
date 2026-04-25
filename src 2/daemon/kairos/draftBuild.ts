@@ -126,6 +126,10 @@ export function createDraftUsers(): string[] {
   return ['Primary operator', 'Reviewer or approver', 'Administrator']
 }
 
+export function createDraftProblem(): string {
+  return 'Capture the business problem, affected users, and current workflow pain.'
+}
+
 export function createDraftFunctionalRequirements(): string[] {
   return [
     'Intake form or record creation flow.',
@@ -175,6 +179,7 @@ export function renderDraftPrd(brief: string): string {
   const title = deriveDraftTitle(trimmedBrief)
   const tracerSlices = createDraftTracerSlices()
   const users = createDraftUsers()
+  const problem = createDraftProblem()
   const goals = createDraftGoals()
   const nonGoals = createDraftNonGoals()
   const functionalRequirements = createDraftFunctionalRequirements()
@@ -194,7 +199,7 @@ export function renderDraftPrd(brief: string): string {
     '',
     '## Problem',
     '',
-    'Capture the business problem, affected users, and current workflow pain.',
+    problem,
     '',
     '## Users',
     '',
@@ -260,6 +265,7 @@ export async function createDraftBuild(
   const title = deriveDraftTitle(trimmedBrief)
   const tracerSlices = createDraftTracerSlices()
   const users = createDraftUsers()
+  const problem = createDraftProblem()
   const goals = createDraftGoals()
   const nonGoals = createDraftNonGoals()
   const functionalRequirements = createDraftFunctionalRequirements()
@@ -275,6 +281,7 @@ export async function createDraftBuild(
     tenantId: 'local',
     title,
     brief: trimmedBrief,
+    problem,
     users,
     goals,
     nonGoals,

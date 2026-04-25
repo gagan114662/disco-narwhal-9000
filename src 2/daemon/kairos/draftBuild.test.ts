@@ -6,6 +6,7 @@ import {
   createDraftFunctionalRequirements,
   createDraftGoals,
   createDraftNonGoals,
+  createDraftProblem,
   createDraftRisks,
   createDraftTracerSlices,
   createDraftUsers,
@@ -121,6 +122,12 @@ describe('draft build PRD rendering', () => {
       'Reviewer or approver',
       'Administrator',
     ])
+  })
+
+  test('creates a deterministic problem placeholder for vague briefs', () => {
+    expect(createDraftProblem()).toBe(
+      'Capture the business problem, affected users, and current workflow pain.',
+    )
   })
 
   test('creates deterministic assumptions for vague briefs', () => {

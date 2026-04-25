@@ -127,6 +127,7 @@ describe('/kairos command', () => {
     expect(out).toContain('/kairos build-goals')
     expect(out).toContain('/kairos build-non-goals')
     expect(out).toContain('/kairos build-users')
+    expect(out).toContain('/kairos build-problem')
     expect(out).toContain('/kairos cloud deploy')
     expect(out).toContain('/kairos cloud-sync')
   })
@@ -247,6 +248,8 @@ describe('/kairos command', () => {
         'Reviewer or approver',
         'Administrator',
       ],
+      problem:
+        'Capture the business problem, affected users, and current workflow pain.',
       assumptions: [
         'The first build targets a browser-based internal workflow tool.',
         'A human reviewer will confirm roles, fields, and compliance constraints before implementation.',
@@ -580,6 +583,31 @@ describe('/kairos command', () => {
     expect(out).toBe(`No build missing-build found for ${projectDir}.`)
   })
 
+  test('build-problem prints persisted draft problem statement', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'problem-build',
+      now: () => new Date('2026-04-25T19:21:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+
+    const out = await runKairosCommand(
+      `build-problem ${projectDir} problem-build`,
+    )
+    expect(out.split('\n')).toEqual([
+      'Problem for problem-build:',
+      'Capture the business problem, affected users, and current workflow pain.',
+    ])
+  })
+
+  test('build-problem reports a missing build clearly', async () => {
+    const projectDir = makeProjectDir()
+    const out = await runKairosCommand(
+      `build-problem ${projectDir} missing-build`,
+    )
+    expect(out).toBe(`No build missing-build found for ${projectDir}.`)
+  })
+
   test('build-summary prints compact PRD metadata counts', async () => {
     const projectDir = makeProjectDir()
     __setKairosBuildDepsForTesting({
@@ -597,6 +625,7 @@ describe('/kairos command', () => {
       'title: Leave Request App',
       'status: draft',
       'selected slice: TB-1',
+      'problem: yes',
       'users: 3',
       'goals: 3',
       'non-goals: 2',
