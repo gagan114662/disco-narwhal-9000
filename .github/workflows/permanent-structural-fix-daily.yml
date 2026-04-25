@@ -28,3 +28,6 @@ jobs:
 
       - name: Run permanent structural fix loop
         run: bun run structural-fix:daily
+
+      - name: Run static production proof gates
+        run: bun run proof:static
