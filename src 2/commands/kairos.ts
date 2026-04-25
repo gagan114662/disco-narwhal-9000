@@ -12,6 +12,10 @@
 import { readFile } from 'fs/promises'
 import { resolve } from 'path'
 import { getProjectRoot } from '../bootstrap/state.js'
+import {
+  createDraftBuild,
+  type CreateDraftBuildDeps,
+} from '../daemon/kairos/draftBuild.js'
 import type { Command } from '../types/command.js'
 import {
   runKairosMemoryCommand,
@@ -58,6 +62,7 @@ const HELP_TEXT = `Usage:
 /kairos opt-in [projectDir]
 /kairos opt-out [projectDir]
 /kairos demo [projectDir]
+/kairos build [projectDir] <brief>
 /kairos pause
 /kairos resume
 /kairos dashboard
@@ -83,6 +88,7 @@ type Subcommand =
   | 'opt-in'
   | 'opt-out'
   | 'demo'
+  | 'build'
   | 'pause'
   | 'resume'
   | 'dashboard'
@@ -101,6 +107,7 @@ const SUBCOMMANDS = new Set<Subcommand>([
   'opt-in',
   'opt-out',
   'demo',
+  'build',
   'pause',
   'resume',
   'dashboard',
@@ -233,6 +240,55 @@ async function handleOptOut(projectDir: string): Promise<string> {
 async function handleDemo(projectDir: string): Promise<string> {
   const taskId = await enqueueDemoTask(projectDir)
   return `Demo task ${taskId} scheduled in ${projectDir}/.claude/scheduled_tasks.json`
+}
+
+let kairosBuildDeps: CreateDraftBuildDeps = {}
+
+export function __setKairosBuildDepsForTesting(
+  deps: CreateDraftBuildDeps,
+): void {
+  kairosBuildDeps = deps
+}
+
+export function __resetKairosBuildDepsForTesting(): void {
+  kairosBuildDeps = {}
+}
+
+function parseBuildArgs(rest: string[]): { projectDir: string; brief: string } | null {
+  if (rest.length === 0) return null
+  const [first, ...remaining] = rest
+  const firstLooksLikePath =
+    first.startsWith('/') ||
+    first.startsWith('.') ||
+    first.startsWith('~') ||
+    first.includes('\\')
+  if (firstLooksLikePath) {
+    const brief = remaining.join(' ').trim()
+    if (!brief) return null
+    return { projectDir: resolveProjectDir(first), brief }
+  }
+  const brief = rest.join(' ').trim()
+  if (!brief) return null
+  return { projectDir: resolveProjectDir(undefined), brief }
+}
+
+async function handleBuild(rest: string[]): Promise<string> {
+  const parsed = parseBuildArgs(rest)
+  if (parsed === null) {
+    return 'Usage: /kairos build [projectDir] <brief>'
+  }
+  const result = await createDraftBuild(
+    parsed.projectDir,
+    parsed.brief,
+    kairosBuildDeps,
+  )
+  return [
+    `Build draft created: ${result.buildId}`,
+    `project: ${result.projectDir}`,
+    'status: draft',
+    `spec: ${result.specPath}`,
+    `manifest: ${result.manifestPath}`,
+  ].join('\n')
 }
 
 async function handlePause(): Promise<string> {
@@ -416,6 +472,8 @@ export async function runKairosCommand(args: string): Promise<string> {
       return handleOptOut(resolveProjectDir(rest[0]))
     case 'demo':
       return handleDemo(resolveProjectDir(rest[0]))
+    case 'build':
+      return handleBuild(rest)
     case 'pause':
       return handlePause()
     case 'resume':
@@ -457,7 +515,7 @@ const kairos = {
   name: 'kairos',
   description: 'Inspect and control the KAIROS background daemon',
   argumentHint:
-    'status|list|opt-in|opt-out|demo|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
+    'status|list|opt-in|opt-out|demo|build|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
   load: () => import('./kairos-ui.js'),
 } satisfies Command
 

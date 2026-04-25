@@ -7,10 +7,17 @@ import {
   getProjectRoot,
   setProjectRoot,
 } from '../bootstrap/state.js'
+import {
+  getProjectKairosBuildEventsPath,
+  getProjectKairosBuildManifestPath,
+  getProjectKairosBuildSpecPath,
+} from '../daemon/kairos/paths.js'
 import { createStateWriter } from '../daemon/kairos/stateWriter.js'
 import { writeCronTasks } from '../utils/cronTasks.js'
 import {
+  __resetKairosBuildDepsForTesting,
   __resetKairosCloudSyncDepsForTesting,
+  __setKairosBuildDepsForTesting,
   __setKairosCloudSyncDepsForTesting,
   runKairosCommand,
 } from './kairos.js'
@@ -88,6 +95,7 @@ beforeEach(() => {
 
 afterEach(() => {
   setProjectRoot(originalProjectRoot)
+  __resetKairosBuildDepsForTesting()
   __resetKairosCloudLifecycleDepsForTesting()
   __resetKairosCloudSyncDepsForTesting()
   delete process.env.CLAUDE_CONFIG_DIR
@@ -103,6 +111,7 @@ describe('/kairos command', () => {
     expect(out).toContain('/kairos status')
     expect(out).toContain('/kairos opt-in')
     expect(out).toContain('/kairos demo')
+    expect(out).toContain('/kairos build')
     expect(out).toContain('/kairos cloud deploy')
     expect(out).toContain('/kairos cloud-sync')
   })
@@ -161,6 +170,53 @@ describe('/kairos command', () => {
     expect(task.prompt).toContain('KAIROS dashboard demo')
     // Cron must be a valid 5-field expression targeting a specific minute.
     expect(task.cron.split(/\s+/)).toHaveLength(5)
+  })
+
+  test('build requires a brief', async () => {
+    const out = await runKairosCommand('build')
+    expect(out).toBe('Usage: /kairos build [projectDir] <brief>')
+  })
+
+  test('build turns a vague brief into a persisted draft spec build', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'build-test-1',
+      now: () => new Date('2026-04-25T18:30:00.000Z'),
+    })
+
+    const out = await runKairosCommand(
+      `build ${projectDir} leave request approval app for hourly workers`,
+    )
+
+    expect(out).toContain('Build draft created: build-test-1')
+    expect(out).toContain(`project: ${projectDir}`)
+    expect(out).toContain('status: draft')
+    expect(out).toContain(getProjectKairosBuildSpecPath(projectDir, 'build-test-1'))
+
+    expect(readJson(getProjectKairosBuildManifestPath(projectDir, 'build-test-1'))).toMatchObject({
+      version: 1,
+      buildId: 'build-test-1',
+      projectDir,
+      tenantId: 'local',
+      status: 'draft',
+      createdAt: '2026-04-25T18:30:00.000Z',
+      updatedAt: '2026-04-25T18:30:00.000Z',
+    })
+
+    const spec = readFileSync(
+      getProjectKairosBuildSpecPath(projectDir, 'build-test-1'),
+      'utf8',
+    )
+    expect(spec).toContain('# KAIROS-SF Draft PRD')
+    expect(spec).toContain('leave request approval app for hourly workers')
+    expect(spec).toContain('## Open Questions')
+
+    const events = readFileSync(
+      getProjectKairosBuildEventsPath(projectDir, 'build-test-1'),
+      'utf8',
+    )
+    expect(events).toContain('"kind":"build_created"')
+    expect(events).toContain('"kind":"spec_written"')
   })
 
   test('pause writes pause.json and resume clears it', async () => {
