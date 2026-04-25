@@ -357,6 +357,15 @@ describe('/kairos command', () => {
     expect(out).toContain('status: draft')
     expect(out).toContain('selected slice: —')
     expect(out).toContain('brief: vendor onboarding form')
+    expect(out).toContain(
+      `summary command: /kairos build-summary ${projectDir} show-build`,
+    )
+    expect(out).toContain(
+      `progress command: /kairos build-progress ${projectDir} show-build`,
+    )
+    expect(out).toContain(
+      `readiness command: /kairos build-readiness ${projectDir} show-build`,
+    )
     expect(out).toContain('--- spec ---')
     expect(out).toContain('# Vendor Onboarding Form')
   })

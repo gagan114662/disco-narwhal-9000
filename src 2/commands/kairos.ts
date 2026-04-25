@@ -574,6 +574,9 @@ async function handleBuildShow(rest: string[]): Promise<string> {
     `created: ${manifest.createdAt}`,
     `updated: ${manifest.updatedAt}`,
     `spec: ${formatOptionalValue(manifest.specPath)}`,
+    `summary command: /kairos build-summary ${manifest.projectDir} ${manifest.buildId}`,
+    `progress command: /kairos build-progress ${manifest.projectDir} ${manifest.buildId}`,
+    `readiness command: /kairos build-readiness ${manifest.projectDir} ${manifest.buildId}`,
     '--- spec ---',
     spec ?? '(spec not found)',
   ].join('\n')
