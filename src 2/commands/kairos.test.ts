@@ -1055,6 +1055,29 @@ describe('/kairos command', () => {
     )
   })
 
+  test('build-complete-slice is idempotent for an already completed tracer bullet', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'complete-build',
+      now: () => new Date('2026-04-25T19:56:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+    await runKairosCommand(`build-select ${projectDir} complete-build TB-1`)
+    await runKairosCommand(`build-complete-slice ${projectDir} complete-build`)
+
+    const out = await runKairosCommand(
+      `build-complete-slice ${projectDir} complete-build`,
+    )
+    expect(out).toBe(
+      'Tracer slice TB-1 is already complete for complete-build: Record intake skeleton',
+    )
+
+    const eventsOut = await runKairosCommand(
+      `build-events ${projectDir} complete-build`,
+    )
+    expect(eventsOut.match(/slice_completed slice=TB-1/g)).toHaveLength(1)
+  })
+
   test('build-complete-slice requires a selected tracer bullet', async () => {
     const projectDir = makeProjectDir()
     __setKairosBuildDepsForTesting({

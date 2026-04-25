@@ -1162,6 +1162,9 @@ async function handleBuildCompleteSlice(rest: string[]): Promise<string> {
   if (!slice) {
     return `Selected tracer slice ${manifest.selectedSliceId} is missing for ${parsed.buildId}.`
   }
+  if ((manifest.completedSliceIds ?? []).includes(slice.id)) {
+    return `Tracer slice ${slice.id} is already complete for ${parsed.buildId}: ${slice.title}`
+  }
 
   const updatedAt = new Date().toISOString()
   const completedSliceIds = Array.from(
