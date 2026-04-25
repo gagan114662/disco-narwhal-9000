@@ -453,6 +453,8 @@ describe('/kairos command', () => {
       '- TB-3 Validation and role guardrails',
       '  test: incomplete records are rejected and unauthorized actions are blocked',
       '  implement: add required-field validation and role checks at the command boundary',
+      `select command: /kairos build-select ${projectDir} slices-build <sliceId>`,
+      `next command: /kairos build-select-next-prompt ${projectDir} slices-build`,
     ])
   })
 

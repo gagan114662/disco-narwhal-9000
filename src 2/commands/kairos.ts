@@ -664,6 +664,8 @@ async function handleBuildSlices(rest: string[]): Promise<string> {
       `  test: ${slice.testFirst}`,
       `  implement: ${slice.implement}`,
     ]),
+    `select command: /kairos build-select ${manifest.projectDir} ${manifest.buildId} <sliceId>`,
+    `next command: /kairos build-select-next-prompt ${manifest.projectDir} ${manifest.buildId}`,
   ].join('\n')
 }
 
