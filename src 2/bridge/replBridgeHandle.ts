@@ -27,6 +27,25 @@ export function getReplBridgeHandle(): ReplBridgeHandle | null {
 }
 
 /**
+ * True when a REPL bridge handle is registered. SendMessageTool and
+ * ToolSearchTool use this to gate inter-Claude messaging on a live bridge.
+ *
+ * Historically the two callers imported this name from bootstrap/state.js
+ * but the export never existed there, so plain `bun test` silently tolerated
+ * the unresolved name. Coverage instrumentation walks the import graph
+ * eagerly and surfaced the missing export as a SyntaxError. This is the
+ * canonical home for the function — the handle lives in this module, so
+ * keeping the predicate next to it removes a cross-module surprise.
+ *
+ * Outbound-only (CCR mirror) rejection is NOT enforced here yet; the comment
+ * at the call sites describes the intent, but ReplBridgeHandle does not
+ * currently expose the mode. Wiring that through is a follow-up.
+ */
+export function isReplBridgeActive(): boolean {
+  return handle !== null
+}
+
+/**
  * Our own bridge session ID in the session_* compat format the API returns
  * in /v1/sessions responses — or undefined if bridge isn't connected.
  */
