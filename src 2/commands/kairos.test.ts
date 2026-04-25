@@ -510,6 +510,34 @@ describe('/kairos command', () => {
     ])
   })
 
+  test('build-answer records a clarifying question answer', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'questions-build',
+      now: () => new Date('2026-04-25T19:11:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+
+    const answerOut = await runKairosCommand(
+      `build-answer ${projectDir} questions-build 1 employee manager and HR approver`,
+    )
+    expect(answerOut).toBe(
+      'Answered question 1 for questions-build: employee manager and HR approver',
+    )
+
+    const questionsOut = await runKairosCommand(
+      `build-questions ${projectDir} questions-build`,
+    )
+    expect(questionsOut.split('\n')).toEqual([
+      'Clarifying questions for questions-build:',
+      '1. Who are the exact user roles and approvers?',
+      '   answer: employee manager and HR approver',
+      '2. What fields are required, optional, or sensitive?',
+      '3. What notifications or integrations are required?',
+      '4. What retention, export, or compliance constraints apply?',
+    ])
+  })
+
   test('build-questions reports a missing build clearly', async () => {
     const projectDir = makeProjectDir()
     const out = await runKairosCommand(

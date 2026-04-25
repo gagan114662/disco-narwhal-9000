@@ -39,6 +39,9 @@ export const kairosBuildManifestSchema = z.object({
   functionalRequirements: z.array(z.string().min(1)).optional(),
   acceptanceChecks: z.array(z.string().min(1)).optional(),
   clarifyingQuestions: z.array(z.string().min(1)).optional(),
+  clarifyingQuestionAnswers: z
+    .record(z.string().min(1), z.string().min(1))
+    .optional(),
   assumptions: z.array(z.string().min(1)).optional(),
   risks: z.array(z.string().min(1)).optional(),
   tracerSlices: z.array(kairosBuildTracerSliceSchema).optional(),

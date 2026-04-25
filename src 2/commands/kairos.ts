@@ -102,6 +102,7 @@ const HELP_TEXT = `Usage:
 /kairos build-complete-slice [projectDir] <buildId>
 /kairos build-acceptance [projectDir] <buildId>
 /kairos build-questions [projectDir] <buildId>
+/kairos build-answer [projectDir] <buildId> <questionNumber> <answer>
 /kairos build-requirements [projectDir] <buildId>
 /kairos build-summary [projectDir] <buildId>
 /kairos build-progress [projectDir] <buildId>
@@ -150,6 +151,7 @@ type Subcommand =
   | 'build-complete-slice'
   | 'build-acceptance'
   | 'build-questions'
+  | 'build-answer'
   | 'build-requirements'
   | 'build-summary'
   | 'build-progress'
@@ -191,6 +193,7 @@ const SUBCOMMANDS = new Set<Subcommand>([
   'build-complete-slice',
   'build-acceptance',
   'build-questions',
+  'build-answer',
   'build-requirements',
   'build-summary',
   'build-progress',
@@ -467,6 +470,39 @@ function parseBuildSelectArgs(
   }
 }
 
+function parseBuildAnswerArgs(
+  rest: string[],
+): { projectDir: string; buildId: string; questionNumber: number; answer: string } | null {
+  if (rest.length === 0) return null
+  const [first, second, third, ...remaining] = rest
+  if (isPathLike(first)) {
+    if (!second || !third) return null
+    const questionNumber = Number(third)
+    const answer = remaining.join(' ').trim()
+    if (!Number.isInteger(questionNumber) || questionNumber < 1 || !answer) {
+      return null
+    }
+    return {
+      projectDir: resolveProjectDir(first),
+      buildId: second,
+      questionNumber,
+      answer,
+    }
+  }
+  if (!second) return null
+  const questionNumber = Number(second)
+  const answer = [third, ...remaining].filter(Boolean).join(' ').trim()
+  if (!Number.isInteger(questionNumber) || questionNumber < 1 || !answer) {
+    return null
+  }
+  return {
+    projectDir: resolveProjectDir(undefined),
+    buildId: first,
+    questionNumber,
+    answer,
+  }
+}
+
 async function handleBuild(rest: string[]): Promise<string> {
   const parsed = parseBuildArgs(rest)
   if (parsed === null) {
@@ -666,10 +702,45 @@ async function handleBuildQuestions(rest: string[]): Promise<string> {
 
   return [
     `Clarifying questions for ${parsed.buildId}:`,
-    ...manifest.clarifyingQuestions.map(
-      (question, index) => `${index + 1}. ${question}`,
-    ),
+    ...manifest.clarifyingQuestions.flatMap((question, index) => {
+      const questionNumber = String(index + 1)
+      const answer = manifest.clarifyingQuestionAnswers?.[questionNumber]
+      return answer
+        ? [`${questionNumber}. ${question}`, `   answer: ${answer}`]
+        : [`${questionNumber}. ${question}`]
+    }),
   ].join('\n')
+}
+
+async function handleBuildAnswer(rest: string[]): Promise<string> {
+  const parsed = parseBuildAnswerArgs(rest)
+  if (parsed === null) {
+    return 'Usage: /kairos build-answer [projectDir] <buildId> <questionNumber> <answer>'
+  }
+
+  const writer = await createStateWriter()
+  const manifest = await writer.readBuildManifest(
+    parsed.projectDir,
+    parsed.buildId,
+  )
+  if (!manifest) {
+    return `No build ${parsed.buildId} found for ${parsed.projectDir}.`
+  }
+  const questions = manifest.clarifyingQuestions ?? []
+  if (!questions[parsed.questionNumber - 1]) {
+    return `No clarifying question ${parsed.questionNumber} found for ${parsed.buildId}.`
+  }
+
+  await writer.writeBuildManifest(parsed.projectDir, {
+    ...manifest,
+    clarifyingQuestionAnswers: {
+      ...(manifest.clarifyingQuestionAnswers ?? {}),
+      [String(parsed.questionNumber)]: parsed.answer,
+    },
+    updatedAt: new Date().toISOString(),
+  })
+
+  return `Answered question ${parsed.questionNumber} for ${parsed.buildId}: ${parsed.answer}`
 }
 
 async function handleBuildRequirements(rest: string[]): Promise<string> {
@@ -1489,6 +1560,8 @@ export async function runKairosCommand(args: string): Promise<string> {
       return handleBuildAcceptance(rest)
     case 'build-questions':
       return handleBuildQuestions(rest)
+    case 'build-answer':
+      return handleBuildAnswer(rest)
     case 'build-requirements':
       return handleBuildRequirements(rest)
     case 'build-summary':
@@ -1552,7 +1625,7 @@ const kairos = {
   name: 'kairos',
   description: 'Inspect and control the KAIROS background daemon',
   argumentHint:
-    'status|list|opt-in|opt-out|demo|build|builds|build-show|build-events|build-slices|build-select|build-select-next|build-select-next-prompt|build-next|build-complete-slice|build-acceptance|build-questions|build-requirements|build-summary|build-progress|build-assumptions|build-risks|build-goals|build-non-goals|build-users|build-problem|build-traceability|build-prd-outline|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
+    'status|list|opt-in|opt-out|demo|build|builds|build-show|build-events|build-slices|build-select|build-select-next|build-select-next-prompt|build-next|build-complete-slice|build-acceptance|build-questions|build-answer|build-requirements|build-summary|build-progress|build-assumptions|build-risks|build-goals|build-non-goals|build-users|build-problem|build-traceability|build-prd-outline|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
   load: () => import('./kairos-ui.js'),
 } satisfies Command
 
