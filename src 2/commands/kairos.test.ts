@@ -924,6 +924,13 @@ describe('/kairos command', () => {
     )
   })
 
+  test('build-select-next-prompt reports its own usage for missing args', async () => {
+    const out = await runKairosCommand('build-select-next-prompt')
+    expect(out).toBe(
+      'Usage: /kairos build-select-next-prompt [projectDir] <buildId>',
+    )
+  })
+
   test('build-next renders a TDD prompt for the selected tracer bullet', async () => {
     const projectDir = makeProjectDir()
     __setKairosBuildDepsForTesting({

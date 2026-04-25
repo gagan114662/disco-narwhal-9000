@@ -1056,6 +1056,9 @@ async function handleBuildNext(rest: string[]): Promise<string> {
 }
 
 async function handleBuildSelectNextPrompt(rest: string[]): Promise<string> {
+  if (parseBuildShowArgs(rest) === null) {
+    return 'Usage: /kairos build-select-next-prompt [projectDir] <buildId>'
+  }
   const selection = await handleBuildSelectNext(rest)
   if (!selection.startsWith('Selected ')) {
     return selection
