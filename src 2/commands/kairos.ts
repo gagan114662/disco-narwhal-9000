@@ -593,28 +593,34 @@ async function handleBuildShow(rest: string[]): Promise<string> {
 }
 
 function formatBuildEvent(event: KairosBuildEvent): string {
+  const auditSuffix = formatBuildEventAuditSuffix(event)
   switch (event.kind) {
     case 'build_created':
-      return `${event.t} build_created status=${event.status}`
+      return `${event.t} build_created status=${event.status}${auditSuffix}`
     case 'build_status_changed':
-      return `${event.t} build_status_changed ${event.from}->${event.to}`
+      return `${event.t} build_status_changed ${event.from}->${event.to}${auditSuffix}`
     case 'spec_written':
-      return `${event.t} spec_written spec=${event.specPath}`
+      return `${event.t} spec_written spec=${event.specPath}${auditSuffix}`
     case 'slice_selected':
-      return `${event.t} slice_selected slice=${event.sliceId} title=${event.title}`
+      return `${event.t} slice_selected slice=${event.sliceId} title=${event.title}${auditSuffix}`
     case 'next_slice_prompt_rendered':
-      return `${event.t} next_slice_prompt_rendered slice=${event.sliceId} title=${event.title}`
+      return `${event.t} next_slice_prompt_rendered slice=${event.sliceId} title=${event.title}${auditSuffix}`
     case 'slice_completed':
-      return `${event.t} slice_completed slice=${event.sliceId} title=${event.title}`
+      return `${event.t} slice_completed slice=${event.sliceId} title=${event.title}${auditSuffix}`
     case 'clarifying_question_answered':
-      return `${event.t} clarifying_question_answered question=${event.questionNumber} answer=${event.answer}`
+      return `${event.t} clarifying_question_answered question=${event.questionNumber} answer=${event.answer}${auditSuffix}`
     case 'agent_event_recorded':
-      return `${event.t} agent_event_recorded run=${event.runId} event=${event.eventKind}`
+      return `${event.t} agent_event_recorded run=${event.runId} event=${event.eventKind}${auditSuffix}`
     case 'build_result_written':
-      return `${event.t} build_result_written status=${event.status} result=${event.resultPath}`
+      return `${event.t} build_result_written status=${event.status} result=${event.resultPath}${auditSuffix}`
     case 'build_failed':
-      return `${event.t} build_failed error=${event.errorMessage}`
+      return `${event.t} build_failed error=${event.errorMessage}${auditSuffix}`
   }
+}
+
+function formatBuildEventAuditSuffix(event: KairosBuildEvent): string {
+  if (!event.auditHash) return ''
+  return ` audit=${event.auditHash} prev=${event.auditPrevHash ?? 'genesis'}`
 }
 
 async function handleBuildEvents(rest: string[]): Promise<string> {

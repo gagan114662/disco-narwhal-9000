@@ -42,6 +42,10 @@ function readJson(path: string): unknown {
   return JSON.parse(readFileSync(path, 'utf8'))
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
 async function seedKairosProjectState(projectDir: string): Promise<void> {
   const writer = await createStateWriter()
   await writer.ensureProjectDir(projectDir)
@@ -423,13 +427,26 @@ describe('/kairos command', () => {
     await runKairosCommand(`build ${projectDir} leave request app`)
 
     const out = await runKairosCommand(`build-events ${projectDir} events-build`)
-    expect(out.split('\n')).toEqual([
-      'Events for events-build:',
-      '- 2026-04-25T18:45:00.000Z build_created status=draft',
-      `- 2026-04-25T18:45:00.000Z spec_written spec=${getProjectKairosBuildSpecPath(projectDir, 'events-build')}`,
+    const lines = out.split('\n')
+    expect(lines[0]).toBe('Events for events-build:')
+    const firstEvent = lines[1]?.match(
+      /^- 2026-04-25T18:45:00\.000Z build_created status=draft audit=([a-f0-9]{64}) prev=genesis$/,
+    )
+    expect(firstEvent).not.toBeNull()
+    const secondEvent = lines[2]?.match(
+      new RegExp(
+        `^- 2026-04-25T18:45:00\\.000Z spec_written spec=${escapeRegExp(getProjectKairosBuildSpecPath(projectDir, 'events-build'))} audit=([a-f0-9]{64}) prev=([a-f0-9]{64})$`,
+      ),
+    )
+    expect(secondEvent).not.toBeNull()
+    expect(secondEvent?.[2]).toBe(firstEvent?.[1])
+    expect(lines[3]).toBe(
       `summary command: /kairos build-summary ${projectDir} events-build`,
+    )
+    expect(lines[4]).toBe(
       `progress command: /kairos build-progress ${projectDir} events-build`,
-    ])
+    )
+    expect(lines).toHaveLength(5)
   })
 
   test('build-events filters persisted events by kind', async () => {
