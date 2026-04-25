@@ -898,9 +898,13 @@ async function handleBuildProgress(rest: string[]): Promise<string> {
     ) ??
     manifest.tracerSlices.find(slice => !completedSliceIds.has(slice.id))
   const nextSliceLabel = nextSlice ? `${nextSlice.id} ${nextSlice.title}` : '—'
-  const nextCommand = nextSlice
-    ? `/kairos build-next ${manifest.projectDir} ${manifest.buildId}`
-    : '—'
+  let nextCommand = '—'
+  if (nextSlice) {
+    nextCommand =
+      nextSlice.id === manifest.selectedSliceId
+        ? `/kairos build-next ${manifest.projectDir} ${manifest.buildId}`
+        : `/kairos build-select-next-prompt ${manifest.projectDir} ${manifest.buildId}`
+  }
   return [
     `Build progress for ${parsed.buildId}:`,
     `selected slice: ${formatOptionalValue(manifest.selectedSliceId)}`,

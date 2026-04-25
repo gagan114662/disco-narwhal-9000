@@ -845,6 +845,30 @@ describe('/kairos command', () => {
     ])
   })
 
+  test('build-progress points unselected builds at select-next-prompt', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'progress-build',
+      now: () => new Date('2026-04-25T20:59:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+
+    const out = await runKairosCommand(
+      `build-progress ${projectDir} progress-build`,
+    )
+    expect(out.split('\n')).toEqual([
+      'Build progress for progress-build:',
+      'selected slice: —',
+      'completed slices: 0/3',
+      'remaining slices: 3',
+      'next slice: TB-1 Record intake skeleton',
+      `next command: /kairos build-select-next-prompt ${projectDir} progress-build`,
+      '- TB-1 Record intake skeleton [pending]',
+      '- TB-2 Review workflow path [pending]',
+      '- TB-3 Validation and role guardrails [pending]',
+    ])
+  })
+
   test('build-progress reports no next slice when all tracer bullets are complete', async () => {
     const projectDir = makeProjectDir()
     __setKairosBuildDepsForTesting({
