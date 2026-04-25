@@ -48,9 +48,11 @@ jobs:
           if (cd "src 2" && bun ./scripts/trunkPatterns.ts check /tmp/changed.txt) > /tmp/hits.txt; then
             echo "no trunk hits"
           else
-            echo "trunk_hits<<EOF" >> "$GITHUB_OUTPUT"
-            cat /tmp/hits.txt >> "$GITHUB_OUTPUT"
-            echo "EOF" >> "$GITHUB_OUTPUT"
+            {
+              echo "trunk_hits<<EOF"
+              cat /tmp/hits.txt
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
           fi
 
       - name: Check for override label

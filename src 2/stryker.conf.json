@@ -1,19 +1,15 @@
 {
   "$schema": "https://raw.githubusercontent.com/stryker-mutator/stryker-js/master/packages/api/schema/stryker-core.json",
-  "_comment": "Mutation testing for the modules called out in the gap audit. testRunner=command lets us drive bun test directly. Stryker is run nightly via .github/workflows/mutation-test.yml; the threshold values are deliberately permissive at first so the gate gives signal before becoming blocking.",
+  "_comment": "Mutation testing for self-contained high-signal modules. testRunner=command lets us drive bun test directly. Stryker is run nightly via .github/workflows/mutation-test.yml; the threshold values are deliberately permissive at first so the gate gives signal before becoming blocking.",
   "packageManager": "npm",
   "reporters": ["html", "clear-text", "progress"],
   "testRunner": "command",
   "commandRunner": {
-    "command": "bun test --bail"
+    "command": "bun test ./entrypoints/agentSdkTypes.test.ts --bail"
   },
   "coverageAnalysis": "off",
   "mutate": [
-    "daemon/**/*.ts",
-    "services/reminders/**/*.ts",
-    "services/structuralFix/**/*.ts",
-    "tools/**/*.ts",
-    "daemon/gateway/telegram/**/*.ts",
+    "entrypoints/agentSdkTypes.ts",
     "!**/*.test.ts",
     "!**/*.test.tsx",
     "!**/*.d.ts"

@@ -104,7 +104,17 @@ const allowedSdkUnsupported = [
 
 const workflowFiles = [
   '.github/workflows/ci.yml',
+  '.github/workflows/codeql.yml',
+  '.github/workflows/container-scan.yml',
+  '.github/workflows/flake-detection.yml',
+  '.github/workflows/mutation-test.yml',
   '.github/workflows/permanent-structural-fix-daily.yml',
+  '.github/workflows/pr-hygiene.yml',
+  '.github/workflows/proof-production-nightly.yml',
+  '.github/workflows/release.yml',
+  '.github/workflows/sbom.yml',
+  '.github/workflows/scorecard.yml',
+  '.github/workflows/secret-scan.yml',
   '.github/workflows/trunk-guard.yml',
 ]
 
@@ -120,7 +130,37 @@ const workflowStaticProofFiles = [
 
 const requiredWorkflowPermissions: Record<string, string[]> = {
   '.github/workflows/ci.yml': ['contents: read'],
+  '.github/workflows/codeql.yml': [
+    'contents: read',
+    'security-events: write',
+    'actions: read',
+  ],
+  '.github/workflows/container-scan.yml': [
+    'contents: read',
+    'security-events: write',
+  ],
+  '.github/workflows/flake-detection.yml': ['contents: read'],
+  '.github/workflows/mutation-test.yml': ['contents: read'],
   '.github/workflows/permanent-structural-fix-daily.yml': ['contents: read'],
+  '.github/workflows/pr-hygiene.yml': [
+    'contents: read',
+    'pull-requests: read',
+  ],
+  '.github/workflows/proof-production-nightly.yml': ['contents: read'],
+  '.github/workflows/release.yml': [
+    'contents: write',
+    'id-token: write',
+    'attestations: write',
+    'packages: read',
+  ],
+  '.github/workflows/sbom.yml': ['contents: read', 'id-token: write'],
+  '.github/workflows/scorecard.yml': [
+    'contents: read',
+    'actions: read',
+    'security-events: write',
+    'id-token: write',
+  ],
+  '.github/workflows/secret-scan.yml': ['contents: read'],
   '.github/workflows/trunk-guard.yml': [
     'contents: read',
     'pull-requests: read',
@@ -581,41 +621,33 @@ function proveDependabotPolicy(repoRoot: string): void {
 
 function proveWorkflowActionPins(repoRoot: string): void {
   const badPins: string[] = []
-  // Accept either the literal `actions/checkout@v5` or a SHA-pinned form
-  // followed by a `# v5` comment on the same line. SHA pinning is required
-  // by the supply-chain hardening gate (.github/workflows/*.yml were
-  // converted to commit-SHA references), so the check needs to recognize
-  // SHA + version-comment as equivalent to the bare `@v5` tag.
-  const PIN_RE =
-    /actions\/checkout@(?<pin>[^\s]+)(?:[ \t]*#[ \t]*(?<comment>[^\n]*))?/g
+  const usesPattern = /^\s*uses:\s*(?<ref>[^\s#]+)(?:\s+#.*)?$/gm
+
   for (const file of workflowFiles) {
     const workflow = readFileSync(join(repoRoot, file), 'utf8')
-    const matches = [...workflow.matchAll(PIN_RE)]
+    const matches = [...workflow.matchAll(usesPattern)]
 
     if (matches.length === 0) {
-      badPins.push(`${file}: no actions/checkout pin found`)
+      badPins.push(`${file}: no action uses entries found`)
       continue
     }
 
     for (const m of matches) {
-      const pin = m.groups?.pin ?? ''
-      const comment = (m.groups?.comment ?? '').trim()
-      const isLiteralV5 = pin === 'v5'
-      const isShaWithV5Comment =
-        /^[0-9a-f]{40}$/.test(pin) && /^v5(\b|$)/.test(comment)
-      if (!isLiteralV5 && !isShaWithV5Comment) {
-        badPins.push(`${file}: actions/checkout@${pin}${comment ? ` # ${comment}` : ''}`)
+      const ref = m.groups?.ref ?? ''
+      const pin = ref.split('@').at(-1) ?? ''
+      if (!ref.includes('@') || !/^[0-9a-f]{40}$/.test(pin)) {
+        badPins.push(`${file}: ${ref}`)
       }
     }
   }
 
   if (badPins.length > 0) {
     throw new Error(
-      `Workflow checkout actions must stay on Node 24-ready actions/checkout@v5 (literal tag or SHA pin with "# v5" comment):\n${badPins.join('\n')}`,
+      `Workflow actions must be pinned by full commit SHA:\n${badPins.join('\n')}`,
     )
   }
 
-  console.log(`Workflow checkout pins verified: ${workflowFiles.join(', ')}`)
+  console.log(`Workflow action SHA pins verified: ${workflowFiles.join(', ')}`)
 }
 
 function proveWorkflowSupplyChainGates(repoRoot: string): void {
@@ -665,22 +697,30 @@ function proveWorkflowStaticProofGates(repoRoot: string): void {
 
 function proveWorkflowTokenPermissions(repoRoot: string): void {
   const failures: string[] = []
-  const writePermissionPattern = /^\s*[a-z-]+:\s*write\s*$/m
+  const permissionPattern = /^\s*(?<name>[a-z-]+):\s*(?<level>read|write)\s*$/gm
 
   for (const [file, permissions] of Object.entries(requiredWorkflowPermissions)) {
     const workflow = readFileSync(join(repoRoot, file), 'utf8')
-    const expectedBlock = `permissions:\n${permissions
-      .map(permission => `  ${permission}`)
-      .join('\n')}`
-
-    if (!workflow.includes(expectedBlock)) {
-      failures.push(`${file}: missing exact least-privilege permissions block`)
+    const expected = new Set(permissions)
+    const found = new Set<string>()
+    for (const match of workflow.matchAll(permissionPattern)) {
+      found.add(`${match.groups?.name}: ${match.groups?.level}`)
     }
+
+    for (const permission of expected) {
+      if (!found.has(permission)) {
+        failures.push(`${file}: missing permission "${permission}"`)
+      }
+    }
+
     if (/^\s*permissions:\s*(?:read-all|write-all)\s*$/m.test(workflow)) {
       failures.push(`${file}: must not use broad read-all/write-all permissions`)
     }
-    if (writePermissionPattern.test(workflow)) {
-      failures.push(`${file}: must not request write token permissions`)
+
+    for (const permission of found) {
+      if (permission.endsWith(': write') && !expected.has(permission)) {
+        failures.push(`${file}: unexpected write permission "${permission}"`)
+      }
     }
   }
 
@@ -945,8 +985,40 @@ function main(): void {
     run('bun', ['run', 'pipeline'], sourceRoot)
   })
 
+  step('full-tree typecheck against baseline', () => {
+    run('bun', ['run', 'typecheck:full'], sourceRoot)
+  })
+
+  step('full-tree lint against baseline', () => {
+    run('bun', ['run', 'lint:full'], sourceRoot)
+  })
+
   step('full local test suite', () => {
     run('bun', ['test'], sourceRoot)
+  })
+
+  step('full local test suite with coverage', () => {
+    run('bun', ['run', 'test:coverage'], sourceRoot)
+  })
+
+  step('bundle artifact verification', () => {
+    run('bun', ['run', 'bundle:budget'], sourceRoot)
+  })
+
+  step('bundle reproducibility check', () => {
+    run('bun', ['run', 'bundle:reproducibility'], sourceRoot)
+  })
+
+  step('performance benchmark', () => {
+    run('bun', ['run', 'perf:bench'], sourceRoot)
+  })
+
+  step('dashboard E2E', () => {
+    run('bun', ['run', 'e2e:dashboard'], sourceRoot)
+  })
+
+  step('license policy check', () => {
+    run('bun', ['run', 'license:check'], sourceRoot)
   })
 
   step(

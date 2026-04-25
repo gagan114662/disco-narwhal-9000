@@ -5,19 +5,26 @@ in this repo (GitHub holds them server-side). This file documents the
 expected state. The `proof:production` script verifies many of these via the
 GitHub REST API; see `src 2/scripts/proveProductionReadiness.ts`.
 
-## Required settings on `main`
+## Currently enforced settings on `main`
 
-- **Pull request reviews**: 1 minimum (raise to 2 once team grows).
-- **Require review from CODEOWNERS**: enabled.
-- **Dismiss stale reviews on new commits**: enabled.
 - **Require status checks to pass before merging**: enabled.
 - **Require branches to be up to date before merging**: enabled.
-- **Require linear history**: enabled (no merge commits).
-- **Require signed commits**: enabled.
-- **Restrict who can push to matching branches**: empty (no direct pushes).
 - **Allow force pushes**: disabled.
 - **Allow deletions**: disabled.
 - **Enforce on administrators**: enabled.
+
+## Future hardening targets
+
+These are desirable, but are not currently enforced by GitHub branch
+protection and are therefore not claimed as active gates by
+`proof:production`:
+
+- Pull request reviews: 1 minimum.
+- Require review from CODEOWNERS.
+- Dismiss stale reviews on new commits.
+- Require linear history.
+- Require signed commits.
+- Restrict direct pushes to `main`.
 
 ## Required status checks (contexts)
 
@@ -30,6 +37,10 @@ the live settings in sync.
   branch-protection rule can stay configured against a single, stable
   name even as the matrix grows.
 - `trunk-guard / block-trunk-changes`
+
+The following checks also run on PRs, but are not currently required by branch
+protection:
+
 - `codeql / analyze (javascript-typescript)`
 - `secret-scan / trufflehog`
 - `secret-scan / semgrep`

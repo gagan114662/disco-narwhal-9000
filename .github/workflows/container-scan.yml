@@ -34,11 +34,9 @@ jobs:
         run: docker build -t kairos-cli:ci -f Dockerfile .
 
       - name: Run Trivy vulnerability scan (image)
-        # exit-code intentionally 0 (advisory) for the first pass: SARIF still
-        # uploads to code scanning so findings are visible in the Security tab,
-        # but unaddressed CRITICAL/HIGH on bun's runtime image (or transitive
-        # node deps) doesn't block the workflow until the first triage. Flip
-        # to '1' once findings are reviewed and a baseline / .trivyignore is in.
+        # Advisory for the first pass: SARIF uploads to code scanning so
+        # findings are visible in the Security tab, but untriaged base-image
+        # and transitive dependency findings do not block PRs yet.
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # master
         with:
           image-ref: kairos-cli:ci
