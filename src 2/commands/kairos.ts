@@ -802,6 +802,10 @@ async function handleBuildSummary(rest: string[]): Promise<string> {
   const latestEventLabel = latestEvent
     ? `${latestEvent.kind} at ${latestEvent.t}`
     : '—'
+  const questionCount = manifest.clarifyingQuestions?.length ?? 0
+  const answeredQuestionCount = Object.keys(
+    manifest.clarifyingQuestionAnswers ?? {},
+  ).filter(key => Number(key) >= 1 && Number(key) <= questionCount).length
 
   return [
     `Build summary for ${parsed.buildId}:`,
@@ -814,7 +818,8 @@ async function handleBuildSummary(rest: string[]): Promise<string> {
     `non-goals: ${manifest.nonGoals?.length ?? 0}`,
     `functional requirements: ${manifest.functionalRequirements?.length ?? 0}`,
     `acceptance checks: ${manifest.acceptanceChecks?.length ?? 0}`,
-    `clarifying questions: ${manifest.clarifyingQuestions?.length ?? 0}`,
+    `clarifying questions: ${questionCount}`,
+    `answered questions: ${answeredQuestionCount}/${questionCount}`,
     `assumptions: ${manifest.assumptions?.length ?? 0}`,
     `risks: ${manifest.risks?.length ?? 0}`,
     `tracer slices: ${manifest.tracerSlices?.length ?? 0}`,

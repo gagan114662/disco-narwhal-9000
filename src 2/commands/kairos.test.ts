@@ -543,6 +543,11 @@ describe('/kairos command', () => {
     expect(eventsOut).toContain(
       'clarifying_question_answered question=1 answer=employee manager and HR approver',
     )
+
+    const summaryOut = await runKairosCommand(
+      `build-summary ${projectDir} questions-build`,
+    )
+    expect(summaryOut).toContain('answered questions: 1/4')
   })
 
   test('build-questions reports a missing build clearly', async () => {
@@ -736,6 +741,7 @@ describe('/kairos command', () => {
       'functional requirements: 4',
       'acceptance checks: 4',
       'clarifying questions: 4',
+      'answered questions: 0/4',
       'assumptions: 4',
       'risks: 4',
       'tracer slices: 3',
