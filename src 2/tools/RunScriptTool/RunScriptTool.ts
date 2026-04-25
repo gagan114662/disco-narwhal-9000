@@ -81,6 +81,7 @@ async function runScriptProcess(
 
   try {
     const { command, args } = parseCommand(input.script)
+    // nosemgrep: javascript.lang.security.detect-child-process.detect-child-process -- this is the model→tool boundary; execution is gated above by allowedTools + per-call permission grant + parseCommand validation.
     const child = spawn(command, args, {
       cwd: getCwd(),
       env: {

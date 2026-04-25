@@ -313,6 +313,7 @@ export async function exec(
   }
 
   try {
+    // nosemgrep: javascript.lang.security.detect-child-process.detect-child-process -- spawnBinary is the local shell path resolved from a fixed shellType enum; not user web input.
     const childProcess = spawn(spawnBinary, shellArgs, {
       env: {
         ...subprocessEnv(),

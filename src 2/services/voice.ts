@@ -53,6 +53,7 @@ function hasCommand(cmd: string): boolean {
   // non-Windows (win32 returns early from all callers), no PATHEXT issue.
   // result.error is set iff the spawn itself fails (ENOENT/EACCES); exit
   // code is irrelevant — an unrecognized --version still means cmd exists.
+  // nosemgrep: javascript.lang.security.detect-child-process.detect-child-process -- cmd is a hardcoded voice-tool name from this file's caller list; not user input.
   const result = spawnSync(cmd, ['--version'], {
     stdio: 'ignore',
     timeout: 3000,

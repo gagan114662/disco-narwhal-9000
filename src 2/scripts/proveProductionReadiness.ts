@@ -235,6 +235,7 @@ function run(
   capture = false,
   extraEnv: Record<string, string> = {},
 ): string {
+  // nosemgrep: javascript.lang.security.detect-child-process.detect-child-process -- internal helper invoked from this file only with hardcoded build/test commands; not user input.
   const result = spawnSync(command, args, {
     cwd,
     env: { ...process.env, ...extraEnv },

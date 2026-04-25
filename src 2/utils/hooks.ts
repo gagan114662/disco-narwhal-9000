@@ -974,6 +974,7 @@ async function execCommandHook(
     // On Windows, use Git Bash explicitly (cmd.exe can't run bash syntax).
     // On other platforms, shell: true uses /bin/sh.
     const shell = isWindows ? findGitBashPath() : true
+    // nosemgrep: javascript.lang.security.detect-child-process.detect-child-process -- finalCommand is a user-configured hook from local hook config; explicitly opt-in by the user editing their own settings.
     child = spawn(finalCommand, [], {
       env: envVars,
       cwd: safeCwd,
