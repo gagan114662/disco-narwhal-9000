@@ -48,6 +48,11 @@ const workflowSupplyChainFiles = [
   '.github/workflows/permanent-structural-fix-daily.yml',
 ]
 
+const workflowStaticProofFiles = [
+  '.github/workflows/ci.yml',
+  '.github/workflows/permanent-structural-fix-daily.yml',
+]
+
 const allowedDisabledCommandStubs = [
   'src 2/commands/ant-trace/index.js',
   'src 2/commands/autofix-pr/index.js',
@@ -263,6 +268,27 @@ function proveWorkflowSupplyChainGates(repoRoot: string): void {
   )
 }
 
+function proveWorkflowStaticProofGates(repoRoot: string): void {
+  const missing: string[] = []
+
+  for (const file of workflowStaticProofFiles) {
+    const workflow = readFileSync(join(repoRoot, file), 'utf8')
+    if (!workflow.includes('bun run proof:static')) {
+      missing.push(`${file}: missing bun run proof:static`)
+    }
+  }
+
+  if (missing.length > 0) {
+    throw new Error(
+      `Workflow static production proof gates must stay enabled:\n${missing.join('\n')}`,
+    )
+  }
+
+  console.log(
+    `Workflow static production proof gates verified: ${workflowStaticProofFiles.join(', ')}`,
+  )
+}
+
 function proveNoLiveIncompleteMarkers(repoRoot: string): void {
   const sourceFiles = trackedFiles(repoRoot, 'src 2').filter(file =>
     /\.(cjs|cts|js|jsx|mjs|mts|ts|tsx)$/.test(file),
@@ -428,6 +454,10 @@ function proveStaticGates(repoRoot: string, sourceRoot: string): void {
     proveWorkflowSupplyChainGates(repoRoot)
   })
 
+  step('workflow static production proof gates are enabled', () => {
+    proveWorkflowStaticProofGates(repoRoot)
+  })
+
   step('live incomplete markers are absent', () => {
     proveNoLiveIncompleteMarkers(repoRoot)
   })
@@ -489,6 +519,10 @@ function main(): void {
 
   step('workflow supply-chain gates are enabled', () => {
     proveWorkflowSupplyChainGates(repoRoot)
+  })
+
+  step('workflow static production proof gates are enabled', () => {
+    proveWorkflowStaticProofGates(repoRoot)
   })
 
   step('live incomplete markers are absent', () => {
