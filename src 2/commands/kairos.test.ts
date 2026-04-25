@@ -1500,7 +1500,10 @@ describe('/kairos command', () => {
     const out = await runKairosCommand(
       `build-select-next ${projectDir} missing-build`,
     )
-    expect(out).toBe(`No build missing-build found for ${projectDir}.`)
+    expect(out.split('\n')).toEqual([
+      `No build missing-build found for ${projectDir}.`,
+      `builds command: /kairos builds ${projectDir}`,
+    ])
   })
 
   test('build-select-next-prompt selects and renders the next TDD prompt', async () => {
