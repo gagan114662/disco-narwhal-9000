@@ -705,13 +705,7 @@ async function handleBuildQuestions(rest: string[]): Promise<string> {
 
   return [
     `Clarifying questions for ${parsed.buildId}:`,
-    ...manifest.clarifyingQuestions.flatMap((question, index) => {
-      const questionNumber = String(index + 1)
-      const answer = manifest.clarifyingQuestionAnswers?.[questionNumber]
-      return answer
-        ? [`${questionNumber}. ${question}`, `   answer: ${answer}`]
-        : [`${questionNumber}. ${question}`]
-    }),
+    ...renderClarifyingQuestions(manifest),
   ].join('\n')
 }
 
@@ -985,6 +979,30 @@ function appendNumberedSection(
   )
 }
 
+function renderClarifyingQuestions(
+  manifest: KairosBuildManifest,
+): string[] {
+  if (!manifest.clarifyingQuestions || manifest.clarifyingQuestions.length === 0) {
+    return []
+  }
+  return manifest.clarifyingQuestions.flatMap((question, index) => {
+    const questionNumber = String(index + 1)
+    const answer = manifest.clarifyingQuestionAnswers?.[questionNumber]
+    return answer
+      ? [`${questionNumber}. ${question}`, `   answer: ${answer}`]
+      : [`${questionNumber}. ${question}`]
+  })
+}
+
+function appendClarifyingQuestionSection(
+  lines: string[],
+  manifest: KairosBuildManifest,
+): void {
+  const renderedQuestions = renderClarifyingQuestions(manifest)
+  if (renderedQuestions.length === 0) return
+  lines.push('clarifying questions:', ...renderedQuestions)
+}
+
 function appendTraceabilitySeedSection(
   lines: string[],
   seeds: KairosBuildManifest['traceabilitySeeds'],
@@ -1038,11 +1056,7 @@ async function handleBuildPrdOutline(rest: string[]): Promise<string> {
   appendBulletSection(lines, 'acceptance checks', manifest.acceptanceChecks)
   appendBulletSection(lines, 'assumptions', manifest.assumptions)
   appendBulletSection(lines, 'risks', manifest.risks)
-  appendNumberedSection(
-    lines,
-    'clarifying questions',
-    manifest.clarifyingQuestions,
-  )
+  appendClarifyingQuestionSection(lines, manifest)
   appendTraceabilitySeedSection(lines, manifest.traceabilitySeeds)
 
   return lines.join('\n')
@@ -1281,11 +1295,7 @@ async function handleBuildNext(rest: string[]): Promise<string> {
   )
   appendBulletSection(stressLines, 'assumptions', manifest.assumptions)
   appendBulletSection(stressLines, 'risks', manifest.risks)
-  appendNumberedSection(
-    stressLines,
-    'clarifying questions',
-    manifest.clarifyingQuestions,
-  )
+  appendClarifyingQuestionSection(stressLines, manifest)
 
   await writer.appendBuildEvent(parsed.projectDir, parsed.buildId, {
     version: 1,

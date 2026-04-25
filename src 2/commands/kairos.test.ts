@@ -548,6 +548,14 @@ describe('/kairos command', () => {
       `build-summary ${projectDir} questions-build`,
     )
     expect(summaryOut).toContain('answered questions: 1/4')
+
+    await runKairosCommand(`build-select ${projectDir} questions-build TB-1`)
+    const nextOut = await runKairosCommand(
+      `build-next ${projectDir} questions-build`,
+    )
+    expect(nextOut).toContain('Clarifying questions answered: 1/4')
+    expect(nextOut).toContain('1. Who are the exact user roles and approvers?')
+    expect(nextOut).toContain('   answer: employee manager and HR approver')
   })
 
   test('build-questions reports a missing build clearly', async () => {
