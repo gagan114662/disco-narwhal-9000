@@ -34,5 +34,6 @@ export function execSync_DEPRECATED(
   options?: ExecSyncOptions,
 ): Buffer | string {
   using _ = slowLogging`execSync: ${command.slice(0, 100)}`
+  // nosemgrep: javascript.lang.security.detect-child-process.detect-child-process -- thin internal wrapper around node:child_process execSync; sanitization is the caller's responsibility (this is the wrapper itself).
   return nodeExecSync(command, options)
 }

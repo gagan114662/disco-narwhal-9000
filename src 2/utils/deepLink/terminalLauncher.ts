@@ -479,6 +479,7 @@ function spawnDetached(
   opts: { cwd?: string; windowsVerbatimArguments?: boolean } = {},
 ): Promise<boolean> {
   return new Promise<boolean>(resolve => {
+    // nosemgrep: javascript.lang.security.detect-child-process.detect-child-process -- command is selected from a hardcoded terminal-emulator list (Terminal.app, iTerm, etc.) by this module's callers; not user input.
     const child = spawn(command, args, {
       detached: true,
       stdio: 'ignore',

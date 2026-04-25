@@ -654,6 +654,7 @@ export function refreshAwsAuth(awsAuthRefresh: string): Promise<boolean> {
   authStatusManager.startAuthentication()
 
   return new Promise(resolve => {
+    // nosemgrep: javascript.lang.security.detect-child-process.detect-child-process -- awsAuthRefresh is a CLI-configured auth refresh command from local user config, not remote/web input.
     const refreshProc = exec(awsAuthRefresh, {
       timeout: AWS_AUTH_REFRESH_TIMEOUT_MS,
     })
@@ -922,6 +923,7 @@ export function refreshGcpAuth(gcpAuthRefresh: string): Promise<boolean> {
   authStatusManager.startAuthentication()
 
   return new Promise(resolve => {
+    // nosemgrep: javascript.lang.security.detect-child-process.detect-child-process -- gcpAuthRefresh is a CLI-configured auth refresh command from local user config, not remote/web input.
     const refreshProc = exec(gcpAuthRefresh, {
       timeout: GCP_AUTH_REFRESH_TIMEOUT_MS,
     })

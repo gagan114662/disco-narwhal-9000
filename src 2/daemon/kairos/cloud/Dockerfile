@@ -11,4 +11,7 @@ RUN bun install --frozen-lockfile
 
 COPY . .
 
+# Drop privileges: the oven/bun base image ships a non-root `bun` user (UID 1000).
+USER bun
+
 CMD ["bun", "./daemon/kairos/cloud/bootstrap.ts"]

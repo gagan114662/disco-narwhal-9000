@@ -62,6 +62,7 @@ async function removeSocketPath(path: string): Promise<void> {
 
 async function runSocketPathCommand(command: string, args: string[]): Promise<void> {
   await new Promise<void>((resolve, reject) => {
+    // nosemgrep: javascript.lang.security.detect-child-process.detect-child-process -- only invoked above with the literal 'rm' command; not user input.
     const child = spawn(command, args, {
       stdio: 'ignore',
     })

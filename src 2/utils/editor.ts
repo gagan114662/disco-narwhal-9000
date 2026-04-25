@@ -103,6 +103,7 @@ export function openFileInExternalEditor(
       // string; cmd.exe doesn't expand $() or backticks inside double quotes.
       // Quote each arg so paths with spaces survive the shell join.
       const gotoStr = gotoArgv.map(a => `"${a}"`).join(' ')
+      // nosemgrep: javascript.lang.security.detect-child-process.detect-child-process -- win32-only path; editor is from $VISUAL/$EDITOR (local env), gotoArgv elements are explicitly quoted above to survive shell join.
       child = spawn(`${editor} ${gotoStr}`, { ...detachedOpts, shell: true })
     } else {
       // POSIX: argv array with no shell — injection-safe. shell: true would
@@ -137,6 +138,7 @@ export function openFileInExternalEditor(
       // explicit quoting ourselves (matching promptEditor.ts:74). spawnSync
       // returns errors in .error rather than throwing.
       const lineArg = useGotoLine ? `+${line} ` : ''
+      // nosemgrep: javascript.lang.security.detect-child-process.detect-child-process -- win32-only path; editor is from $VISUAL/$EDITOR (local env), filePath is explicitly quoted, line is gated by PLUS_N_EDITORS regex.
       result = spawnSync(`${editor} ${lineArg}"${filePath}"`, {
         ...syncOpts,
         shell: true,

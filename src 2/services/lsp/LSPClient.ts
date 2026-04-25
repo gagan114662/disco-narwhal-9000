@@ -95,6 +95,7 @@ export function createLSPClient(
     ): Promise<void> {
       try {
         // 1. Spawn LSP server process
+        // nosemgrep: javascript.lang.security.detect-child-process.detect-child-process -- LSP server binary path comes from trusted local config (configured language servers), not remote/user input.
         process = spawn(command, args, {
           stdio: ['pipe', 'pipe', 'pipe'],
           env: { ...subprocessEnv(), ...options?.env },
