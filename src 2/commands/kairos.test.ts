@@ -505,7 +505,10 @@ describe('/kairos command', () => {
   test('build-slices reports a missing build clearly', async () => {
     const projectDir = makeProjectDir()
     const out = await runKairosCommand(`build-slices ${projectDir} missing-build`)
-    expect(out).toBe(`No build missing-build found for ${projectDir}.`)
+    expect(out.split('\n')).toEqual([
+      `No build missing-build found for ${projectDir}.`,
+      `builds command: /kairos builds ${projectDir}`,
+    ])
   })
 
   test('build-acceptance prints persisted acceptance checks', async () => {
