@@ -1120,7 +1120,7 @@ describe('/kairos command', () => {
     )
     expect(out).toContain('Run verification before committing.')
     expect(out).toContain(
-      'After the commit, mark this slice complete with `/kairos build-complete-slice <buildId>`.',
+      `After the commit, mark this slice complete with \`/kairos build-complete-slice ${projectDir} next-build\`.`,
     )
 
     const eventsOut = await runKairosCommand(`build-events ${projectDir} next-build`)
