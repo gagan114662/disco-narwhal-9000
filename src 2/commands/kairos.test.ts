@@ -121,6 +121,7 @@ describe('/kairos command', () => {
     expect(out).toContain('/kairos build-acceptance')
     expect(out).toContain('/kairos build-questions')
     expect(out).toContain('/kairos build-requirements')
+    expect(out).toContain('/kairos build-summary')
     expect(out).toContain('/kairos cloud deploy')
     expect(out).toContain('/kairos cloud-sync')
   })
@@ -464,6 +465,39 @@ describe('/kairos command', () => {
     const projectDir = makeProjectDir()
     const out = await runKairosCommand(
       `build-requirements ${projectDir} missing-build`,
+    )
+    expect(out).toBe(`No build missing-build found for ${projectDir}.`)
+  })
+
+  test('build-summary prints compact PRD metadata counts', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'summary-build',
+      now: () => new Date('2026-04-25T19:20:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+    await runKairosCommand(`build-select ${projectDir} summary-build TB-1`)
+
+    const out = await runKairosCommand(
+      `build-summary ${projectDir} summary-build`,
+    )
+    expect(out.split('\n')).toEqual([
+      'Build summary for summary-build:',
+      'title: Leave Request App',
+      'status: draft',
+      'selected slice: TB-1',
+      'functional requirements: 4',
+      'acceptance checks: 4',
+      'clarifying questions: 4',
+      'tracer slices: 3',
+      'brief: leave request app',
+    ])
+  })
+
+  test('build-summary reports a missing build clearly', async () => {
+    const projectDir = makeProjectDir()
+    const out = await runKairosCommand(
+      `build-summary ${projectDir} missing-build`,
     )
     expect(out).toBe(`No build missing-build found for ${projectDir}.`)
   })

@@ -77,6 +77,7 @@ const HELP_TEXT = `Usage:
 /kairos build-acceptance [projectDir] <buildId>
 /kairos build-questions [projectDir] <buildId>
 /kairos build-requirements [projectDir] <buildId>
+/kairos build-summary [projectDir] <buildId>
 /kairos pause
 /kairos resume
 /kairos dashboard
@@ -112,6 +113,7 @@ type Subcommand =
   | 'build-acceptance'
   | 'build-questions'
   | 'build-requirements'
+  | 'build-summary'
   | 'pause'
   | 'resume'
   | 'dashboard'
@@ -140,6 +142,7 @@ const SUBCOMMANDS = new Set<Subcommand>([
   'build-acceptance',
   'build-questions',
   'build-requirements',
+  'build-summary',
   'pause',
   'resume',
   'dashboard',
@@ -583,6 +586,34 @@ async function handleBuildRequirements(rest: string[]): Promise<string> {
   ].join('\n')
 }
 
+async function handleBuildSummary(rest: string[]): Promise<string> {
+  const parsed = parseBuildShowArgs(rest)
+  if (parsed === null) {
+    return 'Usage: /kairos build-summary [projectDir] <buildId>'
+  }
+
+  const writer = await createStateWriter()
+  const manifest = await writer.readBuildManifest(
+    parsed.projectDir,
+    parsed.buildId,
+  )
+  if (!manifest) {
+    return `No build ${parsed.buildId} found for ${parsed.projectDir}.`
+  }
+
+  return [
+    `Build summary for ${parsed.buildId}:`,
+    `title: ${formatOptionalValue(manifest.title)}`,
+    `status: ${manifest.status}`,
+    `selected slice: ${formatOptionalValue(manifest.selectedSliceId)}`,
+    `functional requirements: ${manifest.functionalRequirements?.length ?? 0}`,
+    `acceptance checks: ${manifest.acceptanceChecks?.length ?? 0}`,
+    `clarifying questions: ${manifest.clarifyingQuestions?.length ?? 0}`,
+    `tracer slices: ${manifest.tracerSlices?.length ?? 0}`,
+    `brief: ${formatOptionalValue(manifest.brief)}`,
+  ].join('\n')
+}
+
 async function handleBuildSelect(rest: string[]): Promise<string> {
   const parsed = parseBuildSelectArgs(rest)
   if (parsed === null) {
@@ -878,6 +909,8 @@ export async function runKairosCommand(args: string): Promise<string> {
       return handleBuildQuestions(rest)
     case 'build-requirements':
       return handleBuildRequirements(rest)
+    case 'build-summary':
+      return handleBuildSummary(rest)
     case 'pause':
       return handlePause()
     case 'resume':
@@ -919,7 +952,7 @@ const kairos = {
   name: 'kairos',
   description: 'Inspect and control the KAIROS background daemon',
   argumentHint:
-    'status|list|opt-in|opt-out|demo|build|builds|build-show|build-events|build-slices|build-select|build-next|build-acceptance|build-questions|build-requirements|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
+    'status|list|opt-in|opt-out|demo|build|builds|build-show|build-events|build-slices|build-select|build-next|build-acceptance|build-questions|build-requirements|build-summary|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
   load: () => import('./kairos-ui.js'),
 } satisfies Command
 
