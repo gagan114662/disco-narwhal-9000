@@ -254,13 +254,17 @@ describe('/kairos command', () => {
       now: () => new Date('2026-04-25T18:35:00.000Z'),
     })
     await runKairosCommand(`build ${projectDir} leave request approval app`)
+    await runKairosCommand(`build-select ${projectDir} newer-build TB-2`)
 
     const out = await runKairosCommand(`builds ${projectDir}`)
-    expect(out.split('\n')).toEqual([
-      `Builds for ${projectDir}:`,
-      '- newer-build [draft] Leave Request Approval App updated=2026-04-25T18:35:00.000Z',
+    const lines = out.split('\n')
+    expect(lines[0]).toBe(`Builds for ${projectDir}:`)
+    expect(lines[1]).toContain(
+      '- newer-build [draft] Leave Request Approval App selected=TB-2 updated=',
+    )
+    expect(lines[2]).toBe(
       '- older-build [draft] Vendor Onboarding Form updated=2026-04-25T18:30:00.000Z',
-    ])
+    )
   })
 
   test('builds reports empty state clearly', async () => {
@@ -282,9 +286,24 @@ describe('/kairos command', () => {
     expect(out).toContain(`project: ${projectDir}`)
     expect(out).toContain('title: Vendor Onboarding Form')
     expect(out).toContain('status: draft')
+    expect(out).toContain('selected slice: —')
     expect(out).toContain('brief: vendor onboarding form')
     expect(out).toContain('--- spec ---')
     expect(out).toContain('# Vendor Onboarding Form')
+  })
+
+  test('build-show prints the selected tracer bullet when present', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'show-selected-build',
+      now: () => new Date('2026-04-25T18:42:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+    await runKairosCommand(`build-select ${projectDir} show-selected-build TB-3`)
+
+    const out = await runKairosCommand(`build-show ${projectDir} show-selected-build`)
+    expect(out).toContain('Build: show-selected-build')
+    expect(out).toContain('selected slice: TB-3')
   })
 
   test('build-show reports a missing build clearly', async () => {

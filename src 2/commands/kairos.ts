@@ -384,7 +384,10 @@ async function handleBuilds(projectDir: string): Promise<string> {
     ...builds.map(
       build => {
         const title = build.title ? ` ${build.title}` : ''
-        return `- ${build.buildId} [${build.status}]${title} updated=${build.updatedAt}`
+        const selected = build.selectedSliceId
+          ? ` selected=${build.selectedSliceId}`
+          : ''
+        return `- ${build.buildId} [${build.status}]${title}${selected} updated=${build.updatedAt}`
       },
     ),
   ].join('\n')
@@ -410,6 +413,7 @@ async function handleBuildShow(rest: string[]): Promise<string> {
     `project: ${manifest.projectDir}`,
     `title: ${formatOptionalValue(manifest.title)}`,
     `status: ${manifest.status}`,
+    `selected slice: ${formatOptionalValue(manifest.selectedSliceId)}`,
     `brief: ${formatOptionalValue(manifest.brief)}`,
     `created: ${manifest.createdAt}`,
     `updated: ${manifest.updatedAt}`,
