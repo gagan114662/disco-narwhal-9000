@@ -1175,6 +1175,8 @@ describe('/kairos command', () => {
       '4. What retention, export, or compliance constraints apply?',
       'traceability seeds:',
       '- BRIEF-1 [brief] leave request app',
+      `show command: /kairos build-show ${projectDir} outline-build`,
+      `readiness command: /kairos build-readiness ${projectDir} outline-build`,
     ])
   })
 

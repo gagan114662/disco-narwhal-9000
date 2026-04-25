@@ -1256,6 +1256,10 @@ async function handleBuildPrdOutline(rest: string[]): Promise<string> {
   appendBulletSection(lines, 'risks', manifest.risks)
   appendClarifyingQuestionSection(lines, manifest)
   appendTraceabilitySeedSection(lines, manifest.traceabilitySeeds)
+  lines.push(
+    `show command: /kairos build-show ${manifest.projectDir} ${manifest.buildId}`,
+    `readiness command: /kairos build-readiness ${manifest.projectDir} ${manifest.buildId}`,
+  )
 
   return lines.join('\n')
 }
