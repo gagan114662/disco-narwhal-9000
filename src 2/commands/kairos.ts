@@ -733,6 +733,17 @@ function appendBulletSection(
   lines.push(`${title}:`, ...items.map(item => `- ${item}`))
 }
 
+function appendTraceabilitySeedSection(
+  lines: string[],
+  seeds: KairosBuildManifest['traceabilitySeeds'],
+): void {
+  if (!seeds || seeds.length === 0) return
+  lines.push(
+    'traceability seeds:',
+    ...seeds.map(seed => `- ${seed.id} [${seed.source}] ${seed.text}`),
+  )
+}
+
 async function handleBuildPrdOutline(rest: string[]): Promise<string> {
   const parsed = parseBuildShowArgs(rest)
   if (parsed === null) {
@@ -772,14 +783,7 @@ async function handleBuildPrdOutline(rest: string[]): Promise<string> {
       ),
     )
   }
-  if (manifest.traceabilitySeeds && manifest.traceabilitySeeds.length > 0) {
-    lines.push(
-      'traceability seeds:',
-      ...manifest.traceabilitySeeds.map(
-        seed => `- ${seed.id} [${seed.source}] ${seed.text}`,
-      ),
-    )
-  }
+  appendTraceabilitySeedSection(lines, manifest.traceabilitySeeds)
 
   return lines.join('\n')
 }
@@ -992,6 +996,14 @@ async function handleBuildNext(rest: string[]): Promise<string> {
   if (!slice) {
     return `Selected tracer slice ${manifest.selectedSliceId} is missing for ${parsed.buildId}.`
   }
+  const anchorLines: string[] = ['PRD anchors:']
+  appendBulletSection(
+    anchorLines,
+    'functional requirements',
+    manifest.functionalRequirements,
+  )
+  appendBulletSection(anchorLines, 'acceptance checks', manifest.acceptanceChecks)
+  appendTraceabilitySeedSection(anchorLines, manifest.traceabilitySeeds)
 
   await writer.appendBuildEvent(parsed.projectDir, parsed.buildId, {
     version: 1,
@@ -1011,6 +1023,8 @@ async function handleBuildNext(rest: string[]): Promise<string> {
     '',
     'Write the failing test first:',
     slice.testFirst,
+    '',
+    ...anchorLines,
     '',
     'Then implement only this slice:',
     slice.implement,

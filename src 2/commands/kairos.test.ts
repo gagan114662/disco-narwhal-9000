@@ -907,6 +907,15 @@ describe('/kairos command', () => {
     expect(out).toContain(
       'creating the minimum valid record persists it and shows it in a list',
     )
+    expect(out).toContain('PRD anchors:')
+    expect(out).toContain('functional requirements:')
+    expect(out).toContain('- Intake form or record creation flow.')
+    expect(out).toContain('acceptance checks:')
+    expect(out).toContain(
+      '- A user can create a valid record from the primary form.',
+    )
+    expect(out).toContain('traceability seeds:')
+    expect(out).toContain('- BRIEF-1 [brief] leave request app')
     expect(out).toContain('Then implement only this slice:')
     expect(out).toContain(
       'add the smallest form, persistence path, and list view needed for one record',
