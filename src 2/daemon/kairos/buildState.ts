@@ -27,6 +27,7 @@ export const kairosBuildManifestSchema = z.object({
   title: z.string().min(1).optional(),
   brief: z.string().min(1).optional(),
   goals: z.array(z.string().min(1)).optional(),
+  nonGoals: z.array(z.string().min(1)).optional(),
   functionalRequirements: z.array(z.string().min(1)).optional(),
   acceptanceChecks: z.array(z.string().min(1)).optional(),
   clarifyingQuestions: z.array(z.string().min(1)).optional(),

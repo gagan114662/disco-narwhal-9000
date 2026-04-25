@@ -125,6 +125,7 @@ describe('/kairos command', () => {
     expect(out).toContain('/kairos build-assumptions')
     expect(out).toContain('/kairos build-risks')
     expect(out).toContain('/kairos build-goals')
+    expect(out).toContain('/kairos build-non-goals')
     expect(out).toContain('/kairos cloud deploy')
     expect(out).toContain('/kairos cloud-sync')
   })
@@ -235,6 +236,10 @@ describe('/kairos command', () => {
         'Convert the brief into a buildable internal workflow app.',
         'Preserve spec clauses as future eval and audit anchors.',
         'Identify missing compliance, data, and approval requirements before build.',
+      ],
+      nonGoals: [
+        'Native mobile application.',
+        'Broad "any app" generation beyond the selected workflow.',
       ],
       assumptions: [
         'The first build targets a browser-based internal workflow tool.',
@@ -516,6 +521,32 @@ describe('/kairos command', () => {
     expect(out).toBe(`No build missing-build found for ${projectDir}.`)
   })
 
+  test('build-non-goals prints persisted draft non-goals', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'non-goals-build',
+      now: () => new Date('2026-04-25T19:18:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+
+    const out = await runKairosCommand(
+      `build-non-goals ${projectDir} non-goals-build`,
+    )
+    expect(out.split('\n')).toEqual([
+      'Non-goals for non-goals-build:',
+      '- Native mobile application.',
+      '- Broad "any app" generation beyond the selected workflow.',
+    ])
+  })
+
+  test('build-non-goals reports a missing build clearly', async () => {
+    const projectDir = makeProjectDir()
+    const out = await runKairosCommand(
+      `build-non-goals ${projectDir} missing-build`,
+    )
+    expect(out).toBe(`No build missing-build found for ${projectDir}.`)
+  })
+
   test('build-summary prints compact PRD metadata counts', async () => {
     const projectDir = makeProjectDir()
     __setKairosBuildDepsForTesting({
@@ -534,6 +565,7 @@ describe('/kairos command', () => {
       'status: draft',
       'selected slice: TB-1',
       'goals: 3',
+      'non-goals: 2',
       'functional requirements: 4',
       'acceptance checks: 4',
       'clarifying questions: 4',

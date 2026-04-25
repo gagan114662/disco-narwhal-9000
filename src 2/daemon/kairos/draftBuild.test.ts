@@ -5,6 +5,7 @@ import {
   createDraftClarifyingQuestions,
   createDraftFunctionalRequirements,
   createDraftGoals,
+  createDraftNonGoals,
   createDraftRisks,
   createDraftTracerSlices,
   deriveDraftTitle,
@@ -103,6 +104,13 @@ describe('draft build PRD rendering', () => {
       'Convert the brief into a buildable internal workflow app.',
       'Preserve spec clauses as future eval and audit anchors.',
       'Identify missing compliance, data, and approval requirements before build.',
+    ])
+  })
+
+  test('creates deterministic non-goals for vague briefs', () => {
+    expect(createDraftNonGoals()).toEqual([
+      'Native mobile application.',
+      'Broad "any app" generation beyond the selected workflow.',
     ])
   })
 

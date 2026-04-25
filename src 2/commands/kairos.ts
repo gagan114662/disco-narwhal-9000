@@ -81,6 +81,7 @@ const HELP_TEXT = `Usage:
 /kairos build-assumptions [projectDir] <buildId>
 /kairos build-risks [projectDir] <buildId>
 /kairos build-goals [projectDir] <buildId>
+/kairos build-non-goals [projectDir] <buildId>
 /kairos pause
 /kairos resume
 /kairos dashboard
@@ -120,6 +121,7 @@ type Subcommand =
   | 'build-assumptions'
   | 'build-risks'
   | 'build-goals'
+  | 'build-non-goals'
   | 'pause'
   | 'resume'
   | 'dashboard'
@@ -152,6 +154,7 @@ const SUBCOMMANDS = new Set<Subcommand>([
   'build-assumptions',
   'build-risks',
   'build-goals',
+  'build-non-goals',
   'pause',
   'resume',
   'dashboard',
@@ -616,6 +619,7 @@ async function handleBuildSummary(rest: string[]): Promise<string> {
     `status: ${manifest.status}`,
     `selected slice: ${formatOptionalValue(manifest.selectedSliceId)}`,
     `goals: ${manifest.goals?.length ?? 0}`,
+    `non-goals: ${manifest.nonGoals?.length ?? 0}`,
     `functional requirements: ${manifest.functionalRequirements?.length ?? 0}`,
     `acceptance checks: ${manifest.acceptanceChecks?.length ?? 0}`,
     `clarifying questions: ${manifest.clarifyingQuestions?.length ?? 0}`,
@@ -647,6 +651,30 @@ async function handleBuildGoals(rest: string[]): Promise<string> {
   return [
     `Goals for ${parsed.buildId}:`,
     ...manifest.goals.map(goal => `- ${goal}`),
+  ].join('\n')
+}
+
+async function handleBuildNonGoals(rest: string[]): Promise<string> {
+  const parsed = parseBuildShowArgs(rest)
+  if (parsed === null) {
+    return 'Usage: /kairos build-non-goals [projectDir] <buildId>'
+  }
+
+  const writer = await createStateWriter()
+  const manifest = await writer.readBuildManifest(
+    parsed.projectDir,
+    parsed.buildId,
+  )
+  if (!manifest) {
+    return `No build ${parsed.buildId} found for ${parsed.projectDir}.`
+  }
+  if (!manifest.nonGoals || manifest.nonGoals.length === 0) {
+    return `No non-goals found for ${parsed.buildId} in ${parsed.projectDir}.`
+  }
+
+  return [
+    `Non-goals for ${parsed.buildId}:`,
+    ...manifest.nonGoals.map(nonGoal => `- ${nonGoal}`),
   ].join('\n')
 }
 
@@ -1001,6 +1029,8 @@ export async function runKairosCommand(args: string): Promise<string> {
       return handleBuildRisks(rest)
     case 'build-goals':
       return handleBuildGoals(rest)
+    case 'build-non-goals':
+      return handleBuildNonGoals(rest)
     case 'pause':
       return handlePause()
     case 'resume':
@@ -1042,7 +1072,7 @@ const kairos = {
   name: 'kairos',
   description: 'Inspect and control the KAIROS background daemon',
   argumentHint:
-    'status|list|opt-in|opt-out|demo|build|builds|build-show|build-events|build-slices|build-select|build-next|build-acceptance|build-questions|build-requirements|build-summary|build-assumptions|build-risks|build-goals|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
+    'status|list|opt-in|opt-out|demo|build|builds|build-show|build-events|build-slices|build-select|build-next|build-acceptance|build-questions|build-requirements|build-summary|build-assumptions|build-risks|build-goals|build-non-goals|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
   load: () => import('./kairos-ui.js'),
 } satisfies Command
 

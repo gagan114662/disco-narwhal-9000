@@ -115,6 +115,13 @@ export function createDraftGoals(): string[] {
   ]
 }
 
+export function createDraftNonGoals(): string[] {
+  return [
+    'Native mobile application.',
+    'Broad "any app" generation beyond the selected workflow.',
+  ]
+}
+
 export function createDraftFunctionalRequirements(): string[] {
   return [
     'Intake form or record creation flow.',
@@ -164,6 +171,7 @@ export function renderDraftPrd(brief: string): string {
   const title = deriveDraftTitle(trimmedBrief)
   const tracerSlices = createDraftTracerSlices()
   const goals = createDraftGoals()
+  const nonGoals = createDraftNonGoals()
   const functionalRequirements = createDraftFunctionalRequirements()
   const acceptanceChecks = createDraftAcceptanceChecks()
   const clarifyingQuestions = createDraftClarifyingQuestions()
@@ -203,8 +211,7 @@ export function renderDraftPrd(brief: string): string {
     '',
     '## Non-Goals',
     '',
-    '- Native mobile application.',
-    '- Broad "any app" generation beyond the selected workflow.',
+    ...nonGoals.map(nonGoal => `- ${nonGoal}`),
     '',
     '## Functional Requirements',
     '',
@@ -250,6 +257,7 @@ export async function createDraftBuild(
   const title = deriveDraftTitle(trimmedBrief)
   const tracerSlices = createDraftTracerSlices()
   const goals = createDraftGoals()
+  const nonGoals = createDraftNonGoals()
   const functionalRequirements = createDraftFunctionalRequirements()
   const acceptanceChecks = createDraftAcceptanceChecks()
   const clarifyingQuestions = createDraftClarifyingQuestions()
@@ -264,6 +272,7 @@ export async function createDraftBuild(
     title,
     brief: trimmedBrief,
     goals,
+    nonGoals,
     functionalRequirements,
     acceptanceChecks,
     clarifyingQuestions,
