@@ -688,7 +688,8 @@ describe('/kairos command', () => {
     const out = await runKairosCommand(
       `build-summary ${projectDir} summary-build`,
     )
-    expect(out.split('\n')).toEqual([
+    const lines = out.split('\n')
+    expect(lines.slice(0, -2)).toEqual([
       'Build summary for summary-build:',
       'title: Leave Request App',
       'status: draft',
@@ -705,8 +706,11 @@ describe('/kairos command', () => {
       'tracer slices: 3',
       'completed slices: 0',
       'traceability seeds: 1',
-      'brief: leave request app',
     ])
+    expect(lines.at(-2)?.startsWith('last event: slice_selected at ')).toBe(
+      true,
+    )
+    expect(lines.at(-1)).toBe('brief: leave request app')
   })
 
   test('build-summary reports a missing build clearly', async () => {

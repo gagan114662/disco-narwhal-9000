@@ -713,6 +713,11 @@ async function handleBuildSummary(rest: string[]): Promise<string> {
   if (!manifest) {
     return `No build ${parsed.buildId} found for ${parsed.projectDir}.`
   }
+  const events = await writer.readBuildEvents(parsed.projectDir, parsed.buildId)
+  const latestEvent = events.at(-1)
+  const latestEventLabel = latestEvent
+    ? `${latestEvent.kind} at ${latestEvent.t}`
+    : '—'
 
   return [
     `Build summary for ${parsed.buildId}:`,
@@ -731,6 +736,7 @@ async function handleBuildSummary(rest: string[]): Promise<string> {
     `tracer slices: ${manifest.tracerSlices?.length ?? 0}`,
     `completed slices: ${manifest.completedSliceIds?.length ?? 0}`,
     `traceability seeds: ${manifest.traceabilitySeeds?.length ?? 0}`,
+    `last event: ${latestEventLabel}`,
     `brief: ${formatOptionalValue(manifest.brief)}`,
   ].join('\n')
 }
