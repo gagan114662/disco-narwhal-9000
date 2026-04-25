@@ -76,6 +76,7 @@ const HELP_TEXT = `Usage:
 /kairos build-next [projectDir] <buildId>
 /kairos build-acceptance [projectDir] <buildId>
 /kairos build-questions [projectDir] <buildId>
+/kairos build-requirements [projectDir] <buildId>
 /kairos pause
 /kairos resume
 /kairos dashboard
@@ -110,6 +111,7 @@ type Subcommand =
   | 'build-next'
   | 'build-acceptance'
   | 'build-questions'
+  | 'build-requirements'
   | 'pause'
   | 'resume'
   | 'dashboard'
@@ -137,6 +139,7 @@ const SUBCOMMANDS = new Set<Subcommand>([
   'build-next',
   'build-acceptance',
   'build-questions',
+  'build-requirements',
   'pause',
   'resume',
   'dashboard',
@@ -553,6 +556,33 @@ async function handleBuildQuestions(rest: string[]): Promise<string> {
   ].join('\n')
 }
 
+async function handleBuildRequirements(rest: string[]): Promise<string> {
+  const parsed = parseBuildShowArgs(rest)
+  if (parsed === null) {
+    return 'Usage: /kairos build-requirements [projectDir] <buildId>'
+  }
+
+  const writer = await createStateWriter()
+  const manifest = await writer.readBuildManifest(
+    parsed.projectDir,
+    parsed.buildId,
+  )
+  if (!manifest) {
+    return `No build ${parsed.buildId} found for ${parsed.projectDir}.`
+  }
+  if (
+    !manifest.functionalRequirements ||
+    manifest.functionalRequirements.length === 0
+  ) {
+    return `No functional requirements found for ${parsed.buildId} in ${parsed.projectDir}.`
+  }
+
+  return [
+    `Functional requirements for ${parsed.buildId}:`,
+    ...manifest.functionalRequirements.map(requirement => `- ${requirement}`),
+  ].join('\n')
+}
+
 async function handleBuildSelect(rest: string[]): Promise<string> {
   const parsed = parseBuildSelectArgs(rest)
   if (parsed === null) {
@@ -846,6 +876,8 @@ export async function runKairosCommand(args: string): Promise<string> {
       return handleBuildAcceptance(rest)
     case 'build-questions':
       return handleBuildQuestions(rest)
+    case 'build-requirements':
+      return handleBuildRequirements(rest)
     case 'pause':
       return handlePause()
     case 'resume':
@@ -887,7 +919,7 @@ const kairos = {
   name: 'kairos',
   description: 'Inspect and control the KAIROS background daemon',
   argumentHint:
-    'status|list|opt-in|opt-out|demo|build|builds|build-show|build-events|build-slices|build-select|build-next|build-acceptance|build-questions|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
+    'status|list|opt-in|opt-out|demo|build|builds|build-show|build-events|build-slices|build-select|build-next|build-acceptance|build-questions|build-requirements|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
   load: () => import('./kairos-ui.js'),
 } satisfies Command
 

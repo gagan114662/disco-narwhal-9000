@@ -107,6 +107,15 @@ export function createDraftAcceptanceChecks(): string[] {
   ]
 }
 
+export function createDraftFunctionalRequirements(): string[] {
+  return [
+    'Intake form or record creation flow.',
+    'List/detail views for submitted records.',
+    'Role-aware approval or status workflow where applicable.',
+    'Audit trail for important state changes.',
+  ]
+}
+
 export function createDraftClarifyingQuestions(): string[] {
   return [
     'Who are the exact user roles and approvers?',
@@ -128,6 +137,7 @@ export function renderDraftPrd(brief: string): string {
   const trimmedBrief = brief.trim()
   const title = deriveDraftTitle(trimmedBrief)
   const tracerSlices = createDraftTracerSlices()
+  const functionalRequirements = createDraftFunctionalRequirements()
   const acceptanceChecks = createDraftAcceptanceChecks()
   const clarifyingQuestions = createDraftClarifyingQuestions()
   return [
@@ -163,10 +173,7 @@ export function renderDraftPrd(brief: string): string {
     '',
     '## Functional Requirements',
     '',
-    '- Intake form or record creation flow.',
-    '- List/detail views for submitted records.',
-    '- Role-aware approval or status workflow where applicable.',
-    '- Audit trail for important state changes.',
+    ...functionalRequirements.map(requirement => `- ${requirement}`),
     '',
     '## Acceptance Checks',
     '',
@@ -207,6 +214,7 @@ export async function createDraftBuild(
   const manifestPath = getProjectKairosBuildManifestPath(projectDir, buildId)
   const title = deriveDraftTitle(trimmedBrief)
   const tracerSlices = createDraftTracerSlices()
+  const functionalRequirements = createDraftFunctionalRequirements()
   const acceptanceChecks = createDraftAcceptanceChecks()
   const clarifyingQuestions = createDraftClarifyingQuestions()
 
@@ -217,6 +225,7 @@ export async function createDraftBuild(
     tenantId: 'local',
     title,
     brief: trimmedBrief,
+    functionalRequirements,
     acceptanceChecks,
     clarifyingQuestions,
     tracerSlices,

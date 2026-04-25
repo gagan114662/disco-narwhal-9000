@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   createDraftAcceptanceChecks,
   createDraftClarifyingQuestions,
+  createDraftFunctionalRequirements,
   createDraftTracerSlices,
   deriveDraftTitle,
   renderDraftPrd,
@@ -82,6 +83,15 @@ describe('draft build PRD rendering', () => {
       'What fields are required, optional, or sensitive?',
       'What notifications or integrations are required?',
       'What retention, export, or compliance constraints apply?',
+    ])
+  })
+
+  test('creates deterministic functional requirements for vague briefs', () => {
+    expect(createDraftFunctionalRequirements()).toEqual([
+      'Intake form or record creation flow.',
+      'List/detail views for submitted records.',
+      'Role-aware approval or status workflow where applicable.',
+      'Audit trail for important state changes.',
     ])
   })
 })

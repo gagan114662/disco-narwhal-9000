@@ -26,6 +26,7 @@ export const kairosBuildManifestSchema = z.object({
   tenantId: z.string().min(1),
   title: z.string().min(1).optional(),
   brief: z.string().min(1).optional(),
+  functionalRequirements: z.array(z.string().min(1)).optional(),
   acceptanceChecks: z.array(z.string().min(1)).optional(),
   clarifyingQuestions: z.array(z.string().min(1)).optional(),
   tracerSlices: z.array(kairosBuildTracerSliceSchema).optional(),
