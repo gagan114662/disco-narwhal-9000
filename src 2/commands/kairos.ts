@@ -86,6 +86,7 @@ const HELP_TEXT = `Usage:
 /kairos build-questions [projectDir] <buildId>
 /kairos build-requirements [projectDir] <buildId>
 /kairos build-summary [projectDir] <buildId>
+/kairos build-progress [projectDir] <buildId>
 /kairos build-assumptions [projectDir] <buildId>
 /kairos build-risks [projectDir] <buildId>
 /kairos build-goals [projectDir] <buildId>
@@ -133,6 +134,7 @@ type Subcommand =
   | 'build-questions'
   | 'build-requirements'
   | 'build-summary'
+  | 'build-progress'
   | 'build-assumptions'
   | 'build-risks'
   | 'build-goals'
@@ -173,6 +175,7 @@ const SUBCOMMANDS = new Set<Subcommand>([
   'build-questions',
   'build-requirements',
   'build-summary',
+  'build-progress',
   'build-assumptions',
   'build-risks',
   'build-goals',
@@ -659,6 +662,59 @@ async function handleBuildSummary(rest: string[]): Promise<string> {
     `completed slices: ${manifest.completedSliceIds?.length ?? 0}`,
     `traceability seeds: ${manifest.traceabilitySeeds?.length ?? 0}`,
     `brief: ${formatOptionalValue(manifest.brief)}`,
+  ].join('\n')
+}
+
+function formatTracerSliceProgress(
+  slice: KairosBuildTracerSlice,
+  completedSliceIds: Set<string>,
+  selectedSliceId: string | undefined,
+): string {
+  let state = 'pending'
+  if (completedSliceIds.has(slice.id)) {
+    state = 'complete'
+  } else if (slice.id === selectedSliceId) {
+    state = 'selected'
+  }
+  return `- ${slice.id} ${slice.title} [${state}]`
+}
+
+async function handleBuildProgress(rest: string[]): Promise<string> {
+  const parsed = parseBuildShowArgs(rest)
+  if (parsed === null) {
+    return 'Usage: /kairos build-progress [projectDir] <buildId>'
+  }
+
+  const writer = await createStateWriter()
+  const manifest = await writer.readBuildManifest(
+    parsed.projectDir,
+    parsed.buildId,
+  )
+  if (!manifest) {
+    return `No build ${parsed.buildId} found for ${parsed.projectDir}.`
+  }
+  if (!manifest.tracerSlices || manifest.tracerSlices.length === 0) {
+    return `No tracer slices found for ${parsed.buildId} in ${parsed.projectDir}.`
+  }
+
+  const completedSliceIds = new Set(manifest.completedSliceIds ?? [])
+  const completedCount = manifest.tracerSlices.filter(slice =>
+    completedSliceIds.has(slice.id),
+  ).length
+  const totalCount = manifest.tracerSlices.length
+  const remainingCount = totalCount - completedCount
+  return [
+    `Build progress for ${parsed.buildId}:`,
+    `selected slice: ${formatOptionalValue(manifest.selectedSliceId)}`,
+    `completed slices: ${completedCount}/${totalCount}`,
+    `remaining slices: ${remainingCount}`,
+    ...manifest.tracerSlices.map(slice =>
+      formatTracerSliceProgress(
+        slice,
+        completedSliceIds,
+        manifest.selectedSliceId,
+      ),
+    ),
   ].join('\n')
 }
 
@@ -1334,6 +1390,8 @@ export async function runKairosCommand(args: string): Promise<string> {
       return handleBuildRequirements(rest)
     case 'build-summary':
       return handleBuildSummary(rest)
+    case 'build-progress':
+      return handleBuildProgress(rest)
     case 'build-assumptions':
       return handleBuildAssumptions(rest)
     case 'build-risks':
@@ -1391,7 +1449,7 @@ const kairos = {
   name: 'kairos',
   description: 'Inspect and control the KAIROS background daemon',
   argumentHint:
-    'status|list|opt-in|opt-out|demo|build|builds|build-show|build-events|build-slices|build-select|build-select-next|build-select-next-prompt|build-next|build-complete-slice|build-acceptance|build-questions|build-requirements|build-summary|build-assumptions|build-risks|build-goals|build-non-goals|build-users|build-problem|build-traceability|build-prd-outline|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
+    'status|list|opt-in|opt-out|demo|build|builds|build-show|build-events|build-slices|build-select|build-select-next|build-select-next-prompt|build-next|build-complete-slice|build-acceptance|build-questions|build-requirements|build-summary|build-progress|build-assumptions|build-risks|build-goals|build-non-goals|build-users|build-problem|build-traceability|build-prd-outline|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
   load: () => import('./kairos-ui.js'),
 } satisfies Command
 

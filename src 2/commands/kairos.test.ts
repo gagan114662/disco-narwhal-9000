@@ -125,6 +125,7 @@ describe('/kairos command', () => {
     expect(out).toContain('/kairos build-questions')
     expect(out).toContain('/kairos build-requirements')
     expect(out).toContain('/kairos build-summary')
+    expect(out).toContain('/kairos build-progress')
     expect(out).toContain('/kairos build-assumptions')
     expect(out).toContain('/kairos build-risks')
     expect(out).toContain('/kairos build-goals')
@@ -684,6 +685,46 @@ describe('/kairos command', () => {
       `build-summary ${projectDir} missing-build`,
     )
     expect(out).toBe(`No build missing-build found for ${projectDir}.`)
+  })
+
+  test('build-progress prints selected, completed, and pending tracer bullets', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'progress-build',
+      now: () => new Date('2026-04-25T19:52:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+    await runKairosCommand(`build-select ${projectDir} progress-build TB-1`)
+    await runKairosCommand(
+      `build-complete-slice ${projectDir} progress-build`,
+    )
+    await runKairosCommand(`build-select ${projectDir} progress-build TB-2`)
+
+    const out = await runKairosCommand(
+      `build-progress ${projectDir} progress-build`,
+    )
+    expect(out.split('\n')).toEqual([
+      'Build progress for progress-build:',
+      'selected slice: TB-2',
+      'completed slices: 1/3',
+      'remaining slices: 2',
+      '- TB-1 Record intake skeleton [complete]',
+      '- TB-2 Review workflow path [selected]',
+      '- TB-3 Validation and role guardrails [pending]',
+    ])
+  })
+
+  test('build-progress reports a missing build clearly', async () => {
+    const projectDir = makeProjectDir()
+    const out = await runKairosCommand(
+      `build-progress ${projectDir} missing-build`,
+    )
+    expect(out).toBe(`No build missing-build found for ${projectDir}.`)
+  })
+
+  test('build-progress reports its own usage for missing args', async () => {
+    const out = await runKairosCommand('build-progress')
+    expect(out).toBe('Usage: /kairos build-progress [projectDir] <buildId>')
   })
 
   test('build-prd-outline prints persisted PRD sections in canonical order', async () => {
