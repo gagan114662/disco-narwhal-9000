@@ -67,7 +67,7 @@ const DEFAULT_DASHBOARD_URL = 'http://127.0.0.1:7777/'
 const DEFAULT_LOG_TAIL = 25
 type KairosBuildEventKind = KairosBuildEvent['kind']
 
-const KAIROS_BUILD_EVENT_KINDS = new Set<KairosBuildEventKind>([
+const KAIROS_BUILD_EVENT_KIND_LIST: KairosBuildEventKind[] = [
   'build_created',
   'build_status_changed',
   'spec_written',
@@ -77,7 +77,12 @@ const KAIROS_BUILD_EVENT_KINDS = new Set<KairosBuildEventKind>([
   'agent_event_recorded',
   'build_result_written',
   'build_failed',
-])
+]
+const KAIROS_BUILD_EVENT_KINDS = new Set<KairosBuildEventKind>(
+  KAIROS_BUILD_EVENT_KIND_LIST,
+)
+const BUILD_EVENTS_USAGE =
+  'Usage: /kairos build-events [projectDir] <buildId> [lines] [--kind <kind>]'
 
 const HELP_TEXT = `Usage:
 /kairos status
@@ -386,14 +391,18 @@ function parseBuildEventKind(value: string): KairosBuildEventKind | null {
 
 function parseBuildEventOptions(
   tokens: string[],
-): { limit: number; kind?: KairosBuildEventKind } | null {
+):
+  | { limit: number; kind?: KairosBuildEventKind }
+  | { error: 'invalid_kind'; kind: string }
+  | null {
   let limit = DEFAULT_LOG_TAIL
   let kind: KairosBuildEventKind | undefined
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index]
     if (token === '--kind') {
-      const parsedKind = parseBuildEventKind(tokens[index + 1] ?? '')
-      if (!parsedKind) return null
+      const rawKind = tokens[index + 1] ?? ''
+      const parsedKind = parseBuildEventKind(rawKind)
+      if (!parsedKind) return { error: 'invalid_kind', kind: rawKind }
       kind = parsedKind
       index += 1
       continue
@@ -412,6 +421,7 @@ function parseBuildEventsArgs(rest: string[]):
       limit: number
       kind?: KairosBuildEventKind
     }
+  | { error: 'invalid_kind'; kind: string }
   | null {
   if (rest.length === 0) return null
   const [first, second] = rest
@@ -419,6 +429,7 @@ function parseBuildEventsArgs(rest: string[]):
     if (!second) return null
     const options = parseBuildEventOptions(rest.slice(2))
     if (!options) return null
+    if ('error' in options) return options
     return {
       projectDir: resolveProjectDir(first),
       buildId: second,
@@ -427,6 +438,7 @@ function parseBuildEventsArgs(rest: string[]):
   }
   const options = parseBuildEventOptions(rest.slice(1))
   if (!options) return null
+  if ('error' in options) return options
   return {
     projectDir: resolveProjectDir(undefined),
     buildId: first,
@@ -550,7 +562,14 @@ function formatBuildEvent(event: KairosBuildEvent): string {
 async function handleBuildEvents(rest: string[]): Promise<string> {
   const parsed = parseBuildEventsArgs(rest)
   if (parsed === null) {
-    return 'Usage: /kairos build-events [projectDir] <buildId> [lines] [--kind <kind>]'
+    return BUILD_EVENTS_USAGE
+  }
+  if ('error' in parsed) {
+    return [
+      `Unknown build event kind: ${parsed.kind}`,
+      `Supported kinds: ${KAIROS_BUILD_EVENT_KIND_LIST.join(', ')}`,
+      BUILD_EVENTS_USAGE,
+    ].join('\n')
   }
 
   const writer = await createStateWriter()

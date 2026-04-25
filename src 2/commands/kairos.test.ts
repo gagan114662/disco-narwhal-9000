@@ -418,6 +418,15 @@ describe('/kairos command', () => {
     )
   })
 
+  test('build-events reports supported kinds for an invalid kind filter', async () => {
+    const out = await runKairosCommand('build-events events-build --kind nope')
+    expect(out.split('\n')).toEqual([
+      'Unknown build event kind: nope',
+      'Supported kinds: build_created, build_status_changed, spec_written, slice_selected, next_slice_prompt_rendered, slice_completed, agent_event_recorded, build_result_written, build_failed',
+      'Usage: /kairos build-events [projectDir] <buildId> [lines] [--kind <kind>]',
+    ])
+  })
+
   test('build-events reports a missing build clearly', async () => {
     const projectDir = makeProjectDir()
     const out = await runKairosCommand(`build-events ${projectDir} missing-build`)
