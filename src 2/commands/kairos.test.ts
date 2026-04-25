@@ -117,6 +117,7 @@ describe('/kairos command', () => {
     expect(out).toContain('/kairos build-events')
     expect(out).toContain('/kairos build-slices')
     expect(out).toContain('/kairos build-select')
+    expect(out).toContain('/kairos build-next')
     expect(out).toContain('/kairos cloud deploy')
     expect(out).toContain('/kairos cloud-sync')
   })
@@ -380,6 +381,43 @@ describe('/kairos command', () => {
 
     const out = await runKairosCommand(`build-select ${projectDir} select-build TB-9`)
     expect(out).toBe('No tracer slice TB-9 found for select-build.')
+  })
+
+  test('build-next renders a TDD prompt for the selected tracer bullet', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'next-build',
+      now: () => new Date('2026-04-25T19:00:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+    await runKairosCommand(`build-select ${projectDir} next-build TB-1`)
+
+    const out = await runKairosCommand(`build-next ${projectDir} next-build`)
+    expect(out).toContain('Build next slice: TB-1 Record intake skeleton')
+    expect(out).toContain(`Project: ${projectDir}`)
+    expect(out).toContain('Write the failing test first:')
+    expect(out).toContain(
+      'creating the minimum valid record persists it and shows it in a list',
+    )
+    expect(out).toContain('Then implement only this slice:')
+    expect(out).toContain(
+      'add the smallest form, persistence path, and list view needed for one record',
+    )
+    expect(out).toContain('Run verification before committing.')
+  })
+
+  test('build-next requires a selected tracer bullet', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'next-build',
+      now: () => new Date('2026-04-25T19:00:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+
+    const out = await runKairosCommand(`build-next ${projectDir} next-build`)
+    expect(out).toBe(
+      'No tracer slice selected for next-build. Run `/kairos build-select <buildId> <sliceId>` first.',
+    )
   })
 
   test('pause writes pause.json and resume clears it', async () => {
