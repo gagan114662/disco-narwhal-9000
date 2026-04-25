@@ -21,14 +21,63 @@ export type DraftBuildResult = {
   manifestPath: string
 }
 
+const TITLE_STOP_WORDS = new Set([
+  'a',
+  'an',
+  'and',
+  'application',
+  'build',
+  'create',
+  'for',
+  'me',
+  'please',
+  'the',
+  'to',
+])
+
+function toTitleCaseWord(word: string): string {
+  return `${word.slice(0, 1).toUpperCase()}${word.slice(1).toLowerCase()}`
+}
+
+export function deriveDraftTitle(brief: string): string {
+  const normalizedWords = brief
+    .trim()
+    .replace(/[^A-Za-z0-9\s-]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+  const forIndex = normalizedWords.findIndex(
+    word => word.toLowerCase() === 'for',
+  )
+  const titleSource =
+    forIndex > 0 ? normalizedWords.slice(0, forIndex) : normalizedWords
+  const words = titleSource
+    .filter(word => !TITLE_STOP_WORDS.has(word.toLowerCase()))
+    .slice(0, 6)
+
+  if (words.length === 0) return 'KAIROS-SF Draft PRD'
+  return words.map(toTitleCaseWord).join(' ')
+}
+
+function quoteBrief(brief: string): string {
+  return brief
+    .trim()
+    .split(/\r?\n/)
+    .map(line => `> ${line.trim()}`)
+    .join('\n')
+}
+
 export function renderDraftPrd(brief: string): string {
   const trimmedBrief = brief.trim()
+  const title = deriveDraftTitle(trimmedBrief)
   return [
-    '# KAIROS-SF Draft PRD',
+    `# ${title}`,
+    '',
+    '**Status:** Draft',
+    '**Source:** `/kairos build` brief',
     '',
     '## Original Brief',
     '',
-    trimmedBrief,
+    quoteBrief(trimmedBrief),
     '',
     '## Problem',
     '',
@@ -65,12 +114,16 @@ export function renderDraftPrd(brief: string): string {
     '- Invalid or incomplete data is rejected with clear feedback.',
     '- Important changes are visible in an audit trail.',
     '',
-    '## Open Questions',
+    '## Clarifying Questions',
     '',
     '1. Who are the exact user roles and approvers?',
     '2. What fields are required, optional, or sensitive?',
     '3. What notifications or integrations are required?',
     '4. What retention, export, or compliance constraints apply?',
+    '',
+    '## Traceability Seed',
+    '',
+    `- BRIEF-1: ${trimmedBrief}`,
     '',
   ].join('\n')
 }

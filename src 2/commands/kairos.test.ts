@@ -207,9 +207,9 @@ describe('/kairos command', () => {
       getProjectKairosBuildSpecPath(projectDir, 'build-test-1'),
       'utf8',
     )
-    expect(spec).toContain('# KAIROS-SF Draft PRD')
+    expect(spec).toContain('# Leave Request Approval App')
     expect(spec).toContain('leave request approval app for hourly workers')
-    expect(spec).toContain('## Open Questions')
+    expect(spec).toContain('## Clarifying Questions')
 
     const events = readFileSync(
       getProjectKairosBuildEventsPath(projectDir, 'build-test-1'),
