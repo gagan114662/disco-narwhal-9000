@@ -34,6 +34,8 @@ bun run proof:production
 - Workflow checkout actions stay pinned to Node 24-ready `actions/checkout@v5`.
 - GitHub `ci` and `permanent-structural-fix-daily` workflows keep
   frozen-lockfile install, supply-chain audit, and static proof gates enabled.
+- GitHub workflows declare least-privilege `GITHUB_TOKEN` permissions and do
+  not request write-scoped or broad read/write-all permissions.
 - Live incomplete markers are absent across tracked source files.
 - Disabled command stubs are explicit and bounded.
 - SDK unsupported surfaces are explicit and bounded.
@@ -64,6 +66,7 @@ No focused, skipped, pending, or expected-failing tests found across 65 test fil
 ci hosted steps verified
 permanent-structural-fix-daily hosted steps verified
 Main branch protection verified
+Workflow token permissions verified
 PRODUCTION PROOF PASSED
 ```
 
@@ -73,9 +76,10 @@ GitHub workflows also run:
 bun run proof:static
 ```
 
-That CI-friendly proof mode verifies test hygiene, workflow pins and
-supply-chain gates, incomplete-marker scanning, disabled command stub bounds,
-and SDK unsupported-surface bounds without requiring GitHub API access.
+That CI-friendly proof mode verifies test hygiene, workflow pins, workflow
+supply-chain/static-proof gates, least-privilege token permissions,
+incomplete-marker scanning, disabled command stub bounds, and SDK
+unsupported-surface bounds without requiring GitHub API access.
 
 ## 8090 Comparison Boundary
 

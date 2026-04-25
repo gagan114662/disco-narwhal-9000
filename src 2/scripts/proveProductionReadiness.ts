@@ -81,6 +81,15 @@ const workflowStaticProofFiles = [
   '.github/workflows/permanent-structural-fix-daily.yml',
 ]
 
+const requiredWorkflowPermissions: Record<string, string[]> = {
+  '.github/workflows/ci.yml': ['contents: read'],
+  '.github/workflows/permanent-structural-fix-daily.yml': ['contents: read'],
+  '.github/workflows/trunk-guard.yml': [
+    'contents: read',
+    'pull-requests: read',
+  ],
+}
+
 const requiredHostedWorkflowSteps: Record<string, string[]> = {
   ci: [
     'Install dependencies',
@@ -442,6 +451,40 @@ function proveWorkflowStaticProofGates(repoRoot: string): void {
   )
 }
 
+function proveWorkflowTokenPermissions(repoRoot: string): void {
+  const failures: string[] = []
+  const writePermissionPattern = /^\s*[a-z-]+:\s*write\s*$/m
+
+  for (const [file, permissions] of Object.entries(requiredWorkflowPermissions)) {
+    const workflow = readFileSync(join(repoRoot, file), 'utf8')
+    const expectedBlock = `permissions:\n${permissions
+      .map(permission => `  ${permission}`)
+      .join('\n')}`
+
+    if (!workflow.includes(expectedBlock)) {
+      failures.push(`${file}: missing exact least-privilege permissions block`)
+    }
+    if (/^\s*permissions:\s*(?:read-all|write-all)\s*$/m.test(workflow)) {
+      failures.push(`${file}: must not use broad read-all/write-all permissions`)
+    }
+    if (writePermissionPattern.test(workflow)) {
+      failures.push(`${file}: must not request write token permissions`)
+    }
+  }
+
+  if (failures.length > 0) {
+    throw new Error(
+      `Workflow token permissions are not least-privilege:\n${failures.join('\n')}`,
+    )
+  }
+
+  console.log(
+    `Workflow token permissions verified: ${Object.keys(
+      requiredWorkflowPermissions,
+    ).join(', ')}`,
+  )
+}
+
 function proveNoLiveIncompleteMarkers(repoRoot: string): void {
   const sourceFiles = trackedFiles(repoRoot, 'src 2').filter(file =>
     /\.(cjs|cts|js|jsx|mjs|mts|ts|tsx)$/.test(file),
@@ -611,6 +654,10 @@ function proveStaticGates(repoRoot: string, sourceRoot: string): void {
     proveWorkflowStaticProofGates(repoRoot)
   })
 
+  step('workflow token permissions are least-privilege', () => {
+    proveWorkflowTokenPermissions(repoRoot)
+  })
+
   step('live incomplete markers are absent', () => {
     proveNoLiveIncompleteMarkers(repoRoot)
   })
@@ -676,6 +723,10 @@ function main(): void {
 
   step('workflow static production proof gates are enabled', () => {
     proveWorkflowStaticProofGates(repoRoot)
+  })
+
+  step('workflow token permissions are least-privilege', () => {
+    proveWorkflowTokenPermissions(repoRoot)
   })
 
   step('live incomplete markers are absent', () => {
