@@ -15,7 +15,9 @@ bun run proof:production
 - Local production pipeline: typecheck, lint, builds, CLI smoke, bundle smoke,
   KAIROS smoke, and employee smoke.
 - Full local test suite: 411 tests across 65 files.
-- Tracked worktree cleanliness after the proof run.
+- Test hygiene: no focused, skipped, pending, or expected-failing test
+  modifiers across tracked test files.
+- Tracked worktree cleanliness before and after the proof run.
 - Latest `origin/main` `ci` workflow is completed and successful for the exact
   main commit.
 - Latest `origin/main` `permanent-structural-fix-daily` workflow is completed
@@ -47,6 +49,7 @@ The local proof result must end with:
 ```text
 411 pass
 0 fail
+No focused, skipped, pending, or expected-failing tests found across 65 test files
 PRODUCTION PROOF PASSED
 ```
 
@@ -85,5 +88,6 @@ The SDK facade currently permits exactly these unsupported surfaces:
 - `watchScheduledTasks`
 - `connectRemoteControl`
 
-Any new live incomplete marker, unbounded disabled command stub, or unexpected
-SDK unsupported surface should fail `bun run proof:production`.
+Any new live incomplete marker, focused/skipped/pending/expected-failing test,
+unbounded disabled command stub, or unexpected SDK unsupported surface should
+fail `bun run proof:production`.
