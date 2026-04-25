@@ -558,6 +558,52 @@ describe('/kairos command', () => {
     expect(nextOut).toContain('   answer: employee manager and HR approver')
   })
 
+  test('build-unanswered lists only unanswered clarifying questions', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'questions-build',
+      now: () => new Date('2026-04-25T19:12:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+    await runKairosCommand(
+      `build-answer ${projectDir} questions-build 1 employee manager and HR approver`,
+    )
+
+    const out = await runKairosCommand(
+      `build-unanswered ${projectDir} questions-build`,
+    )
+    expect(out.split('\n')).toEqual([
+      'Unanswered clarifying questions for questions-build:',
+      '2. What fields are required, optional, or sensitive?',
+      '3. What notifications or integrations are required?',
+      '4. What retention, export, or compliance constraints apply?',
+    ])
+  })
+
+  test('build-unanswered reports when every clarifying question is answered', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'questions-build',
+      now: () => new Date('2026-04-25T19:13:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+    for (const [questionNumber, answer] of [
+      [1, 'employee manager and HR approver'],
+      [2, 'dates reason and sensitive notes'],
+      [3, 'email notifications only'],
+      [4, 'retain records for seven years'],
+    ] as const) {
+      await runKairosCommand(
+        `build-answer ${projectDir} questions-build ${questionNumber} ${answer}`,
+      )
+    }
+
+    const out = await runKairosCommand(
+      `build-unanswered ${projectDir} questions-build`,
+    )
+    expect(out).toBe('No unanswered clarifying questions for questions-build.')
+  })
+
   test('build-questions reports a missing build clearly', async () => {
     const projectDir = makeProjectDir()
     const out = await runKairosCommand(

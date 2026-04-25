@@ -104,6 +104,7 @@ const HELP_TEXT = `Usage:
 /kairos build-acceptance [projectDir] <buildId>
 /kairos build-questions [projectDir] <buildId>
 /kairos build-answer [projectDir] <buildId> <questionNumber> <answer>
+/kairos build-unanswered [projectDir] <buildId>
 /kairos build-requirements [projectDir] <buildId>
 /kairos build-summary [projectDir] <buildId>
 /kairos build-progress [projectDir] <buildId>
@@ -153,6 +154,7 @@ type Subcommand =
   | 'build-acceptance'
   | 'build-questions'
   | 'build-answer'
+  | 'build-unanswered'
   | 'build-requirements'
   | 'build-summary'
   | 'build-progress'
@@ -195,6 +197,7 @@ const SUBCOMMANDS = new Set<Subcommand>([
   'build-acceptance',
   'build-questions',
   'build-answer',
+  'build-unanswered',
   'build-requirements',
   'build-summary',
   'build-progress',
@@ -750,6 +753,31 @@ async function handleBuildAnswer(rest: string[]): Promise<string> {
   return `Answered question ${parsed.questionNumber} for ${parsed.buildId}: ${parsed.answer}`
 }
 
+async function handleBuildUnanswered(rest: string[]): Promise<string> {
+  const parsed = parseBuildShowArgs(rest)
+  if (parsed === null) {
+    return 'Usage: /kairos build-unanswered [projectDir] <buildId>'
+  }
+
+  const writer = await createStateWriter()
+  const manifest = await writer.readBuildManifest(
+    parsed.projectDir,
+    parsed.buildId,
+  )
+  if (!manifest) {
+    return `No build ${parsed.buildId} found for ${parsed.projectDir}.`
+  }
+  const unanswered = renderUnansweredClarifyingQuestions(manifest)
+  if (unanswered.length === 0) {
+    return `No unanswered clarifying questions for ${parsed.buildId}.`
+  }
+
+  return [
+    `Unanswered clarifying questions for ${parsed.buildId}:`,
+    ...unanswered,
+  ].join('\n')
+}
+
 async function handleBuildRequirements(rest: string[]): Promise<string> {
   const parsed = parseBuildShowArgs(rest)
   if (parsed === null) {
@@ -1023,6 +1051,20 @@ function countAnsweredClarifyingQuestions(manifest: KairosBuildManifest): {
     key => Number(key) >= 1 && Number(key) <= total,
   ).length
   return { answered, total }
+}
+
+function renderUnansweredClarifyingQuestions(
+  manifest: KairosBuildManifest,
+): string[] {
+  if (!manifest.clarifyingQuestions || manifest.clarifyingQuestions.length === 0) {
+    return []
+  }
+  return manifest.clarifyingQuestions.flatMap((question, index) => {
+    const questionNumber = String(index + 1)
+    return manifest.clarifyingQuestionAnswers?.[questionNumber]
+      ? []
+      : [`${questionNumber}. ${question}`]
+  })
 }
 
 async function handleBuildPrdOutline(rest: string[]): Promise<string> {
@@ -1602,6 +1644,8 @@ export async function runKairosCommand(args: string): Promise<string> {
       return handleBuildQuestions(rest)
     case 'build-answer':
       return handleBuildAnswer(rest)
+    case 'build-unanswered':
+      return handleBuildUnanswered(rest)
     case 'build-requirements':
       return handleBuildRequirements(rest)
     case 'build-summary':
@@ -1665,7 +1709,7 @@ const kairos = {
   name: 'kairos',
   description: 'Inspect and control the KAIROS background daemon',
   argumentHint:
-    'status|list|opt-in|opt-out|demo|build|builds|build-show|build-events|build-slices|build-select|build-select-next|build-select-next-prompt|build-next|build-complete-slice|build-acceptance|build-questions|build-answer|build-requirements|build-summary|build-progress|build-assumptions|build-risks|build-goals|build-non-goals|build-users|build-problem|build-traceability|build-prd-outline|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
+    'status|list|opt-in|opt-out|demo|build|builds|build-show|build-events|build-slices|build-select|build-select-next|build-select-next-prompt|build-next|build-complete-slice|build-acceptance|build-questions|build-answer|build-unanswered|build-requirements|build-summary|build-progress|build-assumptions|build-risks|build-goals|build-non-goals|build-users|build-problem|build-traceability|build-prd-outline|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
   load: () => import('./kairos-ui.js'),
 } satisfies Command
 
