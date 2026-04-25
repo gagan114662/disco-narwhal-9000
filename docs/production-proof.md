@@ -28,7 +28,7 @@ bun run proof:production
 - Current open PR check rollups have no red latest checks.
 - Workflow checkout actions stay pinned to Node 24-ready `actions/checkout@v5`.
 - GitHub `ci` and `permanent-structural-fix-daily` workflows keep
-  frozen-lockfile install and supply-chain audit gates enabled.
+  frozen-lockfile install, supply-chain audit, and static proof gates enabled.
 - Live incomplete markers are absent across tracked source files.
 - Disabled command stubs are explicit and bounded.
 - SDK unsupported surfaces are explicit and bounded.
@@ -58,6 +58,16 @@ No vulnerabilities found
 No focused, skipped, pending, or expected-failing tests found across 65 test files
 PRODUCTION PROOF PASSED
 ```
+
+GitHub workflows also run:
+
+```bash
+bun run proof:static
+```
+
+That CI-friendly proof mode verifies test hygiene, workflow pins and
+supply-chain gates, incomplete-marker scanning, disabled command stub bounds,
+and SDK unsupported-surface bounds without requiring GitHub API access.
 
 ## 8090 Comparison Boundary
 

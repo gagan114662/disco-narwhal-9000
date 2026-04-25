@@ -404,9 +404,53 @@ function proveTrackedWorktreeClean(repoRoot: string): void {
   run('git', ['diff', '--cached', '--exit-code'], repoRoot, true)
 }
 
+function proveStaticGates(repoRoot: string, sourceRoot: string): void {
+  step('tracked worktree clean before static proof run', () => {
+    proveTrackedWorktreeClean(repoRoot)
+  })
+
+  step(
+    'test suite has no focused, skipped, pending, or expected-failing tests',
+    () => {
+      proveNoNonRunningTests(repoRoot)
+    },
+  )
+
+  step('tracked worktree unchanged by static proof run', () => {
+    proveTrackedWorktreeClean(repoRoot)
+  })
+
+  step('workflow checkout actions are Node 24 ready', () => {
+    proveWorkflowActionPins(repoRoot)
+  })
+
+  step('workflow supply-chain gates are enabled', () => {
+    proveWorkflowSupplyChainGates(repoRoot)
+  })
+
+  step('live incomplete markers are absent', () => {
+    proveNoLiveIncompleteMarkers(repoRoot)
+  })
+
+  step('disabled command stubs are explicit and bounded', () => {
+    proveDisabledCommandStubs(repoRoot)
+  })
+
+  step('SDK compatibility stubs are explicit and bounded', () => {
+    proveSdkStubs(sourceRoot)
+  })
+}
+
 function main(): void {
   const repoRoot = run('git', ['rev-parse', '--show-toplevel'], process.cwd(), true)
   const sourceRoot = join(repoRoot, 'src 2')
+  const staticOnly = process.argv.includes('--static')
+
+  if (staticOnly) {
+    proveStaticGates(repoRoot, sourceRoot)
+    console.log('\nSTATIC PRODUCTION PROOF PASSED')
+    return
+  }
 
   step('tracked worktree clean before proof run', () => {
     proveTrackedWorktreeClean(repoRoot)

@@ -37,3 +37,6 @@ jobs:
 
       - name: Run full test suite
         run: bun test
+
+      - name: Run static production proof gates
+        run: bun run proof:static
