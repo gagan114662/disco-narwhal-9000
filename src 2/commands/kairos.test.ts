@@ -1398,6 +1398,17 @@ describe('/kairos command', () => {
     ])
   })
 
+  test('build-select reports a missing build clearly', async () => {
+    const projectDir = makeProjectDir()
+    const out = await runKairosCommand(
+      `build-select ${projectDir} missing-build TB-1`,
+    )
+    expect(out.split('\n')).toEqual([
+      `No build missing-build found for ${projectDir}.`,
+      `builds command: /kairos builds ${projectDir}`,
+    ])
+  })
+
   test('build-select-next selects the first tracer bullet when none is selected', async () => {
     const projectDir = makeProjectDir()
     __setKairosBuildDepsForTesting({
