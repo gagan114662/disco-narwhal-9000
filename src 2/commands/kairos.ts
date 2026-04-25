@@ -16,6 +16,7 @@ import {
   createDraftBuild,
   type CreateDraftBuildDeps,
 } from '../daemon/kairos/draftBuild.js'
+import type { KairosBuildEvent } from '../daemon/kairos/buildState.js'
 import type { Command } from '../types/command.js'
 import {
   runKairosMemoryCommand,
@@ -69,6 +70,7 @@ const HELP_TEXT = `Usage:
 /kairos build [projectDir] <brief>
 /kairos builds [projectDir]
 /kairos build-show [projectDir] <buildId>
+/kairos build-events [projectDir] <buildId> [lines]
 /kairos pause
 /kairos resume
 /kairos dashboard
@@ -97,6 +99,7 @@ type Subcommand =
   | 'build'
   | 'builds'
   | 'build-show'
+  | 'build-events'
   | 'pause'
   | 'resume'
   | 'dashboard'
@@ -118,6 +121,7 @@ const SUBCOMMANDS = new Set<Subcommand>([
   'build',
   'builds',
   'build-show',
+  'build-events',
   'pause',
   'resume',
   'dashboard',
@@ -298,6 +302,28 @@ function parseBuildShowArgs(
   return { projectDir: resolveProjectDir(undefined), buildId: first }
 }
 
+function parseBuildEventsArgs(
+  rest: string[],
+): { projectDir: string; buildId: string; limit: number } | null {
+  if (rest.length === 0) return null
+  const [first, second, third] = rest
+  if (isPathLike(first)) {
+    if (!second) return null
+    const parsedLimit = third ? Math.max(1, Math.floor(Number(third))) : DEFAULT_LOG_TAIL
+    return {
+      projectDir: resolveProjectDir(first),
+      buildId: second,
+      limit: Number.isFinite(parsedLimit) ? parsedLimit : DEFAULT_LOG_TAIL,
+    }
+  }
+  const parsedLimit = second ? Math.max(1, Math.floor(Number(second))) : DEFAULT_LOG_TAIL
+  return {
+    projectDir: resolveProjectDir(undefined),
+    buildId: first,
+    limit: Number.isFinite(parsedLimit) ? parsedLimit : DEFAULT_LOG_TAIL,
+  }
+}
+
 async function handleBuild(rest: string[]): Promise<string> {
   const parsed = parseBuildArgs(rest)
   if (parsed === null) {
@@ -360,6 +386,48 @@ async function handleBuildShow(rest: string[]): Promise<string> {
     `spec: ${formatOptionalValue(manifest.specPath)}`,
     '--- spec ---',
     spec ?? '(spec not found)',
+  ].join('\n')
+}
+
+function formatBuildEvent(event: KairosBuildEvent): string {
+  switch (event.kind) {
+    case 'build_created':
+      return `${event.t} build_created status=${event.status}`
+    case 'build_status_changed':
+      return `${event.t} build_status_changed ${event.from}->${event.to}`
+    case 'spec_written':
+      return `${event.t} spec_written spec=${event.specPath}`
+    case 'agent_event_recorded':
+      return `${event.t} agent_event_recorded run=${event.runId} event=${event.eventKind}`
+    case 'build_result_written':
+      return `${event.t} build_result_written status=${event.status} result=${event.resultPath}`
+    case 'build_failed':
+      return `${event.t} build_failed error=${event.errorMessage}`
+  }
+}
+
+async function handleBuildEvents(rest: string[]): Promise<string> {
+  const parsed = parseBuildEventsArgs(rest)
+  if (parsed === null) {
+    return 'Usage: /kairos build-events [projectDir] <buildId> [lines]'
+  }
+
+  const writer = await createStateWriter()
+  const manifest = await writer.readBuildManifest(
+    parsed.projectDir,
+    parsed.buildId,
+  )
+  if (!manifest) {
+    return `No build ${parsed.buildId} found for ${parsed.projectDir}.`
+  }
+
+  const events = await writer.readBuildEvents(parsed.projectDir, parsed.buildId)
+  if (events.length === 0) {
+    return `No build events found for ${parsed.buildId} in ${parsed.projectDir}.`
+  }
+  return [
+    `Events for ${parsed.buildId}:`,
+    ...events.slice(-parsed.limit).map(event => `- ${formatBuildEvent(event)}`),
   ].join('\n')
 }
 
@@ -550,6 +618,8 @@ export async function runKairosCommand(args: string): Promise<string> {
       return handleBuilds(resolveProjectDir(rest[0]))
     case 'build-show':
       return handleBuildShow(rest)
+    case 'build-events':
+      return handleBuildEvents(rest)
     case 'pause':
       return handlePause()
     case 'resume':
@@ -591,7 +661,7 @@ const kairos = {
   name: 'kairos',
   description: 'Inspect and control the KAIROS background daemon',
   argumentHint:
-    'status|list|opt-in|opt-out|demo|build|builds|build-show|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
+    'status|list|opt-in|opt-out|demo|build|builds|build-show|build-events|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
   load: () => import('./kairos-ui.js'),
 } satisfies Command
 

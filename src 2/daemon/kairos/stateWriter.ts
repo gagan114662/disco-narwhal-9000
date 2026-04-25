@@ -307,6 +307,24 @@ export async function createStateWriter() {
         parsed,
       )
     },
+    async readBuildEvents(
+      projectDir: string,
+      buildId: string,
+    ): Promise<KairosBuildEvent[]> {
+      let raw: string
+      try {
+        raw = await readFile(
+          getProjectKairosBuildEventsPath(projectDir, buildId),
+          'utf8',
+        )
+      } catch {
+        return []
+      }
+      return raw
+        .split(/\r?\n/)
+        .filter(line => line.trim().length > 0)
+        .map(line => parseKairosBuildEvent(JSON.parse(line)))
+    },
     async writeBuildTranscriptPointer(
       projectDir: string,
       buildId: string,

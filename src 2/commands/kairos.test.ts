@@ -114,6 +114,7 @@ describe('/kairos command', () => {
     expect(out).toContain('/kairos build')
     expect(out).toContain('/kairos builds')
     expect(out).toContain('/kairos build-show')
+    expect(out).toContain('/kairos build-events')
     expect(out).toContain('/kairos cloud deploy')
     expect(out).toContain('/kairos cloud-sync')
   })
@@ -272,6 +273,28 @@ describe('/kairos command', () => {
   test('build-show reports a missing build clearly', async () => {
     const projectDir = makeProjectDir()
     const out = await runKairosCommand(`build-show ${projectDir} missing-build`)
+    expect(out).toBe(`No build missing-build found for ${projectDir}.`)
+  })
+
+  test('build-events prints persisted build lifecycle events', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'events-build',
+      now: () => new Date('2026-04-25T18:45:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+
+    const out = await runKairosCommand(`build-events ${projectDir} events-build`)
+    expect(out.split('\n')).toEqual([
+      'Events for events-build:',
+      '- 2026-04-25T18:45:00.000Z build_created status=draft',
+      `- 2026-04-25T18:45:00.000Z spec_written spec=${getProjectKairosBuildSpecPath(projectDir, 'events-build')}`,
+    ])
+  })
+
+  test('build-events reports a missing build clearly', async () => {
+    const projectDir = makeProjectDir()
+    const out = await runKairosCommand(`build-events ${projectDir} missing-build`)
     expect(out).toBe(`No build missing-build found for ${projectDir}.`)
   })
 

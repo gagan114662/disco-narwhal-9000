@@ -83,6 +83,16 @@ describe('Kairos state writer build state', () => {
     expect(readFileSync(join(buildDir, 'events.jsonl'), 'utf8')).toContain(
       '"kind":"build_created"',
     )
+    expect(await writer.readBuildEvents(projectDir, buildId)).toEqual([
+      {
+        version: 1,
+        kind: 'build_created',
+        buildId,
+        tenantId: 'tenant-local',
+        t: '2026-04-25T18:00:00.000Z',
+        status: 'draft',
+      },
+    ])
     expect(readJson(join(buildDir, 'result.json'))).toMatchObject({
       buildId,
       status: 'succeeded',
