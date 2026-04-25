@@ -618,6 +618,17 @@ describe('/kairos command', () => {
     expect(nextOut).toContain('   answer: employee manager and HR approver')
   })
 
+  test('build-answer reports a missing build clearly', async () => {
+    const projectDir = makeProjectDir()
+    const out = await runKairosCommand(
+      `build-answer ${projectDir} missing-build 1 answer`,
+    )
+    expect(out.split('\n')).toEqual([
+      `No build missing-build found for ${projectDir}.`,
+      `builds command: /kairos builds ${projectDir}`,
+    ])
+  })
+
   test('build-answer explains the valid clarifying question range', async () => {
     const projectDir = makeProjectDir()
     __setKairosBuildDepsForTesting({
