@@ -14,16 +14,21 @@ import type {
   ToolAnnotations,
 } from '@modelcontextprotocol/sdk/types.js'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { appendFile } from 'fs/promises'
+import { randomUUID } from 'crypto'
+import { appendFile, writeFile } from 'fs/promises'
+import { dirname, join } from 'path'
 import {
   listSessionsImpl,
   parseSessionInfoFromLite,
+  type SessionInfo,
 } from '../utils/listSessionsImpl.js'
 import {
   readSessionLite,
+  readTranscriptForLoad,
   resolveSessionFilePath,
 } from '../utils/sessionStoragePortable.js'
 import { cronToHuman } from '../utils/cron.js'
+import { parseJSONL } from '../utils/json.js'
 
 // Control protocol types for SDK builders (bridge subpath consumers)
 /** @alpha */
@@ -48,37 +53,73 @@ export * from './sdk/toolTypes.js'
 import type {
   SDKMessage,
   SDKResultMessage,
-  SDKSessionInfo,
   SDKUserMessage,
 } from './sdk/coreTypes.js'
 // Import types needed for function signatures
 import type {
   AnyZodRawShape,
-  ForkSessionOptions,
-  ForkSessionResult,
-  GetSessionInfoOptions,
-  GetSessionMessagesOptions,
   InferShape,
-  InternalOptions,
-  InternalQuery,
-  ListSessionsOptions,
   McpSdkServerConfigWithInstance,
   Options,
   Query,
   SDKSession,
   SDKSessionOptions,
   SdkMcpToolDefinition,
-  SessionMessage,
-  SessionMutationOptions,
 } from './sdk/runtimeTypes.js'
 
-export type {
-  ListSessionsOptions,
-  GetSessionInfoOptions,
-  SessionMutationOptions,
-  ForkSessionOptions,
-  ForkSessionResult,
-  SDKSessionInfo,
+type InternalOptions = Options
+type InternalQuery = Query
+
+export type SDKSessionInfo = SessionInfo
+
+export type ListSessionsOptions = {
+  dir?: string
+  limit?: number
+  offset?: number
+  includeWorktrees?: boolean
+}
+
+export type GetSessionInfoOptions = {
+  dir?: string
+}
+
+export type GetSessionMessagesOptions = {
+  dir?: string
+  limit?: number
+  offset?: number
+  includeSystemMessages?: boolean
+}
+
+export type SessionMutationOptions = {
+  dir?: string
+}
+
+export type ForkSessionOptions = {
+  dir?: string
+  upToMessageId?: string
+  title?: string
+}
+
+export type ForkSessionResult = {
+  sessionId: string
+}
+
+export type SessionMessage = {
+  type: string
+  uuid: string
+  parentUuid: string | null
+  logicalParentUuid?: string | null
+  sessionId?: string
+  timestamp?: string
+  isSidechain?: boolean
+  message?: unknown
+  [key: string]: unknown
+}
+
+type ContentReplacementEntry = {
+  type: 'content-replacement'
+  sessionId: string
+  replacements: unknown[]
 }
 
 function unsupportedSdkApi(name: string): never {
@@ -89,6 +130,173 @@ function unsupportedSdkApi(name: string): never {
 
 function sessionDir(options: unknown): string | undefined {
   return (options as { dir?: string } | undefined)?.dir
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function isSessionMessage(entry: unknown): entry is SessionMessage {
+  if (!isRecord(entry)) return false
+  if (typeof entry.type !== 'string') return false
+  if (typeof entry.uuid !== 'string') return false
+  return entry.parentUuid === null || typeof entry.parentUuid === 'string'
+}
+
+function isConversationMessage(
+  entry: SessionMessage,
+  includeSystemMessages: boolean,
+): boolean {
+  return (
+    entry.type === 'user' ||
+    entry.type === 'assistant' ||
+    entry.type === 'attachment' ||
+    (includeSystemMessages && entry.type === 'system')
+  )
+}
+
+function parseTranscriptMessages(buf: Buffer): Map<string, SessionMessage> {
+  const messages = new Map<string, SessionMessage>()
+  const progressBridge = new Map<string, string | null>()
+
+  for (const entry of parseJSONL<unknown>(buf)) {
+    if (
+      isRecord(entry) &&
+      entry.type === 'progress' &&
+      typeof entry.uuid === 'string'
+    ) {
+      const parentUuid =
+        entry.parentUuid === null || typeof entry.parentUuid === 'string'
+          ? (entry.parentUuid as string | null)
+          : null
+      const uuid = entry.uuid
+      progressBridge.set(
+        uuid,
+        parentUuid && progressBridge.has(parentUuid)
+          ? (progressBridge.get(parentUuid) ?? null)
+          : parentUuid,
+      )
+      continue
+    }
+
+    if (!isSessionMessage(entry)) continue
+    if (
+      !['user', 'assistant', 'attachment', 'system'].includes(entry.type) ||
+      entry.isSidechain === true
+    ) {
+      continue
+    }
+
+    if (entry.parentUuid && progressBridge.has(entry.parentUuid)) {
+      entry.parentUuid = progressBridge.get(entry.parentUuid) ?? null
+    }
+    messages.set(entry.uuid, entry)
+  }
+
+  return messages
+}
+
+function findLatestLeaf(
+  messages: Iterable<SessionMessage>,
+): SessionMessage | undefined {
+  const all = [...messages]
+  const parentUuids = new Set(
+    all
+      .map(message => message.parentUuid)
+      .filter((uuid): uuid is string => typeof uuid === 'string'),
+  )
+
+  let latest: SessionMessage | undefined
+  let maxTime = -Infinity
+  for (let index = 0; index < all.length; index++) {
+    const message = all[index]!
+    if (parentUuids.has(message.uuid)) continue
+    const timestamp =
+      typeof message.timestamp === 'string'
+        ? Date.parse(message.timestamp)
+        : NaN
+    const time = Number.isFinite(timestamp) ? timestamp : index
+    if (time > maxTime) {
+      maxTime = time
+      latest = message
+    }
+  }
+  return latest
+}
+
+function buildSessionChain(
+  messages: Map<string, SessionMessage>,
+  leaf: SessionMessage,
+): SessionMessage[] {
+  const chain: SessionMessage[] = []
+  const seen = new Set<string>()
+  let current: SessionMessage | undefined = leaf
+
+  while (current && !seen.has(current.uuid)) {
+    seen.add(current.uuid)
+    chain.push(current)
+    current = current.parentUuid ? messages.get(current.parentUuid) : undefined
+  }
+
+  chain.reverse()
+  return chain
+}
+
+function contentReplacementRecordsFor(
+  buf: Buffer,
+  sessionId: string,
+): unknown[] {
+  return parseJSONL<unknown>(buf).flatMap(entry => {
+    if (!isRecord(entry)) return []
+    if (entry.type !== 'content-replacement') return []
+    if (entry.sessionId !== sessionId) return []
+    if (!Array.isArray(entry.replacements)) return []
+    return (entry as ContentReplacementEntry).replacements
+  })
+}
+
+function cloneForkMessage(
+  entry: SessionMessage,
+  sourceSessionId: string,
+  forkSessionId: string,
+  uuidMap: Map<string, string>,
+): SessionMessage {
+  const originalUuid = entry.uuid
+  const forkedUuid = uuidMap.get(originalUuid)
+  if (!forkedUuid) {
+    throw new Error(
+      `Unable to fork message without UUID mapping: ${originalUuid}`,
+    )
+  }
+
+  return {
+    ...entry,
+    uuid: forkedUuid,
+    parentUuid: entry.parentUuid
+      ? (uuidMap.get(entry.parentUuid) ?? null)
+      : null,
+    logicalParentUuid: entry.logicalParentUuid
+      ? (uuidMap.get(entry.logicalParentUuid) ?? null)
+      : entry.logicalParentUuid,
+    sessionId: forkSessionId,
+    isSidechain: false,
+    forkedFrom: {
+      sessionId: sourceSessionId,
+      messageUuid: originalUuid,
+    },
+  }
+}
+
+function findForkBoundary(
+  chain: SessionMessage[],
+  upToMessageId: string | undefined,
+): number {
+  if (!upToMessageId) return chain.length
+  const index = chain.findIndex(message => message.uuid === upToMessageId)
+  if (index === -1) {
+    throw new Error(`Message not found in session chain: ${upToMessageId}`)
+  }
+  return index + 1
 }
 
 async function resolveMutableSessionFile(
@@ -242,10 +450,28 @@ export async function unstable_v2_prompt(
  * @returns Array of messages, or empty array if session not found
  */
 export async function getSessionMessages(
-  _sessionId: string,
-  _options?: GetSessionMessagesOptions,
+  sessionId: string,
+  options?: GetSessionMessagesOptions,
 ): Promise<SessionMessage[]> {
-  unsupportedSdkApi('getSessionMessages')
+  const resolved = await resolveSessionFilePath(sessionId, sessionDir(options))
+  if (!resolved) return []
+
+  const { postBoundaryBuf } = await readTranscriptForLoad(
+    resolved.filePath,
+    resolved.fileSize,
+  )
+  const messages = parseTranscriptMessages(postBoundaryBuf)
+  const leaf = findLatestLeaf(messages.values())
+  if (!leaf) return []
+
+  const includeSystemMessages = options?.includeSystemMessages === true
+  const offset = Math.max(0, options?.offset ?? 0)
+  const limit = options?.limit ?? 0
+  const chain = buildSessionChain(messages, leaf).filter(message =>
+    isConversationMessage(message, includeSystemMessages),
+  )
+  const page = chain.slice(offset)
+  return limit > 0 ? page.slice(0, limit) : page
 }
 
 /**
@@ -352,10 +578,72 @@ export async function tagSession(
  * @returns `{ sessionId }` — UUID of the new forked session
  */
 export async function forkSession(
-  _sessionId: string,
-  _options?: ForkSessionOptions,
+  sessionId: string,
+  options?: ForkSessionOptions,
 ): Promise<ForkSessionResult> {
-  unsupportedSdkApi('forkSession')
+  if (options?.title !== undefined && options.title.trim().length === 0) {
+    throw new Error('Session title cannot be empty')
+  }
+
+  const resolved = await resolveSessionFilePath(sessionId, sessionDir(options))
+  if (!resolved) {
+    throw new Error(`Session not found: ${sessionId}`)
+  }
+
+  const { postBoundaryBuf } = await readTranscriptForLoad(
+    resolved.filePath,
+    resolved.fileSize,
+  )
+  const messages = parseTranscriptMessages(postBoundaryBuf)
+  const leaf = findLatestLeaf(messages.values())
+  if (!leaf) {
+    throw new Error(`No messages to fork: ${sessionId}`)
+  }
+
+  const sourceChain = buildSessionChain(messages, leaf)
+  const forkBoundary = findForkBoundary(sourceChain, options?.upToMessageId)
+  const forkSource = sourceChain.slice(0, forkBoundary)
+  if (forkSource.length === 0) {
+    throw new Error(`No messages to fork: ${sessionId}`)
+  }
+
+  const forkSessionId = randomUUID()
+  const uuidMap = new Map(
+    forkSource.map(message => [message.uuid, randomUUID()] as const),
+  )
+  const forkedMessages = forkSource.map(message =>
+    cloneForkMessage(message, sessionId, forkSessionId, uuidMap),
+  )
+  const lines = forkedMessages.map(message => JSON.stringify(message))
+
+  if (options?.title) {
+    lines.push(
+      JSON.stringify({
+        type: 'custom-title',
+        customTitle: options.title.trim(),
+        sessionId: forkSessionId,
+      }),
+    )
+  }
+
+  const replacements = contentReplacementRecordsFor(postBoundaryBuf, sessionId)
+  if (replacements.length > 0) {
+    lines.push(
+      JSON.stringify({
+        type: 'content-replacement',
+        sessionId: forkSessionId,
+        replacements,
+      }),
+    )
+  }
+
+  const forkPath = join(dirname(resolved.filePath), `${forkSessionId}.jsonl`)
+  await writeFile(forkPath, lines.join('\n') + '\n', {
+    encoding: 'utf8',
+    mode: 0o600,
+  })
+
+  return { sessionId: forkSessionId }
 }
 
 // ============================================================================
@@ -457,10 +745,11 @@ export function buildMissedTaskNotification(_missed: CronTask[]): string {
 
   const blocks = _missed.map(t => {
     const meta = `[${cronToHuman(t.cron)}, created ${new Date(t.createdAt).toLocaleString()}]`
-    const longestRun = (t.prompt.match(/`+/g) ?? []).reduce(
-      (max, run) => Math.max(max, run.length),
-      0,
-    )
+    const backtickRuns = t.prompt.match(/`+/g) ?? []
+    let longestRun = 0
+    for (const run of backtickRuns) {
+      longestRun = Math.max(longestRun, run.length)
+    }
     const fence = '`'.repeat(Math.max(3, longestRun + 1))
     return `${meta}\n${fence}\n${t.prompt}\n${fence}`
   })

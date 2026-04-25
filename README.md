@@ -114,4 +114,4 @@ If you are changing guarded architecture paths, expect extra review friction and
 
 - The source root is currently `src 2/`; the rename to `src/` is tracked separately because it is broad path churn.
 - Some KAIROS surfaces are intentionally implemented before full trunk registration so the codepaths can be iterated on safely.
-- The Agent SDK compatibility facade is partial. Tool/server helpers, query/session creation, session listing/info, rename/tag, and missed-task formatting are wired; `getSessionMessages`, `forkSession`, `watchScheduledTasks`, and `connectRemoteControl` fail explicitly with a rebuild-specific unsupported message.
+- The Agent SDK compatibility facade is partial. Tool/server helpers, `getSessionMessages`, `forkSession`, session listing/info, rename/tag, and missed-task formatting are wired; query/session creation/prompting, `watchScheduledTasks`, and `connectRemoteControl` fail explicitly with a rebuild-specific unsupported message.
