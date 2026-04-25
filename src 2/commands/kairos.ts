@@ -1629,7 +1629,12 @@ async function handleBuildCompleteSlice(rest: string[]): Promise<string> {
     title: slice.title,
   })
 
-  return `Completed ${slice.id} for ${parsed.buildId}: ${slice.title}`
+  return [
+    `Completed ${slice.id} for ${parsed.buildId}: ${slice.title}`,
+    `progress command: /kairos build-progress ${parsed.projectDir} ${parsed.buildId}`,
+    `readiness command: /kairos build-readiness ${parsed.projectDir} ${parsed.buildId}`,
+    `next command: /kairos build-select-next-prompt ${parsed.projectDir} ${parsed.buildId}`,
+  ].join('\n')
 }
 
 async function handlePause(): Promise<string> {

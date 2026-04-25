@@ -1479,7 +1479,12 @@ describe('/kairos command', () => {
     const out = await runKairosCommand(
       `build-complete-slice ${projectDir} complete-build`,
     )
-    expect(out).toBe('Completed TB-1 for complete-build: Record intake skeleton')
+    expect(out.split('\n')).toEqual([
+      'Completed TB-1 for complete-build: Record intake skeleton',
+      `progress command: /kairos build-progress ${projectDir} complete-build`,
+      `readiness command: /kairos build-readiness ${projectDir} complete-build`,
+      `next command: /kairos build-select-next-prompt ${projectDir} complete-build`,
+    ])
     expect(readJson(getProjectKairosBuildManifestPath(projectDir, 'complete-build'))).toMatchObject({
       selectedSliceId: 'TB-1',
       completedSliceIds: ['TB-1'],
