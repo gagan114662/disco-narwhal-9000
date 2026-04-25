@@ -30,6 +30,8 @@ bun run proof:production
   and static production proof.
 - Main branch protection requires up-to-date `block-trunk-changes` and `verify`
   status checks, includes administrators, and blocks force pushes/deletions.
+- Repository Actions defaults grant read-only workflow tokens and forbid
+  workflow tokens from approving pull requests.
 - Current open PR check rollups have no red latest checks.
 - Workflow checkout actions stay pinned to Node 24-ready `actions/checkout@v5`.
 - GitHub `ci` and `permanent-structural-fix-daily` workflows keep
@@ -67,6 +69,7 @@ ci hosted steps verified
 permanent-structural-fix-daily hosted steps verified
 Main branch protection verified
 Workflow token permissions verified
+Repository Actions default workflow permissions verified
 PRODUCTION PROOF PASSED
 ```
 

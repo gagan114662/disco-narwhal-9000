@@ -40,6 +40,11 @@ type BranchProtection = {
   allow_deletions?: { enabled: boolean }
 }
 
+type ActionsWorkflowPermissions = {
+  default_workflow_permissions: string
+  can_approve_pull_request_reviews: boolean
+}
+
 type PullRequestCheck = {
   name?: string
   status?: string
@@ -342,6 +347,33 @@ function proveMainBranchProtection(repoRoot: string): void {
       ', ',
     )}`,
   )
+}
+
+function proveActionsDefaultWorkflowPermissions(repoRoot: string): void {
+  const permissions = json<ActionsWorkflowPermissions>(
+    'gh',
+    ['api', `repos/${repoSlug(repoRoot)}/actions/permissions/workflow`],
+    repoRoot,
+  )
+  const failures: string[] = []
+
+  if (permissions.default_workflow_permissions !== 'read') {
+    failures.push(
+      `default workflow token permissions are ${permissions.default_workflow_permissions}, expected read`,
+    )
+  }
+
+  if (permissions.can_approve_pull_request_reviews !== false) {
+    failures.push('workflow token must not be able to approve pull requests')
+  }
+
+  if (failures.length > 0) {
+    throw new Error(
+      `Repository Actions workflow permissions are not production-ready:\n${failures.join('\n')}`,
+    )
+  }
+
+  console.log('Repository Actions default workflow permissions verified: read')
 }
 
 function proveOpenPrs(repoRoot: string): void {
@@ -743,6 +775,10 @@ function main(): void {
 
   step('main branch protection requires green checks', () => {
     proveMainBranchProtection(repoRoot)
+  })
+
+  step('repository Actions default permissions are read-only', () => {
+    proveActionsDefaultWorkflowPermissions(repoRoot)
   })
 
   step('open PR check rollups have no current red checks', () => {

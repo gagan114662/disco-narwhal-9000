@@ -107,7 +107,7 @@ Main branch protections and checks already present in the repo include:
 - CODEOWNERS on trunk paths in `.github/CODEOWNERS`
 - trunk guard workflow in `.github/workflows/trunk-guard.yml`
 - daily structural-fix workflow in `.github/workflows/permanent-structural-fix-daily.yml`
-- Local proof command: `cd "src 2" && bun run proof:production`. This runs frozen-lockfile install verification, supply-chain audit, the production pipeline, the full test suite, non-running-test modifier scanning, clean-worktree verification, GitHub main workflow and hosted-step receipt checks, main branch protection checks, open-PR check rollups, Node 24-ready checkout pinning, GitHub workflow frozen-install/audit/static-proof gate verification, least-privilege workflow token permission checks, incomplete-marker scanning, and bounded SDK/command-stub checks.
+- Local proof command: `cd "src 2" && bun run proof:production`. This runs frozen-lockfile install verification, supply-chain audit, the production pipeline, the full test suite, non-running-test modifier scanning, clean-worktree verification, GitHub main workflow and hosted-step receipt checks, main branch protection checks, repository Actions default permission checks, open-PR check rollups, Node 24-ready checkout pinning, GitHub workflow frozen-install/audit/static-proof gate verification, least-privilege workflow token permission checks, incomplete-marker scanning, and bounded SDK/command-stub checks.
 - Proof notes and current receipt in `docs/production-proof.md`
 
 If you are changing guarded architecture paths, expect extra review friction and explicit approval requirements.
