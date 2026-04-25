@@ -214,6 +214,15 @@ describe('/kairos command', () => {
     expect(out).toContain(`project: ${projectDir}`)
     expect(out).toContain('status: draft')
     expect(out).toContain(getProjectKairosBuildSpecPath(projectDir, 'build-test-1'))
+    expect(out).toContain(
+      `show command: /kairos build-show ${projectDir} build-test-1`,
+    )
+    expect(out).toContain(
+      `readiness command: /kairos build-readiness ${projectDir} build-test-1`,
+    )
+    expect(out).toContain(
+      `next command: /kairos build-select-next-prompt ${projectDir} build-test-1`,
+    )
 
     expect(readJson(getProjectKairosBuildManifestPath(projectDir, 'build-test-1'))).toMatchObject({
       version: 1,

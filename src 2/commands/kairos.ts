@@ -526,6 +526,9 @@ async function handleBuild(rest: string[]): Promise<string> {
     'status: draft',
     `spec: ${result.specPath}`,
     `manifest: ${result.manifestPath}`,
+    `show command: /kairos build-show ${result.projectDir} ${result.buildId}`,
+    `readiness command: /kairos build-readiness ${result.projectDir} ${result.buildId}`,
+    `next command: /kairos build-select-next-prompt ${result.projectDir} ${result.buildId}`,
   ].join('\n')
 }
 
