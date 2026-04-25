@@ -1319,7 +1319,10 @@ describe('/kairos command', () => {
     await runKairosCommand(`build ${projectDir} leave request app`)
 
     const out = await runKairosCommand(`build-select ${projectDir} select-build TB-9`)
-    expect(out).toBe('No tracer slice TB-9 found for select-build.')
+    expect(out.split('\n')).toEqual([
+      'No tracer slice TB-9 found for select-build.',
+      `slices command: /kairos build-slices ${projectDir} select-build`,
+    ])
   })
 
   test('build-select-next selects the first tracer bullet when none is selected', async () => {

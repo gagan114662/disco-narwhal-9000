@@ -1434,7 +1434,10 @@ async function handleBuildSelect(rest: string[]): Promise<string> {
     candidate => candidate.id === parsed.sliceId,
   )
   if (!slice) {
-    return `No tracer slice ${parsed.sliceId} found for ${parsed.buildId}.`
+    return [
+      `No tracer slice ${parsed.sliceId} found for ${parsed.buildId}.`,
+      `slices command: /kairos build-slices ${parsed.projectDir} ${parsed.buildId}`,
+    ].join('\n')
   }
 
   return persistSelectedBuildSlice(writer, parsed.projectDir, manifest, slice)
