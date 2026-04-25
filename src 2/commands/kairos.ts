@@ -16,7 +16,11 @@ import {
   createDraftBuild,
   type CreateDraftBuildDeps,
 } from '../daemon/kairos/draftBuild.js'
-import type { KairosBuildEvent } from '../daemon/kairos/buildState.js'
+import type {
+  KairosBuildEvent,
+  KairosBuildManifest,
+  KairosBuildTracerSlice,
+} from '../daemon/kairos/buildState.js'
 import type { Command } from '../types/command.js'
 import {
   runKairosMemoryCommand,
@@ -56,6 +60,7 @@ import {
   createStateWriter,
   type GlobalStatus,
   type PauseState,
+  type StateWriter,
 } from '../daemon/kairos/stateWriter.js'
 
 const DEFAULT_DASHBOARD_URL = 'http://127.0.0.1:7777/'
@@ -73,6 +78,7 @@ const HELP_TEXT = `Usage:
 /kairos build-events [projectDir] <buildId> [lines]
 /kairos build-slices [projectDir] <buildId>
 /kairos build-select [projectDir] <buildId> <sliceId>
+/kairos build-select-next [projectDir] <buildId>
 /kairos build-next [projectDir] <buildId>
 /kairos build-acceptance [projectDir] <buildId>
 /kairos build-questions [projectDir] <buildId>
@@ -117,6 +123,7 @@ type Subcommand =
   | 'build-events'
   | 'build-slices'
   | 'build-select'
+  | 'build-select-next'
   | 'build-next'
   | 'build-acceptance'
   | 'build-questions'
@@ -154,6 +161,7 @@ const SUBCOMMANDS = new Set<Subcommand>([
   'build-events',
   'build-slices',
   'build-select',
+  'build-select-next',
   'build-next',
   'build-acceptance',
   'build-questions',
@@ -862,6 +870,35 @@ async function handleBuildRisks(rest: string[]): Promise<string> {
   ].join('\n')
 }
 
+async function persistSelectedBuildSlice(
+  writer: StateWriter,
+  projectDir: string,
+  manifest: KairosBuildManifest,
+  slice: KairosBuildTracerSlice,
+): Promise<string> {
+  const updatedAt = new Date().toISOString()
+  await writer.writeBuildManifest(projectDir, {
+    ...manifest,
+    selectedSliceId: slice.id,
+    updatedAt,
+  })
+  await writer.appendBuildEvent(projectDir, manifest.buildId, {
+    version: 1,
+    kind: 'slice_selected',
+    buildId: manifest.buildId,
+    tenantId: manifest.tenantId,
+    t: updatedAt,
+    sliceId: slice.id,
+    title: slice.title,
+  })
+
+  return [
+    `Selected ${slice.id} for ${manifest.buildId}: ${slice.title}`,
+    `test: ${slice.testFirst}`,
+    `implement: ${slice.implement}`,
+  ].join('\n')
+}
+
 async function handleBuildSelect(rest: string[]): Promise<string> {
   const parsed = parseBuildSelectArgs(rest)
   if (parsed === null) {
@@ -883,27 +920,43 @@ async function handleBuildSelect(rest: string[]): Promise<string> {
     return `No tracer slice ${parsed.sliceId} found for ${parsed.buildId}.`
   }
 
-  const updatedAt = new Date().toISOString()
-  await writer.writeBuildManifest(parsed.projectDir, {
-    ...manifest,
-    selectedSliceId: slice.id,
-    updatedAt,
-  })
-  await writer.appendBuildEvent(parsed.projectDir, parsed.buildId, {
-    version: 1,
-    kind: 'slice_selected',
-    buildId: parsed.buildId,
-    tenantId: manifest.tenantId,
-    t: updatedAt,
-    sliceId: slice.id,
-    title: slice.title,
-  })
+  return persistSelectedBuildSlice(writer, parsed.projectDir, manifest, slice)
+}
 
-  return [
-    `Selected ${slice.id} for ${parsed.buildId}: ${slice.title}`,
-    `test: ${slice.testFirst}`,
-    `implement: ${slice.implement}`,
-  ].join('\n')
+async function handleBuildSelectNext(rest: string[]): Promise<string> {
+  const parsed = parseBuildShowArgs(rest)
+  if (parsed === null) {
+    return 'Usage: /kairos build-select-next [projectDir] <buildId>'
+  }
+
+  const writer = await createStateWriter()
+  const manifest = await writer.readBuildManifest(
+    parsed.projectDir,
+    parsed.buildId,
+  )
+  if (!manifest) {
+    return `No build ${parsed.buildId} found for ${parsed.projectDir}.`
+  }
+  if (!manifest.tracerSlices || manifest.tracerSlices.length === 0) {
+    return `No tracer slices found for ${parsed.buildId} in ${parsed.projectDir}.`
+  }
+
+  const currentIndex = manifest.selectedSliceId
+    ? manifest.tracerSlices.findIndex(
+        slice => slice.id === manifest.selectedSliceId,
+      )
+    : -1
+  const nextSlice = manifest.tracerSlices[currentIndex + 1]
+  if (!nextSlice) {
+    return `No next tracer slice found for ${parsed.buildId}.`
+  }
+
+  return persistSelectedBuildSlice(
+    writer,
+    parsed.projectDir,
+    manifest,
+    nextSlice,
+  )
 }
 
 async function handleBuildNext(rest: string[]): Promise<string> {
@@ -1149,6 +1202,8 @@ export async function runKairosCommand(args: string): Promise<string> {
       return handleBuildSlices(rest)
     case 'build-select':
       return handleBuildSelect(rest)
+    case 'build-select-next':
+      return handleBuildSelectNext(rest)
     case 'build-next':
       return handleBuildNext(rest)
     case 'build-acceptance':
@@ -1216,7 +1271,7 @@ const kairos = {
   name: 'kairos',
   description: 'Inspect and control the KAIROS background daemon',
   argumentHint:
-    'status|list|opt-in|opt-out|demo|build|builds|build-show|build-events|build-slices|build-select|build-next|build-acceptance|build-questions|build-requirements|build-summary|build-assumptions|build-risks|build-goals|build-non-goals|build-users|build-problem|build-traceability|build-prd-outline|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
+    'status|list|opt-in|opt-out|demo|build|builds|build-show|build-events|build-slices|build-select|build-select-next|build-next|build-acceptance|build-questions|build-requirements|build-summary|build-assumptions|build-risks|build-goals|build-non-goals|build-users|build-problem|build-traceability|build-prd-outline|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
   load: () => import('./kairos-ui.js'),
 } satisfies Command
 

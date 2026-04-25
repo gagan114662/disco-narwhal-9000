@@ -117,6 +117,7 @@ describe('/kairos command', () => {
     expect(out).toContain('/kairos build-events')
     expect(out).toContain('/kairos build-slices')
     expect(out).toContain('/kairos build-select')
+    expect(out).toContain('/kairos build-select-next')
     expect(out).toContain('/kairos build-next')
     expect(out).toContain('/kairos build-acceptance')
     expect(out).toContain('/kairos build-questions')
@@ -824,6 +825,55 @@ describe('/kairos command', () => {
 
     const out = await runKairosCommand(`build-select ${projectDir} select-build TB-9`)
     expect(out).toBe('No tracer slice TB-9 found for select-build.')
+  })
+
+  test('build-select-next selects the first tracer bullet when none is selected', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'select-next-build',
+      now: () => new Date('2026-04-25T19:32:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+
+    const out = await runKairosCommand(
+      `build-select-next ${projectDir} select-next-build`,
+    )
+    expect(out.split('\n')).toEqual([
+      'Selected TB-1 for select-next-build: Record intake skeleton',
+      'test: creating the minimum valid record persists it and shows it in a list',
+      'implement: add the smallest form, persistence path, and list view needed for one record',
+    ])
+    expect(readJson(getProjectKairosBuildManifestPath(projectDir, 'select-next-build'))).toMatchObject({
+      selectedSliceId: 'TB-1',
+    })
+  })
+
+  test('build-select-next advances from the selected tracer bullet', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'select-next-build',
+      now: () => new Date('2026-04-25T19:34:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+    await runKairosCommand(`build-select ${projectDir} select-next-build TB-1`)
+
+    const out = await runKairosCommand(
+      `build-select-next ${projectDir} select-next-build`,
+    )
+    expect(out).toContain(
+      'Selected TB-2 for select-next-build: Review workflow path',
+    )
+    expect(readJson(getProjectKairosBuildManifestPath(projectDir, 'select-next-build'))).toMatchObject({
+      selectedSliceId: 'TB-2',
+    })
+  })
+
+  test('build-select-next reports a missing build clearly', async () => {
+    const projectDir = makeProjectDir()
+    const out = await runKairosCommand(
+      `build-select-next ${projectDir} missing-build`,
+    )
+    expect(out).toBe(`No build missing-build found for ${projectDir}.`)
   })
 
   test('build-next renders a TDD prompt for the selected tracer bullet', async () => {
