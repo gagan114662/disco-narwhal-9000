@@ -28,6 +28,8 @@ bun run proof:production
 - Hosted GitHub job receipts include successful required steps for frozen
   install, dependency audit, production pipeline/tests or daily structural fix,
   and static production proof.
+- Main branch protection requires up-to-date `block-trunk-changes` and `verify`
+  status checks, includes administrators, and blocks force pushes/deletions.
 - Current open PR check rollups have no red latest checks.
 - Workflow checkout actions stay pinned to Node 24-ready `actions/checkout@v5`.
 - GitHub `ci` and `permanent-structural-fix-daily` workflows keep
@@ -61,6 +63,7 @@ No vulnerabilities found
 No focused, skipped, pending, or expected-failing tests found across 65 test files
 ci hosted steps verified
 permanent-structural-fix-daily hosted steps verified
+Main branch protection verified
 PRODUCTION PROOF PASSED
 ```
 
