@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'bun:test'
-import { deriveDraftTitle, renderDraftPrd } from './draftBuild.js'
+import {
+  createDraftTracerSlices,
+  deriveDraftTitle,
+  renderDraftPrd,
+} from './draftBuild.js'
 
 describe('draft build PRD rendering', () => {
   test('derives a concise title from a vague brief', () => {
@@ -30,5 +34,34 @@ describe('draft build PRD rendering', () => {
     expect(prd).toContain('Implement:')
     expect(prd).toContain('## Traceability Seed')
     expect(prd).toContain('- BRIEF-1:')
+  })
+
+  test('creates deterministic tracer slices for selection and TDD execution', () => {
+    expect(createDraftTracerSlices()).toEqual([
+      {
+        id: 'TB-1',
+        title: 'Record intake skeleton',
+        testFirst:
+          'creating the minimum valid record persists it and shows it in a list',
+        implement:
+          'add the smallest form, persistence path, and list view needed for one record',
+      },
+      {
+        id: 'TB-2',
+        title: 'Review workflow path',
+        testFirst:
+          'a pending record can move to approved or rejected with an audit entry',
+        implement:
+          'add status transitions, reviewer action controls, and audit recording',
+      },
+      {
+        id: 'TB-3',
+        title: 'Validation and role guardrails',
+        testFirst:
+          'incomplete records are rejected and unauthorized actions are blocked',
+        implement:
+          'add required-field validation and role checks at the command boundary',
+      },
+    ])
   })
 })

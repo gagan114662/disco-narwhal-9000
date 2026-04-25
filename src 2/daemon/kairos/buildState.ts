@@ -12,6 +12,13 @@ export const kairosBuildStatusSchema = z.enum([
   'cancelled',
 ])
 
+export const kairosBuildTracerSliceSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  testFirst: z.string().min(1),
+  implement: z.string().min(1),
+})
+
 export const kairosBuildManifestSchema = z.object({
   version: z.literal(KAIROS_BUILD_STATE_VERSION),
   buildId: z.string().min(1),
@@ -19,6 +26,7 @@ export const kairosBuildManifestSchema = z.object({
   tenantId: z.string().min(1),
   title: z.string().min(1).optional(),
   brief: z.string().min(1).optional(),
+  tracerSlices: z.array(kairosBuildTracerSliceSchema).optional(),
   status: kairosBuildStatusSchema,
   createdAt: z.string().min(1),
   updatedAt: z.string().min(1),
@@ -82,6 +90,7 @@ export const kairosBuildResultSchema = z.object({
 })
 
 export type KairosBuildStatus = z.infer<typeof kairosBuildStatusSchema>
+export type KairosBuildTracerSlice = z.infer<typeof kairosBuildTracerSliceSchema>
 export type KairosBuildManifest = z.infer<typeof kairosBuildManifestSchema>
 export type KairosBuildEvent = z.infer<typeof kairosBuildEventSchema>
 export type KairosBuildResult = z.infer<typeof kairosBuildResultSchema>

@@ -71,6 +71,7 @@ const HELP_TEXT = `Usage:
 /kairos builds [projectDir]
 /kairos build-show [projectDir] <buildId>
 /kairos build-events [projectDir] <buildId> [lines]
+/kairos build-slices [projectDir] <buildId>
 /kairos pause
 /kairos resume
 /kairos dashboard
@@ -100,6 +101,7 @@ type Subcommand =
   | 'builds'
   | 'build-show'
   | 'build-events'
+  | 'build-slices'
   | 'pause'
   | 'resume'
   | 'dashboard'
@@ -122,6 +124,7 @@ const SUBCOMMANDS = new Set<Subcommand>([
   'builds',
   'build-show',
   'build-events',
+  'build-slices',
   'pause',
   'resume',
   'dashboard',
@@ -431,6 +434,34 @@ async function handleBuildEvents(rest: string[]): Promise<string> {
   ].join('\n')
 }
 
+async function handleBuildSlices(rest: string[]): Promise<string> {
+  const parsed = parseBuildShowArgs(rest)
+  if (parsed === null) {
+    return 'Usage: /kairos build-slices [projectDir] <buildId>'
+  }
+
+  const writer = await createStateWriter()
+  const manifest = await writer.readBuildManifest(
+    parsed.projectDir,
+    parsed.buildId,
+  )
+  if (!manifest) {
+    return `No build ${parsed.buildId} found for ${parsed.projectDir}.`
+  }
+  if (!manifest.tracerSlices || manifest.tracerSlices.length === 0) {
+    return `No tracer slices found for ${parsed.buildId} in ${parsed.projectDir}.`
+  }
+
+  return [
+    `Slices for ${parsed.buildId}:`,
+    ...manifest.tracerSlices.flatMap(slice => [
+      `- ${slice.id} ${slice.title}`,
+      `  test: ${slice.testFirst}`,
+      `  implement: ${slice.implement}`,
+    ]),
+  ].join('\n')
+}
+
 async function handlePause(): Promise<string> {
   await setPauseState(true)
   return 'Paused KAIROS daemon. Fired tasks will be skipped until resume.'
@@ -620,6 +651,8 @@ export async function runKairosCommand(args: string): Promise<string> {
       return handleBuildShow(rest)
     case 'build-events':
       return handleBuildEvents(rest)
+    case 'build-slices':
+      return handleBuildSlices(rest)
     case 'pause':
       return handlePause()
     case 'resume':
@@ -661,7 +694,7 @@ const kairos = {
   name: 'kairos',
   description: 'Inspect and control the KAIROS background daemon',
   argumentHint:
-    'status|list|opt-in|opt-out|demo|build|builds|build-show|build-events|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
+    'status|list|opt-in|opt-out|demo|build|builds|build-show|build-events|build-slices|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
   load: () => import('./kairos-ui.js'),
 } satisfies Command
 

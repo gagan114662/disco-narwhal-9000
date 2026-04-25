@@ -1,5 +1,8 @@
 import { randomUUID } from 'crypto'
-import { KAIROS_BUILD_STATE_VERSION } from './buildState.js'
+import {
+  KAIROS_BUILD_STATE_VERSION,
+  type KairosBuildTracerSlice,
+} from './buildState.js'
 import {
   getProjectKairosBuildManifestPath,
   getProjectKairosBuildResultPath,
@@ -66,9 +69,47 @@ function quoteBrief(brief: string): string {
     .join('\n')
 }
 
+export function createDraftTracerSlices(): KairosBuildTracerSlice[] {
+  return [
+    {
+      id: 'TB-1',
+      title: 'Record intake skeleton',
+      testFirst:
+        'creating the minimum valid record persists it and shows it in a list',
+      implement:
+        'add the smallest form, persistence path, and list view needed for one record',
+    },
+    {
+      id: 'TB-2',
+      title: 'Review workflow path',
+      testFirst:
+        'a pending record can move to approved or rejected with an audit entry',
+      implement:
+        'add status transitions, reviewer action controls, and audit recording',
+    },
+    {
+      id: 'TB-3',
+      title: 'Validation and role guardrails',
+      testFirst:
+        'incomplete records are rejected and unauthorized actions are blocked',
+      implement:
+        'add required-field validation and role checks at the command boundary',
+    },
+  ]
+}
+
+function renderTracerSlices(slices: KairosBuildTracerSlice[]): string[] {
+  return slices.flatMap((slice, index) => [
+    `${index + 1}. ${slice.id}: ${slice.title}`,
+    `   - Test first: ${slice.testFirst}.`,
+    `   - Implement: ${slice.implement}.`,
+  ])
+}
+
 export function renderDraftPrd(brief: string): string {
   const trimmedBrief = brief.trim()
   const title = deriveDraftTitle(trimmedBrief)
+  const tracerSlices = createDraftTracerSlices()
   return [
     `# ${title}`,
     '',
@@ -116,15 +157,7 @@ export function renderDraftPrd(brief: string): string {
     '',
     '## Tracer Bullet Slices',
     '',
-    '1. TB-1: Record intake skeleton',
-    '   - Test first: creating the minimum valid record persists it and shows it in a list.',
-    '   - Implement: add the smallest form, persistence path, and list view needed for one record.',
-    '2. TB-2: Review workflow path',
-    '   - Test first: a pending record can move to approved or rejected with an audit entry.',
-    '   - Implement: add status transitions, reviewer action controls, and audit recording.',
-    '3. TB-3: Validation and role guardrails',
-    '   - Test first: incomplete records are rejected and unauthorized actions are blocked.',
-    '   - Implement: add required-field validation and role checks at the command boundary.',
+    ...renderTracerSlices(tracerSlices),
     '',
     '## Clarifying Questions',
     '',
@@ -159,6 +192,7 @@ export async function createDraftBuild(
   const specPath = getProjectKairosBuildSpecPath(projectDir, buildId)
   const manifestPath = getProjectKairosBuildManifestPath(projectDir, buildId)
   const title = deriveDraftTitle(trimmedBrief)
+  const tracerSlices = createDraftTracerSlices()
 
   await writer.writeBuildManifest(projectDir, {
     version: KAIROS_BUILD_STATE_VERSION,
@@ -167,6 +201,7 @@ export async function createDraftBuild(
     tenantId: 'local',
     title,
     brief: trimmedBrief,
+    tracerSlices,
     status: 'draft',
     createdAt: timestamp,
     updatedAt: timestamp,

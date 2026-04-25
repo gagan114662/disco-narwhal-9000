@@ -115,6 +115,7 @@ describe('/kairos command', () => {
     expect(out).toContain('/kairos builds')
     expect(out).toContain('/kairos build-show')
     expect(out).toContain('/kairos build-events')
+    expect(out).toContain('/kairos build-slices')
     expect(out).toContain('/kairos cloud deploy')
     expect(out).toContain('/kairos cloud-sync')
   })
@@ -203,6 +204,20 @@ describe('/kairos command', () => {
       tenantId: 'local',
       title: 'Leave Request Approval App',
       brief: 'leave request approval app for hourly workers',
+      tracerSlices: [
+        {
+          id: 'TB-1',
+          title: 'Record intake skeleton',
+        },
+        {
+          id: 'TB-2',
+          title: 'Review workflow path',
+        },
+        {
+          id: 'TB-3',
+          title: 'Validation and role guardrails',
+        },
+      ],
       status: 'draft',
       createdAt: '2026-04-25T18:30:00.000Z',
       updatedAt: '2026-04-25T18:30:00.000Z',
@@ -295,6 +310,35 @@ describe('/kairos command', () => {
   test('build-events reports a missing build clearly', async () => {
     const projectDir = makeProjectDir()
     const out = await runKairosCommand(`build-events ${projectDir} missing-build`)
+    expect(out).toBe(`No build missing-build found for ${projectDir}.`)
+  })
+
+  test('build-slices prints selectable tracer bullets', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'slices-build',
+      now: () => new Date('2026-04-25T18:50:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+
+    const out = await runKairosCommand(`build-slices ${projectDir} slices-build`)
+    expect(out.split('\n')).toEqual([
+      'Slices for slices-build:',
+      '- TB-1 Record intake skeleton',
+      '  test: creating the minimum valid record persists it and shows it in a list',
+      '  implement: add the smallest form, persistence path, and list view needed for one record',
+      '- TB-2 Review workflow path',
+      '  test: a pending record can move to approved or rejected with an audit entry',
+      '  implement: add status transitions, reviewer action controls, and audit recording',
+      '- TB-3 Validation and role guardrails',
+      '  test: incomplete records are rejected and unauthorized actions are blocked',
+      '  implement: add required-field validation and role checks at the command boundary',
+    ])
+  })
+
+  test('build-slices reports a missing build clearly', async () => {
+    const projectDir = makeProjectDir()
+    const out = await runKairosCommand(`build-slices ${projectDir} missing-build`)
     expect(out).toBe(`No build missing-build found for ${projectDir}.`)
   })
 
