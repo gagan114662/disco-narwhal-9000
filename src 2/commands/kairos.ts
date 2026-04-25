@@ -759,10 +759,14 @@ async function handleBuildAnswer(rest: string[]): Promise<string> {
 
   const remainingQuestions =
     renderUnansweredClarifyingQuestions(updatedManifest).length
+  const nextCommand =
+    remainingQuestions > 0
+      ? `/kairos build-unanswered ${parsed.projectDir} ${parsed.buildId}`
+      : `/kairos build-readiness ${parsed.projectDir} ${parsed.buildId}`
   return [
     `Answered question ${parsed.questionNumber} for ${parsed.buildId}: ${parsed.answer}`,
     `unanswered clarifying questions remaining: ${remainingQuestions}`,
-    `next command: /kairos build-unanswered ${parsed.projectDir} ${parsed.buildId}`,
+    `next command: ${nextCommand}`,
   ].join('\n')
 }
 

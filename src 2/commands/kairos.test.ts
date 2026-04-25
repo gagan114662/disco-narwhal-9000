@@ -576,6 +576,33 @@ describe('/kairos command', () => {
     )
   })
 
+  test('build-answer points fully answered builds at readiness', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'questions-build',
+      now: () => new Date('2026-04-25T21:03:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+    for (const [questionNumber, answer] of [
+      [1, 'employee manager and HR approver'],
+      [2, 'dates reason and sensitive notes'],
+      [3, 'email notifications only'],
+    ] as const) {
+      await runKairosCommand(
+        `build-answer ${projectDir} questions-build ${questionNumber} ${answer}`,
+      )
+    }
+
+    const out = await runKairosCommand(
+      `build-answer ${projectDir} questions-build 4 retain records for seven years`,
+    )
+    expect(out.split('\n')).toEqual([
+      'Answered question 4 for questions-build: retain records for seven years',
+      'unanswered clarifying questions remaining: 0',
+      `next command: /kairos build-readiness ${projectDir} questions-build`,
+    ])
+  })
+
   test('build-unanswered lists only unanswered clarifying questions', async () => {
     const projectDir = makeProjectDir()
     __setKairosBuildDepsForTesting({
