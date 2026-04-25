@@ -1,0 +1,14 @@
+**/node_modules
+**/dist
+**/coverage
+**/.git
+**/.github
+**/.context
+**/.claude
+**/.DS_Store
+**/*.log
+**/reports
+**/.bun
+docs/
+README.md
+evals/

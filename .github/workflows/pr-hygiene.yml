@@ -1,0 +1,133 @@
+name: pr-hygiene
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: pr-hygiene-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  conventional-pr-title:
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'pull_request_target'
+    steps:
+      - name: Harden runner (audit egress)
+        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2
+        with:
+          egress-policy: audit
+
+      - name: Validate PR title is Conventional Commits
+        uses: amannn/action-semantic-pull-request@e32d7e603df1aa1ba07e981f2a23455dee596825 # v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            docs
+            style
+            refactor
+            perf
+            test
+            build
+            ci
+            chore
+            revert
+          requireScope: false
+          subjectPattern: ^(?![A-Z]).+$
+          subjectPatternError: |
+            The PR title subject must start with a lowercase letter.
+            Example: "feat: add coverage gate" not "feat: Add coverage gate".
+
+  commitlint:
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Harden runner (audit egress)
+        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          fetch-depth: 0
+
+      - name: Lint commit messages
+        uses: wagoid/commitlint-github-action@b948419dd99f3fd78a6548d48f94e3df7f6bf3ed # v6
+        with:
+          configFile: .commitlintrc.json
+          failOnWarnings: false
+          failOnErrors: true
+
+  no-merge-commits:
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Harden runner (audit egress)
+        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          fetch-depth: 0
+
+      - name: Reject merge commits in PR
+        run: |
+          set -euo pipefail
+          BASE="${{ github.event.pull_request.base.sha }}"
+          HEAD="${{ github.event.pull_request.head.sha }}"
+          MERGES=$(git log --merges --pretty=format:'%H %s' "$BASE..$HEAD" || true)
+          if [ -n "$MERGES" ]; then
+            echo "::error::Linear history is required. Found merge commits in PR:"
+            echo "$MERGES"
+            echo
+            echo "Rebase your branch onto main instead of merging main into it."
+            exit 1
+          fi
+          echo "no merge commits"
+
+  codeowners-required:
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Harden runner (audit egress)
+        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Verify CODEOWNERS file is present and parseable
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = '.github/CODEOWNERS';
+            if (!fs.existsSync(path)) {
+              core.setFailed('Missing .github/CODEOWNERS file');
+              return;
+            }
+            const content = fs.readFileSync(path, 'utf8');
+            const lines = content.split('\n').filter(l => l.trim() && !l.trim().startsWith('#'));
+            if (lines.length === 0) {
+              core.setFailed('CODEOWNERS file has no rules');
+              return;
+            }
+            // Each non-comment, non-empty line must have a path and at least one @owner
+            for (const [i, line] of lines.entries()) {
+              const tokens = line.trim().split(/\s+/);
+              if (tokens.length < 2 || !tokens.slice(1).some(t => t.startsWith('@'))) {
+                core.setFailed(`CODEOWNERS line ${i+1} is malformed: "${line}"`);
+                return;
+              }
+            }
+            core.info(`CODEOWNERS OK: ${lines.length} rules`);
