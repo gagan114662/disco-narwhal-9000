@@ -991,6 +991,9 @@ describe('/kairos command', () => {
     expect(lines[6]?.startsWith('last event: slice_selected at ')).toBe(true)
     expect(lines.slice(7)).toEqual([
       'next command: /kairos build-next ' + projectDir + ' readiness-build',
+      'questions command: /kairos build-unanswered ' +
+        projectDir +
+        ' readiness-build',
       'blockers:',
       '- 2. What fields are required, optional, or sensitive?',
       '- 3. What notifications or integrations are required?',
@@ -1021,6 +1024,9 @@ describe('/kairos command', () => {
     expect(lines[6]?.startsWith('last event: spec_written at ')).toBe(true)
     expect(lines.slice(7)).toEqual([
       'next command: /kairos build-select-next-prompt ' +
+        projectDir +
+        ' readiness-build',
+      'questions command: /kairos build-unanswered ' +
         projectDir +
         ' readiness-build',
       'blockers:',

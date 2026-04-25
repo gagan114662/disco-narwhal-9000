@@ -1020,6 +1020,12 @@ async function handleBuildReadiness(rest: string[]): Promise<string> {
       ? ['blockers:', ...blockers.map(blocker => `- ${blocker}`)]
       : ['blockers: none']
   const readinessState = blockers.length > 0 ? 'blocked' : 'ready'
+  const questionCommandLines =
+    unansweredQuestions.length > 0
+      ? [
+          `questions command: /kairos build-unanswered ${manifest.projectDir} ${manifest.buildId}`,
+        ]
+      : []
 
   return [
     `Build readiness for ${parsed.buildId}:`,
@@ -1030,6 +1036,7 @@ async function handleBuildReadiness(rest: string[]): Promise<string> {
     `unanswered clarifying questions: ${unansweredQuestions.length}`,
     `last event: ${latestEventLabel}`,
     `next command: ${nextCommand}`,
+    ...questionCommandLines,
     ...blockerLines,
   ].join('\n')
 }
