@@ -1335,6 +1335,14 @@ async function handleBuildNext(rest: string[]): Promise<string> {
   stressLines.push(
     `Clarifying questions answered: ${questionReadiness.answered}/${questionReadiness.total}`,
   )
+  const unansweredQuestions = renderUnansweredClarifyingQuestions(manifest)
+  if (unansweredQuestions.length > 0) {
+    stressLines.push(
+      `Unanswered clarifying questions: ${unansweredQuestions.length}`,
+      'unanswered clarifying questions:',
+      ...unansweredQuestions,
+    )
+  }
   appendBulletSection(stressLines, 'assumptions', manifest.assumptions)
   appendBulletSection(stressLines, 'risks', manifest.risks)
   appendClarifyingQuestionSection(stressLines, manifest)

@@ -1298,6 +1298,9 @@ describe('/kairos command', () => {
     expect(out).toContain('- BRIEF-1 [brief] leave request app')
     expect(out).toContain('Stress-test before coding:')
     expect(out).toContain('Clarifying questions answered: 0/4')
+    expect(out).toContain('Unanswered clarifying questions: 4')
+    expect(out).toContain('unanswered clarifying questions:')
+    expect(out).toContain('2. What fields are required, optional, or sensitive?')
     expect(out).toContain('assumptions:')
     expect(out).toContain(
       '- The first build targets a browser-based internal workflow tool.',
