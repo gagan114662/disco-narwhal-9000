@@ -946,7 +946,10 @@ async function handleBuildProgress(rest: string[]): Promise<string> {
     parsed.buildId,
   )
   if (!manifest) {
-    return `No build ${parsed.buildId} found for ${parsed.projectDir}.`
+    return [
+      `No build ${parsed.buildId} found for ${parsed.projectDir}.`,
+      `builds command: /kairos builds ${parsed.projectDir}`,
+    ].join('\n')
   }
   if (!manifest.tracerSlices || manifest.tracerSlices.length === 0) {
     return `No tracer slices found for ${parsed.buildId} in ${parsed.projectDir}.`
