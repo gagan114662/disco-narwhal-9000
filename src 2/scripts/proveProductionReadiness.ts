@@ -12,6 +12,23 @@ type RunResult = {
   url: string
 }
 
+type RunStep = {
+  name: string
+  status: string
+  conclusion: string | null
+}
+
+type RunJob = {
+  name: string
+  status: string
+  conclusion: string | null
+  steps: RunStep[]
+}
+
+type RunView = {
+  jobs: RunJob[]
+}
+
 type PullRequestCheck = {
   name?: string
   status?: string
@@ -52,6 +69,22 @@ const workflowStaticProofFiles = [
   '.github/workflows/ci.yml',
   '.github/workflows/permanent-structural-fix-daily.yml',
 ]
+
+const requiredHostedWorkflowSteps: Record<string, string[]> = {
+  ci: [
+    'Install dependencies',
+    'Audit dependencies',
+    'Run production pipeline',
+    'Run full test suite',
+    'Run static production proof gates',
+  ],
+  'permanent-structural-fix-daily': [
+    'Install dependencies',
+    'Audit dependencies',
+    'Run permanent structural fix loop',
+    'Run static production proof gates',
+  ],
+}
 
 const allowedDisabledCommandStubs = [
   'src 2/commands/ant-trace/index.js',
@@ -147,7 +180,7 @@ function assertLatestWorkflowGreen(
   runs: RunResult[],
   workflowName: string,
   headSha: string,
-): void {
+): RunResult {
   const runForHead = latestWorkflowRun(runs, workflowName, headSha)
   if (!runForHead) {
     throw new Error(`No ${workflowName} run found for origin/main ${headSha}`)
@@ -158,6 +191,49 @@ function assertLatestWorkflowGreen(
     )
   }
   console.log(`${workflowName}: ${runForHead.url}`)
+  return runForHead
+}
+
+function proveHostedWorkflowSteps(repoRoot: string, runResult: RunResult): void {
+  const requiredSteps = requiredHostedWorkflowSteps[runResult.workflowName]
+  if (!requiredSteps) {
+    throw new Error(
+      `No required hosted steps configured for ${runResult.workflowName}`,
+    )
+  }
+
+  const runView = json<RunView>(
+    'gh',
+    ['run', 'view', String(runResult.databaseId), '--json', 'jobs'],
+    repoRoot,
+  )
+  const steps = runView.jobs.flatMap(job =>
+    (job.steps ?? []).map(step => ({ ...step, jobName: job.name })),
+  )
+  const failures: string[] = []
+
+  for (const stepName of requiredSteps) {
+    const step = steps.find(candidate => candidate.name === stepName)
+    if (!step) {
+      failures.push(`${runResult.workflowName}: missing hosted step "${stepName}"`)
+      continue
+    }
+    if (step.status !== 'completed' || step.conclusion !== 'success') {
+      failures.push(
+        `${runResult.workflowName}: step "${stepName}" in job "${step.jobName}" is ${step.status}/${step.conclusion}`,
+      )
+    }
+  }
+
+  if (failures.length > 0) {
+    throw new Error(
+      `Hosted workflow step receipts are not green:\n${failures.join('\n')}`,
+    )
+  }
+
+  console.log(
+    `${runResult.workflowName} hosted steps verified: ${requiredSteps.join(', ')}`,
+  )
 }
 
 function proveRemoteMain(repoRoot: string): void {
@@ -178,8 +254,14 @@ function proveRemoteMain(repoRoot: string): void {
     repoRoot,
   )
 
-  assertLatestWorkflowGreen(runs, 'ci', mainSha)
-  assertLatestWorkflowGreen(runs, 'permanent-structural-fix-daily', mainSha)
+  const ciRun = assertLatestWorkflowGreen(runs, 'ci', mainSha)
+  const dailyRun = assertLatestWorkflowGreen(
+    runs,
+    'permanent-structural-fix-daily',
+    mainSha,
+  )
+  proveHostedWorkflowSteps(repoRoot, ciRun)
+  proveHostedWorkflowSteps(repoRoot, dailyRun)
 }
 
 function proveOpenPrs(repoRoot: string): void {
