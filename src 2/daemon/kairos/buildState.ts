@@ -27,6 +27,7 @@ export const kairosBuildManifestSchema = z.object({
   title: z.string().min(1).optional(),
   brief: z.string().min(1).optional(),
   tracerSlices: z.array(kairosBuildTracerSliceSchema).optional(),
+  selectedSliceId: z.string().min(1).optional(),
   status: kairosBuildStatusSchema,
   createdAt: z.string().min(1),
   updatedAt: z.string().min(1),
@@ -58,6 +59,12 @@ export const kairosBuildEventSchema = z.discriminatedUnion('kind', [
     ...kairosBuildEventBaseSchema,
     kind: z.literal('spec_written'),
     specPath: z.string().min(1),
+  }),
+  z.object({
+    ...kairosBuildEventBaseSchema,
+    kind: z.literal('slice_selected'),
+    sliceId: z.string().min(1),
+    title: z.string().min(1),
   }),
   z.object({
     ...kairosBuildEventBaseSchema,

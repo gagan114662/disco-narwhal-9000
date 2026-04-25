@@ -116,6 +116,7 @@ describe('/kairos command', () => {
     expect(out).toContain('/kairos build-show')
     expect(out).toContain('/kairos build-events')
     expect(out).toContain('/kairos build-slices')
+    expect(out).toContain('/kairos build-select')
     expect(out).toContain('/kairos cloud deploy')
     expect(out).toContain('/kairos cloud-sync')
   })
@@ -340,6 +341,45 @@ describe('/kairos command', () => {
     const projectDir = makeProjectDir()
     const out = await runKairosCommand(`build-slices ${projectDir} missing-build`)
     expect(out).toBe(`No build missing-build found for ${projectDir}.`)
+  })
+
+  test('build-select persists the selected tracer bullet', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'select-build',
+      now: () => new Date('2026-04-25T18:55:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+
+    const out = await runKairosCommand(`build-select ${projectDir} select-build TB-2`)
+    expect(out.split('\n')).toEqual([
+      'Selected TB-2 for select-build: Review workflow path',
+      'test: a pending record can move to approved or rejected with an audit entry',
+      'implement: add status transitions, reviewer action controls, and audit recording',
+    ])
+    expect(readJson(getProjectKairosBuildManifestPath(projectDir, 'select-build'))).toMatchObject({
+      selectedSliceId: 'TB-2',
+      status: 'draft',
+    })
+    expect(readFileSync(getProjectKairosBuildEventsPath(projectDir, 'select-build'), 'utf8')).toContain(
+      '"kind":"slice_selected"',
+    )
+    const eventsOut = await runKairosCommand(`build-events ${projectDir} select-build`)
+    expect(eventsOut).toContain(
+      'slice_selected slice=TB-2 title=Review workflow path',
+    )
+  })
+
+  test('build-select reports an unknown slice clearly', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'select-build',
+      now: () => new Date('2026-04-25T18:55:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+
+    const out = await runKairosCommand(`build-select ${projectDir} select-build TB-9`)
+    expect(out).toBe('No tracer slice TB-9 found for select-build.')
   })
 
   test('pause writes pause.json and resume clears it', async () => {

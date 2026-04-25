@@ -72,6 +72,7 @@ const HELP_TEXT = `Usage:
 /kairos build-show [projectDir] <buildId>
 /kairos build-events [projectDir] <buildId> [lines]
 /kairos build-slices [projectDir] <buildId>
+/kairos build-select [projectDir] <buildId> <sliceId>
 /kairos pause
 /kairos resume
 /kairos dashboard
@@ -102,6 +103,7 @@ type Subcommand =
   | 'build-show'
   | 'build-events'
   | 'build-slices'
+  | 'build-select'
   | 'pause'
   | 'resume'
   | 'dashboard'
@@ -125,6 +127,7 @@ const SUBCOMMANDS = new Set<Subcommand>([
   'build-show',
   'build-events',
   'build-slices',
+  'build-select',
   'pause',
   'resume',
   'dashboard',
@@ -327,6 +330,27 @@ function parseBuildEventsArgs(
   }
 }
 
+function parseBuildSelectArgs(
+  rest: string[],
+): { projectDir: string; buildId: string; sliceId: string } | null {
+  if (rest.length === 0) return null
+  const [first, second, third] = rest
+  if (isPathLike(first)) {
+    if (!second || !third) return null
+    return {
+      projectDir: resolveProjectDir(first),
+      buildId: second,
+      sliceId: third,
+    }
+  }
+  if (!second) return null
+  return {
+    projectDir: resolveProjectDir(undefined),
+    buildId: first,
+    sliceId: second,
+  }
+}
+
 async function handleBuild(rest: string[]): Promise<string> {
   const parsed = parseBuildArgs(rest)
   if (parsed === null) {
@@ -400,6 +424,8 @@ function formatBuildEvent(event: KairosBuildEvent): string {
       return `${event.t} build_status_changed ${event.from}->${event.to}`
     case 'spec_written':
       return `${event.t} spec_written spec=${event.specPath}`
+    case 'slice_selected':
+      return `${event.t} slice_selected slice=${event.sliceId} title=${event.title}`
     case 'agent_event_recorded':
       return `${event.t} agent_event_recorded run=${event.runId} event=${event.eventKind}`
     case 'build_result_written':
@@ -459,6 +485,50 @@ async function handleBuildSlices(rest: string[]): Promise<string> {
       `  test: ${slice.testFirst}`,
       `  implement: ${slice.implement}`,
     ]),
+  ].join('\n')
+}
+
+async function handleBuildSelect(rest: string[]): Promise<string> {
+  const parsed = parseBuildSelectArgs(rest)
+  if (parsed === null) {
+    return 'Usage: /kairos build-select [projectDir] <buildId> <sliceId>'
+  }
+
+  const writer = await createStateWriter()
+  const manifest = await writer.readBuildManifest(
+    parsed.projectDir,
+    parsed.buildId,
+  )
+  if (!manifest) {
+    return `No build ${parsed.buildId} found for ${parsed.projectDir}.`
+  }
+  const slice = manifest.tracerSlices?.find(
+    candidate => candidate.id === parsed.sliceId,
+  )
+  if (!slice) {
+    return `No tracer slice ${parsed.sliceId} found for ${parsed.buildId}.`
+  }
+
+  const updatedAt = new Date().toISOString()
+  await writer.writeBuildManifest(parsed.projectDir, {
+    ...manifest,
+    selectedSliceId: slice.id,
+    updatedAt,
+  })
+  await writer.appendBuildEvent(parsed.projectDir, parsed.buildId, {
+    version: 1,
+    kind: 'slice_selected',
+    buildId: parsed.buildId,
+    tenantId: manifest.tenantId,
+    t: updatedAt,
+    sliceId: slice.id,
+    title: slice.title,
+  })
+
+  return [
+    `Selected ${slice.id} for ${parsed.buildId}: ${slice.title}`,
+    `test: ${slice.testFirst}`,
+    `implement: ${slice.implement}`,
   ].join('\n')
 }
 
@@ -653,6 +723,8 @@ export async function runKairosCommand(args: string): Promise<string> {
       return handleBuildEvents(rest)
     case 'build-slices':
       return handleBuildSlices(rest)
+    case 'build-select':
+      return handleBuildSelect(rest)
     case 'pause':
       return handlePause()
     case 'resume':
@@ -694,7 +766,7 @@ const kairos = {
   name: 'kairos',
   description: 'Inspect and control the KAIROS background daemon',
   argumentHint:
-    'status|list|opt-in|opt-out|demo|build|builds|build-show|build-events|build-slices|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
+    'status|list|opt-in|opt-out|demo|build|builds|build-show|build-events|build-slices|build-select|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
   load: () => import('./kairos-ui.js'),
 } satisfies Command
 
