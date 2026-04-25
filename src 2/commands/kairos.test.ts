@@ -647,7 +647,10 @@ describe('/kairos command', () => {
     const out = await runKairosCommand(
       `build-unanswered ${projectDir} questions-build`,
     )
-    expect(out).toBe('No unanswered clarifying questions for questions-build.')
+    expect(out.split('\n')).toEqual([
+      'No unanswered clarifying questions for questions-build.',
+      `next command: /kairos build-readiness ${projectDir} questions-build`,
+    ])
   })
 
   test('build-questions reports a missing build clearly', async () => {

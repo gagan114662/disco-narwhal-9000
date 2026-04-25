@@ -786,7 +786,10 @@ async function handleBuildUnanswered(rest: string[]): Promise<string> {
   }
   const unanswered = renderUnansweredClarifyingQuestions(manifest)
   if (unanswered.length === 0) {
-    return `No unanswered clarifying questions for ${parsed.buildId}.`
+    return [
+      `No unanswered clarifying questions for ${parsed.buildId}.`,
+      `next command: /kairos build-readiness ${parsed.projectDir} ${parsed.buildId}`,
+    ].join('\n')
   }
   const firstUnansweredQuestionNumber =
     findFirstUnansweredClarifyingQuestionNumber(manifest)
