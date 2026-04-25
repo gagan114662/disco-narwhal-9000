@@ -65,6 +65,19 @@ import {
 
 const DEFAULT_DASHBOARD_URL = 'http://127.0.0.1:7777/'
 const DEFAULT_LOG_TAIL = 25
+type KairosBuildEventKind = KairosBuildEvent['kind']
+
+const KAIROS_BUILD_EVENT_KINDS = new Set<KairosBuildEventKind>([
+  'build_created',
+  'build_status_changed',
+  'spec_written',
+  'slice_selected',
+  'next_slice_prompt_rendered',
+  'slice_completed',
+  'agent_event_recorded',
+  'build_result_written',
+  'build_failed',
+])
 
 const HELP_TEXT = `Usage:
 /kairos status
@@ -75,7 +88,7 @@ const HELP_TEXT = `Usage:
 /kairos build [projectDir] <brief>
 /kairos builds [projectDir]
 /kairos build-show [projectDir] <buildId>
-/kairos build-events [projectDir] <buildId> [lines]
+/kairos build-events [projectDir] <buildId> [lines] [--kind <kind>]
 /kairos build-slices [projectDir] <buildId>
 /kairos build-select [projectDir] <buildId> <sliceId>
 /kairos build-select-next [projectDir] <buildId>
@@ -364,25 +377,60 @@ function parseBuildShowArgs(
   return { projectDir: resolveProjectDir(undefined), buildId: first }
 }
 
-function parseBuildEventsArgs(
-  rest: string[],
-): { projectDir: string; buildId: string; limit: number } | null {
+function parseBuildEventKind(value: string): KairosBuildEventKind | null {
+  if (KAIROS_BUILD_EVENT_KINDS.has(value as KairosBuildEventKind)) {
+    return value as KairosBuildEventKind
+  }
+  return null
+}
+
+function parseBuildEventOptions(
+  tokens: string[],
+): { limit: number; kind?: KairosBuildEventKind } | null {
+  let limit = DEFAULT_LOG_TAIL
+  let kind: KairosBuildEventKind | undefined
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index]
+    if (token === '--kind') {
+      const parsedKind = parseBuildEventKind(tokens[index + 1] ?? '')
+      if (!parsedKind) return null
+      kind = parsedKind
+      index += 1
+      continue
+    }
+    const parsedLimit = Math.max(1, Math.floor(Number(token)))
+    if (!Number.isFinite(parsedLimit)) return null
+    limit = parsedLimit
+  }
+  return { limit, kind }
+}
+
+function parseBuildEventsArgs(rest: string[]):
+  | {
+      projectDir: string
+      buildId: string
+      limit: number
+      kind?: KairosBuildEventKind
+    }
+  | null {
   if (rest.length === 0) return null
-  const [first, second, third] = rest
+  const [first, second] = rest
   if (isPathLike(first)) {
     if (!second) return null
-    const parsedLimit = third ? Math.max(1, Math.floor(Number(third))) : DEFAULT_LOG_TAIL
+    const options = parseBuildEventOptions(rest.slice(2))
+    if (!options) return null
     return {
       projectDir: resolveProjectDir(first),
       buildId: second,
-      limit: Number.isFinite(parsedLimit) ? parsedLimit : DEFAULT_LOG_TAIL,
+      ...options,
     }
   }
-  const parsedLimit = second ? Math.max(1, Math.floor(Number(second))) : DEFAULT_LOG_TAIL
+  const options = parseBuildEventOptions(rest.slice(1))
+  if (!options) return null
   return {
     projectDir: resolveProjectDir(undefined),
     buildId: first,
-    limit: Number.isFinite(parsedLimit) ? parsedLimit : DEFAULT_LOG_TAIL,
+    ...options,
   }
 }
 
@@ -502,7 +550,7 @@ function formatBuildEvent(event: KairosBuildEvent): string {
 async function handleBuildEvents(rest: string[]): Promise<string> {
   const parsed = parseBuildEventsArgs(rest)
   if (parsed === null) {
-    return 'Usage: /kairos build-events [projectDir] <buildId> [lines]'
+    return 'Usage: /kairos build-events [projectDir] <buildId> [lines] [--kind <kind>]'
   }
 
   const writer = await createStateWriter()
@@ -514,12 +562,15 @@ async function handleBuildEvents(rest: string[]): Promise<string> {
     return `No build ${parsed.buildId} found for ${parsed.projectDir}.`
   }
 
-  const events = await writer.readBuildEvents(parsed.projectDir, parsed.buildId)
+  const events = (await writer.readBuildEvents(parsed.projectDir, parsed.buildId))
+    .filter(event => !parsed.kind || event.kind === parsed.kind)
   if (events.length === 0) {
-    return `No build events found for ${parsed.buildId} in ${parsed.projectDir}.`
+    const filter = parsed.kind ? ` matching kind ${parsed.kind}` : ''
+    return `No build events found for ${parsed.buildId} in ${parsed.projectDir}${filter}.`
   }
+  const filter = parsed.kind ? ` kind=${parsed.kind}` : ''
   return [
-    `Events for ${parsed.buildId}:`,
+    `Events for ${parsed.buildId}${filter}:`,
     ...events.slice(-parsed.limit).map(event => `- ${formatBuildEvent(event)}`),
   ].join('\n')
 }

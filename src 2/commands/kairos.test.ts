@@ -397,6 +397,27 @@ describe('/kairos command', () => {
     ])
   })
 
+  test('build-events filters persisted events by kind', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'events-build',
+      now: () => new Date('2026-04-25T18:46:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+    await runKairosCommand(`build-select ${projectDir} events-build TB-1`)
+    await runKairosCommand(`build-complete-slice ${projectDir} events-build`)
+
+    const out = await runKairosCommand(
+      `build-events ${projectDir} events-build --kind slice_completed`,
+    )
+    const lines = out.split('\n')
+    expect(lines).toHaveLength(2)
+    expect(lines[0]).toBe('Events for events-build kind=slice_completed:')
+    expect(lines[1]).toContain(
+      'slice_completed slice=TB-1 title=Record intake skeleton',
+    )
+  })
+
   test('build-events reports a missing build clearly', async () => {
     const projectDir = makeProjectDir()
     const out = await runKairosCommand(`build-events ${projectDir} missing-build`)
