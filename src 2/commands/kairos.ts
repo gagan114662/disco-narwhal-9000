@@ -1379,7 +1379,7 @@ async function handleBuildNext(rest: string[]): Promise<string> {
     return `No build ${parsed.buildId} found for ${parsed.projectDir}.`
   }
   if (!manifest.selectedSliceId) {
-    return `No tracer slice selected for ${parsed.buildId}. Run \`/kairos build-select <buildId> <sliceId>\` first.`
+    return `No tracer slice selected for ${parsed.buildId}. Run \`/kairos build-select ${parsed.projectDir} ${parsed.buildId} <sliceId>\` first.`
   }
   const slice = manifest.tracerSlices?.find(
     candidate => candidate.id === manifest.selectedSliceId,
@@ -1388,7 +1388,7 @@ async function handleBuildNext(rest: string[]): Promise<string> {
     return `Selected tracer slice ${manifest.selectedSliceId} is missing for ${parsed.buildId}.`
   }
   if ((manifest.completedSliceIds ?? []).includes(slice.id)) {
-    return `Selected tracer slice ${slice.id} is already complete for ${parsed.buildId}. Run \`/kairos build-select-next <buildId>\` first.`
+    return `Selected tracer slice ${slice.id} is already complete for ${parsed.buildId}. Run \`/kairos build-select-next ${parsed.projectDir} ${parsed.buildId}\` first.`
   }
   const anchorLines: string[] = ['PRD anchors:']
   appendBulletSection(
@@ -1479,7 +1479,7 @@ async function handleBuildCompleteSlice(rest: string[]): Promise<string> {
     return `No build ${parsed.buildId} found for ${parsed.projectDir}.`
   }
   if (!manifest.selectedSliceId) {
-    return `No tracer slice selected for ${parsed.buildId}. Run \`/kairos build-select <buildId> <sliceId>\` first.`
+    return `No tracer slice selected for ${parsed.buildId}. Run \`/kairos build-select ${parsed.projectDir} ${parsed.buildId} <sliceId>\` first.`
   }
   const slice = manifest.tracerSlices?.find(
     candidate => candidate.id === manifest.selectedSliceId,

@@ -1376,7 +1376,7 @@ describe('/kairos command', () => {
       `build-complete-slice ${projectDir} complete-build`,
     )
     expect(out).toBe(
-      'No tracer slice selected for complete-build. Run `/kairos build-select <buildId> <sliceId>` first.',
+      `No tracer slice selected for complete-build. Run \`/kairos build-select ${projectDir} complete-build <sliceId>\` first.`,
     )
   })
 
@@ -1466,7 +1466,7 @@ describe('/kairos command', () => {
 
     const out = await runKairosCommand(`build-next ${projectDir} next-build`)
     expect(out).toBe(
-      'No tracer slice selected for next-build. Run `/kairos build-select <buildId> <sliceId>` first.',
+      `No tracer slice selected for next-build. Run \`/kairos build-select ${projectDir} next-build <sliceId>\` first.`,
     )
   })
 
@@ -1482,7 +1482,7 @@ describe('/kairos command', () => {
 
     const out = await runKairosCommand(`build-next ${projectDir} next-build`)
     expect(out).toBe(
-      'Selected tracer slice TB-1 is already complete for next-build. Run `/kairos build-select-next <buildId>` first.',
+      `Selected tracer slice TB-1 is already complete for next-build. Run \`/kairos build-select-next ${projectDir} next-build\` first.`,
     )
   })
 
