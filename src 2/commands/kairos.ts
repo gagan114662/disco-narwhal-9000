@@ -1124,6 +1124,7 @@ async function handleBuildNext(rest: string[]): Promise<string> {
     slice.implement,
     '',
     'Run verification before committing.',
+    'After the commit, mark this slice complete with `/kairos build-complete-slice <buildId>`.',
   ].join('\n')
 }
 

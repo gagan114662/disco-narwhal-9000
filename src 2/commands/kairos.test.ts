@@ -1119,6 +1119,9 @@ describe('/kairos command', () => {
       'add the smallest form, persistence path, and list view needed for one record',
     )
     expect(out).toContain('Run verification before committing.')
+    expect(out).toContain(
+      'After the commit, mark this slice complete with `/kairos build-complete-slice <buildId>`.',
+    )
 
     const eventsOut = await runKairosCommand(`build-events ${projectDir} next-build`)
     expect(eventsOut).toContain(
