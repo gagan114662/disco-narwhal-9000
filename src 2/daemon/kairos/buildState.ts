@@ -30,6 +30,7 @@ export const kairosBuildManifestSchema = z.object({
   acceptanceChecks: z.array(z.string().min(1)).optional(),
   clarifyingQuestions: z.array(z.string().min(1)).optional(),
   assumptions: z.array(z.string().min(1)).optional(),
+  risks: z.array(z.string().min(1)).optional(),
   tracerSlices: z.array(kairosBuildTracerSliceSchema).optional(),
   selectedSliceId: z.string().min(1).optional(),
   status: kairosBuildStatusSchema,

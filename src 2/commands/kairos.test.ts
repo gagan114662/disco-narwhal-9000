@@ -123,6 +123,7 @@ describe('/kairos command', () => {
     expect(out).toContain('/kairos build-requirements')
     expect(out).toContain('/kairos build-summary')
     expect(out).toContain('/kairos build-assumptions')
+    expect(out).toContain('/kairos build-risks')
     expect(out).toContain('/kairos cloud deploy')
     expect(out).toContain('/kairos cloud-sync')
   })
@@ -234,6 +235,12 @@ describe('/kairos command', () => {
         'A human reviewer will confirm roles, fields, and compliance constraints before implementation.',
         'Local single-tenant state is acceptable until deployment requirements are known.',
         'Auditability is required for approval or status changes.',
+      ],
+      risks: [
+        'Unknown data fields can cause rework in the first implementation slice.',
+        'Unconfirmed approver roles can weaken workflow and permission tests.',
+        'Missing integration expectations can hide notification or export work.',
+        'Compliance requirements may change storage, audit, and retention design.',
       ],
       tracerSlices: [
         {
@@ -497,6 +504,7 @@ describe('/kairos command', () => {
       'acceptance checks: 4',
       'clarifying questions: 4',
       'assumptions: 4',
+      'risks: 4',
       'tracer slices: 3',
       'brief: leave request app',
     ])
@@ -534,6 +542,34 @@ describe('/kairos command', () => {
     const projectDir = makeProjectDir()
     const out = await runKairosCommand(
       `build-assumptions ${projectDir} missing-build`,
+    )
+    expect(out).toBe(`No build missing-build found for ${projectDir}.`)
+  })
+
+  test('build-risks prints persisted draft risks', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'risks-build',
+      now: () => new Date('2026-04-25T19:30:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+
+    const out = await runKairosCommand(
+      `build-risks ${projectDir} risks-build`,
+    )
+    expect(out.split('\n')).toEqual([
+      'Risks for risks-build:',
+      '- Unknown data fields can cause rework in the first implementation slice.',
+      '- Unconfirmed approver roles can weaken workflow and permission tests.',
+      '- Missing integration expectations can hide notification or export work.',
+      '- Compliance requirements may change storage, audit, and retention design.',
+    ])
+  })
+
+  test('build-risks reports a missing build clearly', async () => {
+    const projectDir = makeProjectDir()
+    const out = await runKairosCommand(
+      `build-risks ${projectDir} missing-build`,
     )
     expect(out).toBe(`No build missing-build found for ${projectDir}.`)
   })

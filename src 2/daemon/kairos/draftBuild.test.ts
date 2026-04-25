@@ -4,6 +4,7 @@ import {
   createDraftAssumptions,
   createDraftClarifyingQuestions,
   createDraftFunctionalRequirements,
+  createDraftRisks,
   createDraftTracerSlices,
   deriveDraftTitle,
   renderDraftPrd,
@@ -102,6 +103,15 @@ describe('draft build PRD rendering', () => {
       'A human reviewer will confirm roles, fields, and compliance constraints before implementation.',
       'Local single-tenant state is acceptable until deployment requirements are known.',
       'Auditability is required for approval or status changes.',
+    ])
+  })
+
+  test('creates deterministic risks for vague briefs', () => {
+    expect(createDraftRisks()).toEqual([
+      'Unknown data fields can cause rework in the first implementation slice.',
+      'Unconfirmed approver roles can weaken workflow and permission tests.',
+      'Missing integration expectations can hide notification or export work.',
+      'Compliance requirements may change storage, audit, and retention design.',
     ])
   })
 })

@@ -125,6 +125,15 @@ export function createDraftAssumptions(): string[] {
   ]
 }
 
+export function createDraftRisks(): string[] {
+  return [
+    'Unknown data fields can cause rework in the first implementation slice.',
+    'Unconfirmed approver roles can weaken workflow and permission tests.',
+    'Missing integration expectations can hide notification or export work.',
+    'Compliance requirements may change storage, audit, and retention design.',
+  ]
+}
+
 export function createDraftClarifyingQuestions(): string[] {
   return [
     'Who are the exact user roles and approvers?',
@@ -150,6 +159,7 @@ export function renderDraftPrd(brief: string): string {
   const acceptanceChecks = createDraftAcceptanceChecks()
   const clarifyingQuestions = createDraftClarifyingQuestions()
   const assumptions = createDraftAssumptions()
+  const risks = createDraftRisks()
   return [
     `# ${title}`,
     '',
@@ -179,6 +189,10 @@ export function renderDraftPrd(brief: string): string {
     '## Assumptions',
     '',
     ...assumptions.map(assumption => `- ${assumption}`),
+    '',
+    '## Risks',
+    '',
+    ...risks.map(risk => `- ${risk}`),
     '',
     '## Non-Goals',
     '',
@@ -232,6 +246,7 @@ export async function createDraftBuild(
   const acceptanceChecks = createDraftAcceptanceChecks()
   const clarifyingQuestions = createDraftClarifyingQuestions()
   const assumptions = createDraftAssumptions()
+  const risks = createDraftRisks()
 
   await writer.writeBuildManifest(projectDir, {
     version: KAIROS_BUILD_STATE_VERSION,
@@ -244,6 +259,7 @@ export async function createDraftBuild(
     acceptanceChecks,
     clarifyingQuestions,
     assumptions,
+    risks,
     tracerSlices,
     status: 'draft',
     createdAt: timestamp,
