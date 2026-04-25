@@ -79,6 +79,7 @@ const HELP_TEXT = `Usage:
 /kairos build-slices [projectDir] <buildId>
 /kairos build-select [projectDir] <buildId> <sliceId>
 /kairos build-select-next [projectDir] <buildId>
+/kairos build-select-next-prompt [projectDir] <buildId>
 /kairos build-next [projectDir] <buildId>
 /kairos build-acceptance [projectDir] <buildId>
 /kairos build-questions [projectDir] <buildId>
@@ -124,6 +125,7 @@ type Subcommand =
   | 'build-slices'
   | 'build-select'
   | 'build-select-next'
+  | 'build-select-next-prompt'
   | 'build-next'
   | 'build-acceptance'
   | 'build-questions'
@@ -162,6 +164,7 @@ const SUBCOMMANDS = new Set<Subcommand>([
   'build-slices',
   'build-select',
   'build-select-next',
+  'build-select-next-prompt',
   'build-next',
   'build-acceptance',
   'build-questions',
@@ -1052,6 +1055,14 @@ async function handleBuildNext(rest: string[]): Promise<string> {
   ].join('\n')
 }
 
+async function handleBuildSelectNextPrompt(rest: string[]): Promise<string> {
+  const selection = await handleBuildSelectNext(rest)
+  if (!selection.startsWith('Selected ')) {
+    return selection
+  }
+  return handleBuildNext(rest)
+}
+
 async function handlePause(): Promise<string> {
   await setPauseState(true)
   return 'Paused KAIROS daemon. Fired tasks will be skipped until resume.'
@@ -1247,6 +1258,8 @@ export async function runKairosCommand(args: string): Promise<string> {
       return handleBuildSelect(rest)
     case 'build-select-next':
       return handleBuildSelectNext(rest)
+    case 'build-select-next-prompt':
+      return handleBuildSelectNextPrompt(rest)
     case 'build-next':
       return handleBuildNext(rest)
     case 'build-acceptance':
@@ -1314,7 +1327,7 @@ const kairos = {
   name: 'kairos',
   description: 'Inspect and control the KAIROS background daemon',
   argumentHint:
-    'status|list|opt-in|opt-out|demo|build|builds|build-show|build-events|build-slices|build-select|build-select-next|build-next|build-acceptance|build-questions|build-requirements|build-summary|build-assumptions|build-risks|build-goals|build-non-goals|build-users|build-problem|build-traceability|build-prd-outline|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
+    'status|list|opt-in|opt-out|demo|build|builds|build-show|build-events|build-slices|build-select|build-select-next|build-select-next-prompt|build-next|build-acceptance|build-questions|build-requirements|build-summary|build-assumptions|build-risks|build-goals|build-non-goals|build-users|build-problem|build-traceability|build-prd-outline|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
   load: () => import('./kairos-ui.js'),
 } satisfies Command
 

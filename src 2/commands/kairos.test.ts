@@ -118,6 +118,7 @@ describe('/kairos command', () => {
     expect(out).toContain('/kairos build-slices')
     expect(out).toContain('/kairos build-select')
     expect(out).toContain('/kairos build-select-next')
+    expect(out).toContain('/kairos build-select-next-prompt')
     expect(out).toContain('/kairos build-next')
     expect(out).toContain('/kairos build-acceptance')
     expect(out).toContain('/kairos build-questions')
@@ -889,6 +890,38 @@ describe('/kairos command', () => {
       `build-select-next ${projectDir} missing-build`,
     )
     expect(out).toBe(`No build missing-build found for ${projectDir}.`)
+  })
+
+  test('build-select-next-prompt selects and renders the next TDD prompt', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'select-next-prompt-build',
+      now: () => new Date('2026-04-25T19:38:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+
+    const out = await runKairosCommand(
+      `build-select-next-prompt ${projectDir} select-next-prompt-build`,
+    )
+    expect(out).toContain(
+      'Build next slice: TB-1 Record intake skeleton',
+    )
+    expect(out).toContain('Write the failing test first:')
+    expect(out).toContain('PRD anchors:')
+    expect(out).toContain('Stress-test before coding:')
+    expect(readJson(getProjectKairosBuildManifestPath(projectDir, 'select-next-prompt-build'))).toMatchObject({
+      selectedSliceId: 'TB-1',
+    })
+
+    const eventsOut = await runKairosCommand(
+      `build-events ${projectDir} select-next-prompt-build`,
+    )
+    expect(eventsOut).toContain(
+      'slice_selected slice=TB-1 title=Record intake skeleton',
+    )
+    expect(eventsOut).toContain(
+      'next_slice_prompt_rendered slice=TB-1 title=Record intake skeleton',
+    )
   })
 
   test('build-next renders a TDD prompt for the selected tracer bullet', async () => {
