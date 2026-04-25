@@ -842,6 +842,7 @@ async function handleBuildRequirements(rest: string[]): Promise<string> {
   return [
     `Functional requirements for ${parsed.buildId}:`,
     ...manifest.functionalRequirements.map(requirement => `- ${requirement}`),
+    ...renderBuildPrdStatusCommands(manifest),
   ].join('\n')
 }
 
@@ -1081,6 +1082,7 @@ async function handleBuildUsers(rest: string[]): Promise<string> {
   return [
     `Users for ${parsed.buildId}:`,
     ...manifest.users.map(user => `- ${user}`),
+    ...renderBuildPrdStatusCommands(manifest),
   ].join('\n')
 }
 
@@ -1102,7 +1104,11 @@ async function handleBuildProblem(rest: string[]): Promise<string> {
     return `No problem statement found for ${parsed.buildId} in ${parsed.projectDir}.`
   }
 
-  return [`Problem for ${parsed.buildId}:`, manifest.problem].join('\n')
+  return [
+    `Problem for ${parsed.buildId}:`,
+    manifest.problem,
+    ...renderBuildPrdStatusCommands(manifest),
+  ].join('\n')
 }
 
 async function handleBuildTraceability(rest: string[]): Promise<string> {
@@ -1128,7 +1134,15 @@ async function handleBuildTraceability(rest: string[]): Promise<string> {
     ...manifest.traceabilitySeeds.map(
       seed => `- ${seed.id} [${seed.source}] ${seed.text}`,
     ),
+    ...renderBuildPrdStatusCommands(manifest),
   ].join('\n')
+}
+
+function renderBuildPrdStatusCommands(manifest: KairosBuildManifest): string[] {
+  return [
+    `outline command: /kairos build-prd-outline ${manifest.projectDir} ${manifest.buildId}`,
+    `readiness command: /kairos build-readiness ${manifest.projectDir} ${manifest.buildId}`,
+  ]
 }
 
 function appendBulletSection(
@@ -1285,6 +1299,7 @@ async function handleBuildGoals(rest: string[]): Promise<string> {
   return [
     `Goals for ${parsed.buildId}:`,
     ...manifest.goals.map(goal => `- ${goal}`),
+    ...renderBuildPrdStatusCommands(manifest),
   ].join('\n')
 }
 
@@ -1309,6 +1324,7 @@ async function handleBuildNonGoals(rest: string[]): Promise<string> {
   return [
     `Non-goals for ${parsed.buildId}:`,
     ...manifest.nonGoals.map(nonGoal => `- ${nonGoal}`),
+    ...renderBuildPrdStatusCommands(manifest),
   ].join('\n')
 }
 
@@ -1333,6 +1349,7 @@ async function handleBuildAssumptions(rest: string[]): Promise<string> {
   return [
     `Assumptions for ${parsed.buildId}:`,
     ...manifest.assumptions.map(assumption => `- ${assumption}`),
+    ...renderBuildPrdStatusCommands(manifest),
   ].join('\n')
 }
 
@@ -1357,6 +1374,7 @@ async function handleBuildRisks(rest: string[]): Promise<string> {
   return [
     `Risks for ${parsed.buildId}:`,
     ...manifest.risks.map(risk => `- ${risk}`),
+    ...renderBuildPrdStatusCommands(manifest),
   ].join('\n')
 }
 

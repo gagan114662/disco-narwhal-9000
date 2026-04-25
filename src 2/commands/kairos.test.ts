@@ -703,6 +703,8 @@ describe('/kairos command', () => {
       '- List/detail views for submitted records.',
       '- Role-aware approval or status workflow where applicable.',
       '- Audit trail for important state changes.',
+      `outline command: /kairos build-prd-outline ${projectDir} requirements-build`,
+      `readiness command: /kairos build-readiness ${projectDir} requirements-build`,
     ])
   })
 
@@ -730,6 +732,8 @@ describe('/kairos command', () => {
       '- Convert the brief into a buildable internal workflow app.',
       '- Preserve spec clauses as future eval and audit anchors.',
       '- Identify missing compliance, data, and approval requirements before build.',
+      `outline command: /kairos build-prd-outline ${projectDir} goals-build`,
+      `readiness command: /kairos build-readiness ${projectDir} goals-build`,
     ])
   })
 
@@ -756,6 +760,8 @@ describe('/kairos command', () => {
       'Non-goals for non-goals-build:',
       '- Native mobile application.',
       '- Broad "any app" generation beyond the selected workflow.',
+      `outline command: /kairos build-prd-outline ${projectDir} non-goals-build`,
+      `readiness command: /kairos build-readiness ${projectDir} non-goals-build`,
     ])
   })
 
@@ -783,6 +789,8 @@ describe('/kairos command', () => {
       '- Primary operator',
       '- Reviewer or approver',
       '- Administrator',
+      `outline command: /kairos build-prd-outline ${projectDir} users-build`,
+      `readiness command: /kairos build-readiness ${projectDir} users-build`,
     ])
   })
 
@@ -808,6 +816,8 @@ describe('/kairos command', () => {
     expect(out.split('\n')).toEqual([
       'Problem for problem-build:',
       'Capture the business problem, affected users, and current workflow pain.',
+      `outline command: /kairos build-prd-outline ${projectDir} problem-build`,
+      `readiness command: /kairos build-readiness ${projectDir} problem-build`,
     ])
   })
 
@@ -833,6 +843,8 @@ describe('/kairos command', () => {
     expect(out.split('\n')).toEqual([
       'Traceability seeds for traceability-build:',
       '- BRIEF-1 [brief] leave request app',
+      `outline command: /kairos build-prd-outline ${projectDir} traceability-build`,
+      `readiness command: /kairos build-readiness ${projectDir} traceability-build`,
     ])
   })
 
@@ -1205,6 +1217,8 @@ describe('/kairos command', () => {
       '- A human reviewer will confirm roles, fields, and compliance constraints before implementation.',
       '- Local single-tenant state is acceptable until deployment requirements are known.',
       '- Auditability is required for approval or status changes.',
+      `outline command: /kairos build-prd-outline ${projectDir} assumptions-build`,
+      `readiness command: /kairos build-readiness ${projectDir} assumptions-build`,
     ])
   })
 
@@ -1233,6 +1247,8 @@ describe('/kairos command', () => {
       '- Unconfirmed approver roles can weaken workflow and permission tests.',
       '- Missing integration expectations can hide notification or export work.',
       '- Compliance requirements may change storage, audit, and retention design.',
+      `outline command: /kairos build-prd-outline ${projectDir} risks-build`,
+      `readiness command: /kairos build-readiness ${projectDir} risks-build`,
     ])
   })
 
