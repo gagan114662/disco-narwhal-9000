@@ -733,6 +733,18 @@ function appendBulletSection(
   lines.push(`${title}:`, ...items.map(item => `- ${item}`))
 }
 
+function appendNumberedSection(
+  lines: string[],
+  title: string,
+  items: string[] | undefined,
+): void {
+  if (!items || items.length === 0) return
+  lines.push(
+    `${title}:`,
+    ...items.map((item, index) => `${index + 1}. ${item}`),
+  )
+}
+
 function appendTraceabilitySeedSection(
   lines: string[],
   seeds: KairosBuildManifest['traceabilitySeeds'],
@@ -775,14 +787,11 @@ async function handleBuildPrdOutline(rest: string[]): Promise<string> {
   appendBulletSection(lines, 'acceptance checks', manifest.acceptanceChecks)
   appendBulletSection(lines, 'assumptions', manifest.assumptions)
   appendBulletSection(lines, 'risks', manifest.risks)
-  if (manifest.clarifyingQuestions && manifest.clarifyingQuestions.length > 0) {
-    lines.push(
-      'clarifying questions:',
-      ...manifest.clarifyingQuestions.map(
-        (question, index) => `${index + 1}. ${question}`,
-      ),
-    )
-  }
+  appendNumberedSection(
+    lines,
+    'clarifying questions',
+    manifest.clarifyingQuestions,
+  )
   appendTraceabilitySeedSection(lines, manifest.traceabilitySeeds)
 
   return lines.join('\n')
@@ -1004,6 +1013,14 @@ async function handleBuildNext(rest: string[]): Promise<string> {
   )
   appendBulletSection(anchorLines, 'acceptance checks', manifest.acceptanceChecks)
   appendTraceabilitySeedSection(anchorLines, manifest.traceabilitySeeds)
+  const stressLines: string[] = ['Stress-test before coding:']
+  appendBulletSection(stressLines, 'assumptions', manifest.assumptions)
+  appendBulletSection(stressLines, 'risks', manifest.risks)
+  appendNumberedSection(
+    stressLines,
+    'clarifying questions',
+    manifest.clarifyingQuestions,
+  )
 
   await writer.appendBuildEvent(parsed.projectDir, parsed.buildId, {
     version: 1,
@@ -1025,6 +1042,8 @@ async function handleBuildNext(rest: string[]): Promise<string> {
     slice.testFirst,
     '',
     ...anchorLines,
+    '',
+    ...stressLines,
     '',
     'Then implement only this slice:',
     slice.implement,

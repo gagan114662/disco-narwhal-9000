@@ -916,6 +916,17 @@ describe('/kairos command', () => {
     )
     expect(out).toContain('traceability seeds:')
     expect(out).toContain('- BRIEF-1 [brief] leave request app')
+    expect(out).toContain('Stress-test before coding:')
+    expect(out).toContain('assumptions:')
+    expect(out).toContain(
+      '- The first build targets a browser-based internal workflow tool.',
+    )
+    expect(out).toContain('risks:')
+    expect(out).toContain(
+      '- Unknown data fields can cause rework in the first implementation slice.',
+    )
+    expect(out).toContain('clarifying questions:')
+    expect(out).toContain('1. Who are the exact user roles and approvers?')
     expect(out).toContain('Then implement only this slice:')
     expect(out).toContain(
       'add the smallest form, persistence path, and list view needed for one record',
