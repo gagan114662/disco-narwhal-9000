@@ -120,6 +120,7 @@ describe('/kairos command', () => {
     expect(out).toContain('/kairos build-select-next')
     expect(out).toContain('/kairos build-select-next-prompt')
     expect(out).toContain('/kairos build-next')
+    expect(out).toContain('/kairos build-complete-slice')
     expect(out).toContain('/kairos build-acceptance')
     expect(out).toContain('/kairos build-questions')
     expect(out).toContain('/kairos build-requirements')
@@ -671,6 +672,7 @@ describe('/kairos command', () => {
       'assumptions: 4',
       'risks: 4',
       'tracer slices: 3',
+      'completed slices: 0',
       'traceability seeds: 1',
       'brief: leave request app',
     ])
@@ -928,6 +930,55 @@ describe('/kairos command', () => {
     const out = await runKairosCommand('build-select-next-prompt')
     expect(out).toBe(
       'Usage: /kairos build-select-next-prompt [projectDir] <buildId>',
+    )
+  })
+
+  test('build-complete-slice records the selected tracer bullet as completed', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'complete-build',
+      now: () => new Date('2026-04-25T19:42:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+    await runKairosCommand(`build-select ${projectDir} complete-build TB-1`)
+
+    const out = await runKairosCommand(
+      `build-complete-slice ${projectDir} complete-build`,
+    )
+    expect(out).toBe('Completed TB-1 for complete-build: Record intake skeleton')
+    expect(readJson(getProjectKairosBuildManifestPath(projectDir, 'complete-build'))).toMatchObject({
+      selectedSliceId: 'TB-1',
+      completedSliceIds: ['TB-1'],
+    })
+
+    const eventsOut = await runKairosCommand(
+      `build-events ${projectDir} complete-build`,
+    )
+    expect(eventsOut).toContain(
+      'slice_completed slice=TB-1 title=Record intake skeleton',
+    )
+  })
+
+  test('build-complete-slice requires a selected tracer bullet', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'complete-build',
+      now: () => new Date('2026-04-25T19:44:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+
+    const out = await runKairosCommand(
+      `build-complete-slice ${projectDir} complete-build`,
+    )
+    expect(out).toBe(
+      'No tracer slice selected for complete-build. Run `/kairos build-select <buildId> <sliceId>` first.',
+    )
+  })
+
+  test('build-complete-slice reports its own usage for missing args', async () => {
+    const out = await runKairosCommand('build-complete-slice')
+    expect(out).toBe(
+      'Usage: /kairos build-complete-slice [projectDir] <buildId>',
     )
   })
 

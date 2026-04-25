@@ -81,6 +81,7 @@ const HELP_TEXT = `Usage:
 /kairos build-select-next [projectDir] <buildId>
 /kairos build-select-next-prompt [projectDir] <buildId>
 /kairos build-next [projectDir] <buildId>
+/kairos build-complete-slice [projectDir] <buildId>
 /kairos build-acceptance [projectDir] <buildId>
 /kairos build-questions [projectDir] <buildId>
 /kairos build-requirements [projectDir] <buildId>
@@ -127,6 +128,7 @@ type Subcommand =
   | 'build-select-next'
   | 'build-select-next-prompt'
   | 'build-next'
+  | 'build-complete-slice'
   | 'build-acceptance'
   | 'build-questions'
   | 'build-requirements'
@@ -166,6 +168,7 @@ const SUBCOMMANDS = new Set<Subcommand>([
   'build-select-next',
   'build-select-next-prompt',
   'build-next',
+  'build-complete-slice',
   'build-acceptance',
   'build-questions',
   'build-requirements',
@@ -482,6 +485,8 @@ function formatBuildEvent(event: KairosBuildEvent): string {
       return `${event.t} slice_selected slice=${event.sliceId} title=${event.title}`
     case 'next_slice_prompt_rendered':
       return `${event.t} next_slice_prompt_rendered slice=${event.sliceId} title=${event.title}`
+    case 'slice_completed':
+      return `${event.t} slice_completed slice=${event.sliceId} title=${event.title}`
     case 'agent_event_recorded':
       return `${event.t} agent_event_recorded run=${event.runId} event=${event.eventKind}`
     case 'build_result_written':
@@ -651,6 +656,7 @@ async function handleBuildSummary(rest: string[]): Promise<string> {
     `assumptions: ${manifest.assumptions?.length ?? 0}`,
     `risks: ${manifest.risks?.length ?? 0}`,
     `tracer slices: ${manifest.tracerSlices?.length ?? 0}`,
+    `completed slices: ${manifest.completedSliceIds?.length ?? 0}`,
     `traceability seeds: ${manifest.traceabilitySeeds?.length ?? 0}`,
     `brief: ${formatOptionalValue(manifest.brief)}`,
   ].join('\n')
@@ -1066,6 +1072,52 @@ async function handleBuildSelectNextPrompt(rest: string[]): Promise<string> {
   return handleBuildNext(rest)
 }
 
+async function handleBuildCompleteSlice(rest: string[]): Promise<string> {
+  const parsed = parseBuildShowArgs(rest)
+  if (parsed === null) {
+    return 'Usage: /kairos build-complete-slice [projectDir] <buildId>'
+  }
+
+  const writer = await createStateWriter()
+  const manifest = await writer.readBuildManifest(
+    parsed.projectDir,
+    parsed.buildId,
+  )
+  if (!manifest) {
+    return `No build ${parsed.buildId} found for ${parsed.projectDir}.`
+  }
+  if (!manifest.selectedSliceId) {
+    return `No tracer slice selected for ${parsed.buildId}. Run \`/kairos build-select <buildId> <sliceId>\` first.`
+  }
+  const slice = manifest.tracerSlices?.find(
+    candidate => candidate.id === manifest.selectedSliceId,
+  )
+  if (!slice) {
+    return `Selected tracer slice ${manifest.selectedSliceId} is missing for ${parsed.buildId}.`
+  }
+
+  const updatedAt = new Date().toISOString()
+  const completedSliceIds = Array.from(
+    new Set([...(manifest.completedSliceIds ?? []), slice.id]),
+  )
+  await writer.writeBuildManifest(parsed.projectDir, {
+    ...manifest,
+    completedSliceIds,
+    updatedAt,
+  })
+  await writer.appendBuildEvent(parsed.projectDir, parsed.buildId, {
+    version: 1,
+    kind: 'slice_completed',
+    buildId: parsed.buildId,
+    tenantId: manifest.tenantId,
+    t: updatedAt,
+    sliceId: slice.id,
+    title: slice.title,
+  })
+
+  return `Completed ${slice.id} for ${parsed.buildId}: ${slice.title}`
+}
+
 async function handlePause(): Promise<string> {
   await setPauseState(true)
   return 'Paused KAIROS daemon. Fired tasks will be skipped until resume.'
@@ -1265,6 +1317,8 @@ export async function runKairosCommand(args: string): Promise<string> {
       return handleBuildSelectNextPrompt(rest)
     case 'build-next':
       return handleBuildNext(rest)
+    case 'build-complete-slice':
+      return handleBuildCompleteSlice(rest)
     case 'build-acceptance':
       return handleBuildAcceptance(rest)
     case 'build-questions':
@@ -1330,7 +1384,7 @@ const kairos = {
   name: 'kairos',
   description: 'Inspect and control the KAIROS background daemon',
   argumentHint:
-    'status|list|opt-in|opt-out|demo|build|builds|build-show|build-events|build-slices|build-select|build-select-next|build-select-next-prompt|build-next|build-acceptance|build-questions|build-requirements|build-summary|build-assumptions|build-risks|build-goals|build-non-goals|build-users|build-problem|build-traceability|build-prd-outline|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
+    'status|list|opt-in|opt-out|demo|build|builds|build-show|build-events|build-slices|build-select|build-select-next|build-select-next-prompt|build-next|build-complete-slice|build-acceptance|build-questions|build-requirements|build-summary|build-assumptions|build-risks|build-goals|build-non-goals|build-users|build-problem|build-traceability|build-prd-outline|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
   load: () => import('./kairos-ui.js'),
 } satisfies Command
 
