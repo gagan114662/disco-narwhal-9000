@@ -883,6 +883,7 @@ describe('/kairos command', () => {
     )
     expect(out.split('\n')).toEqual([
       'Build progress for progress-build:',
+      'readiness: blocked',
       'selected slice: TB-2',
       'completed slices: 1/3',
       'remaining slices: 2',
@@ -907,6 +908,7 @@ describe('/kairos command', () => {
     )
     expect(out.split('\n')).toEqual([
       'Build progress for progress-build:',
+      'readiness: blocked',
       'selected slice: —',
       'completed slices: 0/3',
       'remaining slices: 3',
@@ -939,6 +941,7 @@ describe('/kairos command', () => {
     )
     expect(out).toContain('completed slices: 3/3')
     expect(out).toContain('remaining slices: 0')
+    expect(out).toContain('readiness: blocked')
     expect(out).toContain('next slice: —')
     expect(out).toContain('next command: —')
   })

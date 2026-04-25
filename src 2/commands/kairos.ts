@@ -927,6 +927,7 @@ async function handleBuildProgress(rest: string[]): Promise<string> {
   }
   return [
     `Build progress for ${parsed.buildId}:`,
+    `readiness: ${deriveBuildReadinessState(manifest)}`,
     `selected slice: ${formatOptionalValue(manifest.selectedSliceId)}`,
     `completed slices: ${completedCount}/${totalCount}`,
     `remaining slices: ${remainingCount}`,
@@ -940,6 +941,27 @@ async function handleBuildProgress(rest: string[]): Promise<string> {
       ),
     ),
   ].join('\n')
+}
+
+function deriveBuildReadinessState(
+  manifest: KairosBuildManifest,
+): 'blocked' | 'ready' {
+  const completedSliceIds = new Set(manifest.completedSliceIds ?? [])
+  const selectedSlice = manifest.tracerSlices?.find(
+    slice => slice.id === manifest.selectedSliceId,
+  )
+  const selectedSliceIsIncomplete =
+    selectedSlice !== undefined && !completedSliceIds.has(selectedSlice.id)
+  const hasIncompleteSlice = Boolean(
+    manifest.tracerSlices?.some(slice => !completedSliceIds.has(slice.id)),
+  )
+  const hasUnansweredQuestions =
+    renderUnansweredClarifyingQuestions(manifest).length > 0
+
+  return (hasIncompleteSlice && !selectedSliceIsIncomplete) ||
+    hasUnansweredQuestions
+    ? 'blocked'
+    : 'ready'
 }
 
 async function handleBuildReadiness(rest: string[]): Promise<string> {
