@@ -1,0 +1,34 @@
+{
+  "_comment": "Budget enforced by scripts/bundleBudget.ts. maxBytes is intentionally generous to catch order-of-magnitude regressions; tighten over time. forbiddenExternals are imports that must NEVER appear in the built CLI bundle. allowedExternals is the set of intentionally-external packages declared in `bun build --external`.",
+  "maxBytes": 31457280,
+  "maxStartupMs": 8000,
+  "forbiddenExternals": [
+    "@aws-sdk/client-bedrock-runtime",
+    "playwright",
+    "puppeteer"
+  ],
+  "allowedExternals": [
+    "@ant/computer-use-mcp",
+    "@ant/computer-use-mcp/types",
+    "@ant/computer-use-mcp/sentinelApps",
+    "@ant/claude-for-chrome-mcp",
+    "@ant/computer-use-swift",
+    "@ant/computer-use-input",
+    "@anthropic-ai/mcpb",
+    "@anthropic-ai/sandbox-runtime",
+    "audio-capture-napi",
+    "image-processor-napi",
+    "url-handler-napi",
+    "ajv",
+    "ajv/dist/runtime/validation_error",
+    "ajv/dist/runtime/uri",
+    "ajv/dist/runtime/ucs2length",
+    "ajv/dist/runtime/equal",
+    "ajv-formats/dist/formats",
+    "undici",
+    "@aws-sdk/signature-v4-crt",
+    "@aws-sdk/signature-v4a",
+    "node-fetch",
+    "ws"
+  ]
+}

@@ -8,6 +8,24 @@ updates:
       time: "10:00"
       timezone: "America/Toronto"
     open-pull-requests-limit: 5
+    groups:
+      otel:
+        patterns:
+          - "@opentelemetry/*"
+      aws-sdk:
+        patterns:
+          - "@aws-sdk/*"
+          - "@smithy/*"
+      anthropic-sdk:
+        patterns:
+          - "@anthropic-ai/*"
+      types:
+        patterns:
+          - "@types/*"
+      eslint-stack:
+        patterns:
+          - "eslint*"
+          - "@typescript-eslint/*"
     ignore:
       - dependency-name: "eslint"
         versions: [">=10"]
@@ -24,6 +42,19 @@ updates:
       time: "10:30"
       timezone: "America/Toronto"
     open-pull-requests-limit: 5
+    groups:
+      gh-actions-all:
+        patterns:
+          - "*"
     ignore:
       - dependency-name: "actions/checkout"
         versions: [">=6"]
+
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "10:45"
+      timezone: "America/Toronto"
+    open-pull-requests-limit: 5

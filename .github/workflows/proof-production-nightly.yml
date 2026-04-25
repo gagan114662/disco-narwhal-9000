@@ -1,18 +1,23 @@
-name: permanent-structural-fix-daily
+name: proof-production-nightly
 
 on:
   schedule:
-    - cron: '17 9 * * *'
+    - cron: '53 8 * * *'
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  permanent-structural-fix:
+  proof-production:
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
     env:
       ANTHROPIC_API_KEY: ci-test-key
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     defaults:
       run:
         working-directory: "src 2"
@@ -23,6 +28,8 @@ jobs:
           egress-policy: audit
 
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          fetch-depth: 0
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
@@ -31,11 +38,5 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Audit dependencies
-        run: bun audit
-
-      - name: Run permanent structural fix loop
-        run: bun run structural-fix:daily
-
-      - name: Run static production proof gates
-        run: bun run proof:static
+      - name: Run full proof:production gate
+        run: bun run proof:production

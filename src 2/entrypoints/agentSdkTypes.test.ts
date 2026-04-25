@@ -11,10 +11,15 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   buildMissedTaskNotification,
+  connectRemoteControl,
   forkSession,
   getSessionInfo,
   getSessionMessages,
+  query,
   tool,
+  unstable_v2_createSession,
+  unstable_v2_prompt,
+  unstable_v2_resumeSession,
   watchScheduledTasks,
 } from './agentSdkTypes.js'
 import { getProjectDir } from '../utils/sessionStoragePortable.js'
@@ -235,5 +240,57 @@ describe('Agent SDK compatibility facade', () => {
         signal: new AbortController().signal,
       }),
     ).toThrow('rebuilt CLI distribution')
+  })
+
+  // ItemModel #20 from the gap audit. The README explicitly documents that
+  // these SDK surfaces fail with "unsupported", so a partial re-enable that
+  // silently changes the error message (or stops throwing) must be caught
+  // before it ships. Each case asserts the function still throws AND that
+  // the message names the specific surface, so a generic catch-all does not
+  // satisfy the gate.
+  describe('disabled SDK surfaces (do-not-silently-re-enable gate)', () => {
+    test('query() throws with surface name in message', () => {
+      expect(() => query({ prompt: 'hello' })).toThrow(/query is not available/)
+      expect(() => query({ prompt: 'hello' })).toThrow(/rebuilt CLI distribution/)
+    })
+
+    test('unstable_v2_createSession() throws with surface name in message', () => {
+      expect(() =>
+        unstable_v2_createSession({ model: 'claude-sonnet-4-6' } as never),
+      ).toThrow(/unstable_v2_createSession is not available/)
+    })
+
+    test('unstable_v2_resumeSession() throws with surface name in message', () => {
+      expect(() =>
+        unstable_v2_resumeSession('sess-xxx', { model: 'claude-sonnet-4-6' } as never),
+      ).toThrow(/unstable_v2_resumeSession is not available/)
+    })
+
+    test('unstable_v2_prompt() throws with surface name in message', async () => {
+      await expect(
+        unstable_v2_prompt('hi', { model: 'claude-sonnet-4-6' } as never),
+      ).rejects.toThrow(/unstable_v2_prompt is not available/)
+    })
+
+    test('watchScheduledTasks() throws with surface name in message', () => {
+      expect(() =>
+        watchScheduledTasks({
+          dir: process.cwd(),
+          signal: new AbortController().signal,
+        }),
+      ).toThrow(/watchScheduledTasks is not available/)
+    })
+
+    test('connectRemoteControl() throws with surface name in message', async () => {
+      await expect(
+        connectRemoteControl({
+          dir: process.cwd(),
+          getAccessToken: () => undefined,
+          baseUrl: 'https://example.invalid',
+          orgUUID: '00000000-0000-0000-0000-000000000000',
+          model: 'claude-sonnet-4-6',
+        }),
+      ).rejects.toThrow(/connectRemoteControl is not available/)
+    })
   })
 })

@@ -1,0 +1,5 @@
+{
+  "_comment": "Budgets used by scripts/perfBench.ts. Keep these intentionally loose; they are early-warning gates, not microbench targets.",
+  "dashboardColdStartMs": 5000,
+  "reminderTickMs": 200
+}

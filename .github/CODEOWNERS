@@ -17,5 +17,28 @@
 /src\ 2/schemas/        @gagan114662
 /src\ 2/types/          @gagan114662
 
-/.github/CODEOWNERS              @gagan114662
-/.github/workflows/trunk-guard.yml @gagan114662
+/.github/CODEOWNERS                                  @gagan114662
+/.github/workflows/trunk-guard.yml                   @gagan114662
+/.github/workflows/ci.yml                            @gagan114662
+/.github/workflows/codeql.yml                        @gagan114662
+/.github/workflows/secret-scan.yml                   @gagan114662
+/.github/workflows/scorecard.yml                     @gagan114662
+/.github/workflows/sbom.yml                          @gagan114662
+/.github/workflows/release.yml                       @gagan114662
+/.github/workflows/proof-production-nightly.yml      @gagan114662
+/.github/workflows/mutation-test.yml                 @gagan114662
+/.github/workflows/flake-detection.yml               @gagan114662
+/.github/workflows/pr-hygiene.yml                    @gagan114662
+/.github/workflows/container-scan.yml                @gagan114662
+/.github/dependabot.yml                              @gagan114662
+/.github/trunk-patterns.json                         @gagan114662
+/.commitlintrc.json                                  @gagan114662
+/Dockerfile                                          @gagan114662
+/.dockerignore                                       @gagan114662
+/src\ 2/.bundle-budget.json                          @gagan114662
+/src\ 2/.license-policy.json                         @gagan114662
+/src\ 2/.perf-budget.json                            @gagan114662
+/src\ 2/.lint-baseline.json                          @gagan114662
+/src\ 2/.typecheck-baseline.json                     @gagan114662
+/src\ 2/stryker.conf.json                            @gagan114662
+/src\ 2/scripts/                                     @gagan114662

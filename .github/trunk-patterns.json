@@ -1,0 +1,53 @@
+{
+  "_comment": "Source of truth for trunk-guarded paths. Consumed by .github/workflows/trunk-guard.yml and src 2/scripts/trunkPatterns.ts. Use ECMAScript regex syntax (anchors, character classes). Patterns are matched against repository-relative file paths.",
+  "patterns": [
+    "^src 2/QueryEngine\\.ts$",
+    "^src 2/Task\\.ts$",
+    "^src 2/Tool\\.ts$",
+    "^src 2/query\\.ts$",
+    "^src 2/context\\.ts$",
+    "^src 2/tools\\.ts$",
+    "^src 2/commands\\.ts$",
+    "^src 2/entrypoints/",
+    "^src 2/query/",
+    "^src 2/context/",
+    "^src 2/state/",
+    "^src 2/hooks/",
+    "^src 2/migrations/",
+    "^src 2/schemas/",
+    "^src 2/types/"
+  ],
+  "fixtures": {
+    "must_match": [
+      "src 2/QueryEngine.ts",
+      "src 2/Task.ts",
+      "src 2/Tool.ts",
+      "src 2/query.ts",
+      "src 2/context.ts",
+      "src 2/tools.ts",
+      "src 2/commands.ts",
+      "src 2/entrypoints/cli.tsx",
+      "src 2/entrypoints/sdk.ts",
+      "src 2/query/QueryEngine.ts",
+      "src 2/context/context.ts",
+      "src 2/state/store.ts",
+      "src 2/hooks/useThing.ts",
+      "src 2/migrations/0001.sql",
+      "src 2/schemas/employee.ts",
+      "src 2/types/employee.ts"
+    ],
+    "must_not_match": [
+      "src 2/services/reminders/index.ts",
+      "src 2/daemon/main.ts",
+      "src 2/daemon/dashboard/server.ts",
+      "src 2/components/foo.tsx",
+      "src 2/QueryEngineHelpers.ts",
+      "src 2/context-helpers.ts",
+      "docs/README.md",
+      "README.md",
+      ".github/workflows/ci.yml",
+      "src 2/queryHelpers.ts",
+      "src 2/typesHelpers.ts"
+    ]
+  }
+}
