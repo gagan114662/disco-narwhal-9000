@@ -129,6 +129,7 @@ describe('/kairos command', () => {
     expect(out).toContain('/kairos build-users')
     expect(out).toContain('/kairos build-problem')
     expect(out).toContain('/kairos build-traceability')
+    expect(out).toContain('/kairos build-prd-outline')
     expect(out).toContain('/kairos cloud deploy')
     expect(out).toContain('/kairos cloud-sync')
   })
@@ -677,6 +678,55 @@ describe('/kairos command', () => {
     const projectDir = makeProjectDir()
     const out = await runKairosCommand(
       `build-summary ${projectDir} missing-build`,
+    )
+    expect(out).toBe(`No build missing-build found for ${projectDir}.`)
+  })
+
+  test('build-prd-outline prints persisted PRD sections in canonical order', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'outline-build',
+      now: () => new Date('2026-04-25T19:24:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+
+    const out = await runKairosCommand(
+      `build-prd-outline ${projectDir} outline-build`,
+    )
+    expect(out.split('\n')).toEqual([
+      'PRD outline for outline-build:',
+      'title: Leave Request App',
+      'problem: Capture the business problem, affected users, and current workflow pain.',
+      'users:',
+      '- Primary operator',
+      '- Reviewer or approver',
+      '- Administrator',
+      'goals:',
+      '- Convert the brief into a buildable internal workflow app.',
+      '- Preserve spec clauses as future eval and audit anchors.',
+      '- Identify missing compliance, data, and approval requirements before build.',
+      'non-goals:',
+      '- Native mobile application.',
+      '- Broad "any app" generation beyond the selected workflow.',
+      'functional requirements:',
+      '- Intake form or record creation flow.',
+      '- List/detail views for submitted records.',
+      '- Role-aware approval or status workflow where applicable.',
+      '- Audit trail for important state changes.',
+      'acceptance checks:',
+      '- A user can create a valid record from the primary form.',
+      '- A reviewer can find and act on pending records.',
+      '- Invalid or incomplete data is rejected with clear feedback.',
+      '- Important changes are visible in an audit trail.',
+      'traceability seeds:',
+      '- BRIEF-1 [brief] leave request app',
+    ])
+  })
+
+  test('build-prd-outline reports a missing build clearly', async () => {
+    const projectDir = makeProjectDir()
+    const out = await runKairosCommand(
+      `build-prd-outline ${projectDir} missing-build`,
     )
     expect(out).toBe(`No build missing-build found for ${projectDir}.`)
   })

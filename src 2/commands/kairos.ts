@@ -85,6 +85,7 @@ const HELP_TEXT = `Usage:
 /kairos build-users [projectDir] <buildId>
 /kairos build-problem [projectDir] <buildId>
 /kairos build-traceability [projectDir] <buildId>
+/kairos build-prd-outline [projectDir] <buildId>
 /kairos pause
 /kairos resume
 /kairos dashboard
@@ -128,6 +129,7 @@ type Subcommand =
   | 'build-users'
   | 'build-problem'
   | 'build-traceability'
+  | 'build-prd-outline'
   | 'pause'
   | 'resume'
   | 'dashboard'
@@ -164,6 +166,7 @@ const SUBCOMMANDS = new Set<Subcommand>([
   'build-users',
   'build-problem',
   'build-traceability',
+  'build-prd-outline',
   'pause',
   'resume',
   'dashboard',
@@ -713,6 +716,56 @@ async function handleBuildTraceability(rest: string[]): Promise<string> {
   ].join('\n')
 }
 
+function appendBulletSection(
+  lines: string[],
+  title: string,
+  items: string[] | undefined,
+): void {
+  if (!items || items.length === 0) return
+  lines.push(`${title}:`, ...items.map(item => `- ${item}`))
+}
+
+async function handleBuildPrdOutline(rest: string[]): Promise<string> {
+  const parsed = parseBuildShowArgs(rest)
+  if (parsed === null) {
+    return 'Usage: /kairos build-prd-outline [projectDir] <buildId>'
+  }
+
+  const writer = await createStateWriter()
+  const manifest = await writer.readBuildManifest(
+    parsed.projectDir,
+    parsed.buildId,
+  )
+  if (!manifest) {
+    return `No build ${parsed.buildId} found for ${parsed.projectDir}.`
+  }
+
+  const lines = [
+    `PRD outline for ${parsed.buildId}:`,
+    `title: ${formatOptionalValue(manifest.title)}`,
+    `problem: ${formatOptionalValue(manifest.problem)}`,
+  ]
+  appendBulletSection(lines, 'users', manifest.users)
+  appendBulletSection(lines, 'goals', manifest.goals)
+  appendBulletSection(lines, 'non-goals', manifest.nonGoals)
+  appendBulletSection(
+    lines,
+    'functional requirements',
+    manifest.functionalRequirements,
+  )
+  appendBulletSection(lines, 'acceptance checks', manifest.acceptanceChecks)
+  if (manifest.traceabilitySeeds && manifest.traceabilitySeeds.length > 0) {
+    lines.push(
+      'traceability seeds:',
+      ...manifest.traceabilitySeeds.map(
+        seed => `- ${seed.id} [${seed.source}] ${seed.text}`,
+      ),
+    )
+  }
+
+  return lines.join('\n')
+}
+
 async function handleBuildGoals(rest: string[]): Promise<string> {
   const parsed = parseBuildShowArgs(rest)
   if (parsed === null) {
@@ -1120,6 +1173,8 @@ export async function runKairosCommand(args: string): Promise<string> {
       return handleBuildProblem(rest)
     case 'build-traceability':
       return handleBuildTraceability(rest)
+    case 'build-prd-outline':
+      return handleBuildPrdOutline(rest)
     case 'pause':
       return handlePause()
     case 'resume':
@@ -1161,7 +1216,7 @@ const kairos = {
   name: 'kairos',
   description: 'Inspect and control the KAIROS background daemon',
   argumentHint:
-    'status|list|opt-in|opt-out|demo|build|builds|build-show|build-events|build-slices|build-select|build-next|build-acceptance|build-questions|build-requirements|build-summary|build-assumptions|build-risks|build-goals|build-non-goals|build-users|build-problem|build-traceability|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
+    'status|list|opt-in|opt-out|demo|build|builds|build-show|build-events|build-slices|build-select|build-next|build-acceptance|build-questions|build-requirements|build-summary|build-assumptions|build-risks|build-goals|build-non-goals|build-users|build-problem|build-traceability|build-prd-outline|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
   load: () => import('./kairos-ui.js'),
 } satisfies Command
 
