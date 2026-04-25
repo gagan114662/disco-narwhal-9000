@@ -11,6 +11,8 @@ updates:
     ignore:
       - dependency-name: "eslint"
         versions: [">=10"]
+      - dependency-name: "ink"
+        versions: [">=7"]
       - dependency-name: "typescript"
         versions: [">=6"]
 
