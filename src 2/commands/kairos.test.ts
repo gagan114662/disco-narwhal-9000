@@ -1650,6 +1650,17 @@ describe('/kairos command', () => {
     )
   })
 
+  test('build-complete-slice reports a missing build clearly', async () => {
+    const projectDir = makeProjectDir()
+    const out = await runKairosCommand(
+      `build-complete-slice ${projectDir} missing-build`,
+    )
+    expect(out.split('\n')).toEqual([
+      `No build missing-build found for ${projectDir}.`,
+      `builds command: /kairos builds ${projectDir}`,
+    ])
+  })
+
   test('build-complete-slice reports its own usage for missing args', async () => {
     const out = await runKairosCommand('build-complete-slice')
     expect(out).toBe(
