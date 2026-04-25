@@ -1411,6 +1411,8 @@ async function persistSelectedBuildSlice(
     `Selected ${slice.id} for ${manifest.buildId}: ${slice.title}`,
     `test: ${slice.testFirst}`,
     `implement: ${slice.implement}`,
+    `next command: /kairos build-next ${projectDir} ${manifest.buildId}`,
+    `progress command: /kairos build-progress ${projectDir} ${manifest.buildId}`,
   ].join('\n')
 }
 

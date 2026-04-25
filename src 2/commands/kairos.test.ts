@@ -1294,6 +1294,8 @@ describe('/kairos command', () => {
       'Selected TB-2 for select-build: Review workflow path',
       'test: a pending record can move to approved or rejected with an audit entry',
       'implement: add status transitions, reviewer action controls, and audit recording',
+      `next command: /kairos build-next ${projectDir} select-build`,
+      `progress command: /kairos build-progress ${projectDir} select-build`,
     ])
     expect(readJson(getProjectKairosBuildManifestPath(projectDir, 'select-build'))).toMatchObject({
       selectedSliceId: 'TB-2',
@@ -1335,6 +1337,8 @@ describe('/kairos command', () => {
       'Selected TB-1 for select-next-build: Record intake skeleton',
       'test: creating the minimum valid record persists it and shows it in a list',
       'implement: add the smallest form, persistence path, and list view needed for one record',
+      `next command: /kairos build-next ${projectDir} select-next-build`,
+      `progress command: /kairos build-progress ${projectDir} select-next-build`,
     ])
     expect(readJson(getProjectKairosBuildManifestPath(projectDir, 'select-next-build'))).toMatchObject({
       selectedSliceId: 'TB-1',
