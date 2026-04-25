@@ -731,7 +731,9 @@ async function handleBuildAnswer(rest: string[]): Promise<string> {
   }
   const questions = manifest.clarifyingQuestions ?? []
   if (!questions[parsed.questionNumber - 1]) {
-    return `No clarifying question ${parsed.questionNumber} found for ${parsed.buildId}.`
+    const validRange =
+      questions.length > 0 ? `1-${questions.length}` : 'none'
+    return `No clarifying question ${parsed.questionNumber} found for ${parsed.buildId}. Valid question numbers are ${validRange}. Run \`/kairos build-questions ${parsed.projectDir} ${parsed.buildId}\` to inspect them.`
   }
 
   await writer.writeBuildManifest(parsed.projectDir, {

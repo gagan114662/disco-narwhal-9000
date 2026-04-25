@@ -558,6 +558,22 @@ describe('/kairos command', () => {
     expect(nextOut).toContain('   answer: employee manager and HR approver')
   })
 
+  test('build-answer explains the valid clarifying question range', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'questions-build',
+      now: () => new Date('2026-04-25T21:01:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+
+    const out = await runKairosCommand(
+      `build-answer ${projectDir} questions-build 9 outside range`,
+    )
+    expect(out).toBe(
+      `No clarifying question 9 found for questions-build. Valid question numbers are 1-4. Run \`/kairos build-questions ${projectDir} questions-build\` to inspect them.`,
+    )
+  })
+
   test('build-unanswered lists only unanswered clarifying questions', async () => {
     const projectDir = makeProjectDir()
     __setKairosBuildDepsForTesting({
