@@ -193,10 +193,11 @@ function run(
   args: string[],
   cwd: string,
   capture = false,
+  extraEnv: Record<string, string> = {},
 ): string {
   const result = spawnSync(command, args, {
     cwd,
-    env: process.env,
+    env: { ...process.env, ...extraEnv },
     encoding: 'utf8',
     stdio: capture ? ['ignore', 'pipe', 'pipe'] : 'inherit',
   })
@@ -760,6 +761,33 @@ function proveDisabledCommandStubs(repoRoot: string): void {
   console.log(`Disabled command stubs are bounded: ${found.length}`)
 }
 
+function proveDisabledCommandStubsHiddenAtRuntime(sourceRoot: string): void {
+  const blockedCommandNames = [
+    'stub',
+    ...allowedDisabledCommandStubs.map(file => file.split('/').at(-2)!),
+  ]
+  const script = `
+    import { getCommands } from './commands.ts'
+
+    const blockedCommandNames = ${JSON.stringify(blockedCommandNames)}
+    const names = new Set((await getCommands(process.cwd())).map(command => command.name))
+    const exposed = blockedCommandNames.filter(name => names.has(name))
+
+    if (exposed.length > 0) {
+      console.error('Disabled command stubs exposed at runtime: ' + exposed.join(', '))
+      process.exit(1)
+    }
+
+    console.log('Disabled command stubs hidden at runtime: ' + blockedCommandNames.length)
+  `
+
+  run('bun', ['-e', script], sourceRoot, false, {
+    IS_DEMO: '',
+    NODE_ENV: 'test',
+    USER_TYPE: 'ant',
+  })
+}
+
 function proveSdkStubs(sourceRoot: string): void {
   const sdkEntry = readFileSync(
     join(sourceRoot, 'entrypoints', 'agentSdkTypes.ts'),
@@ -871,6 +899,10 @@ function proveStaticGates(repoRoot: string, sourceRoot: string): void {
     proveDisabledCommandStubs(repoRoot)
   })
 
+  step('disabled command stubs are hidden at runtime', () => {
+    proveDisabledCommandStubsHiddenAtRuntime(sourceRoot)
+  })
+
   step('SDK compatibility stubs are explicit and bounded', () => {
     proveSdkStubs(sourceRoot)
   })
@@ -940,6 +972,10 @@ function main(): void {
 
   step('disabled command stubs are explicit and bounded', () => {
     proveDisabledCommandStubs(repoRoot)
+  })
+
+  step('disabled command stubs are hidden at runtime', () => {
+    proveDisabledCommandStubsHiddenAtRuntime(sourceRoot)
   })
 
   step('latest main workflows are green for origin/main', () => {

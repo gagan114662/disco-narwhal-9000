@@ -45,6 +45,7 @@ bun run proof:production
   not request write-scoped or broad read/write-all permissions.
 - Live incomplete markers are absent across tracked source files.
 - Disabled command stubs are explicit and bounded.
+- Disabled command stubs are not exposed by runtime command loading.
 - SDK unsupported surfaces are explicit and bounded.
 
 ## Capture The Current Receipt
@@ -77,6 +78,7 @@ Workflow token permissions verified
 Repository Actions default workflow permissions verified
 Repository security settings verified
 Dependabot update policy verified
+Disabled command stubs hidden at runtime
 PRODUCTION PROOF PASSED
 ```
 
@@ -89,8 +91,8 @@ bun run proof:static
 That CI-friendly proof mode verifies test hygiene, workflow pins, workflow
 supply-chain/static-proof gates, least-privilege token permissions,
 Dependabot update-policy config, incomplete-marker scanning, disabled command
-stub bounds, and SDK unsupported-surface bounds without requiring GitHub API
-access.
+stub bounds, disabled-stub runtime hiding, and SDK unsupported-surface bounds
+without requiring GitHub API access.
 
 ## 8090 Comparison Boundary
 
@@ -128,5 +130,5 @@ The SDK facade currently permits exactly these unsupported surfaces:
 - `connectRemoteControl`
 
 Any new live incomplete marker, focused/skipped/pending/expected-failing test,
-unbounded disabled command stub, or unexpected SDK unsupported surface should
-fail `bun run proof:production`.
+unbounded or runtime-exposed disabled command stub, or unexpected SDK
+unsupported surface should fail `bun run proof:production`.
