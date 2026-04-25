@@ -51,7 +51,11 @@ import {
 } from '../daemon/kairos/cloudSync.js'
 import { runKairosCloudLifecycleCommand } from '../daemon/kairos/cloudLifecycle.js'
 import { safeParseJSON } from '../utils/json.js'
-import type { GlobalStatus, PauseState } from '../daemon/kairos/stateWriter.js'
+import {
+  createStateWriter,
+  type GlobalStatus,
+  type PauseState,
+} from '../daemon/kairos/stateWriter.js'
 
 const DEFAULT_DASHBOARD_URL = 'http://127.0.0.1:7777/'
 const DEFAULT_LOG_TAIL = 25
@@ -63,6 +67,7 @@ const HELP_TEXT = `Usage:
 /kairos opt-out [projectDir]
 /kairos demo [projectDir]
 /kairos build [projectDir] <brief>
+/kairos builds [projectDir]
 /kairos pause
 /kairos resume
 /kairos dashboard
@@ -89,6 +94,7 @@ type Subcommand =
   | 'opt-out'
   | 'demo'
   | 'build'
+  | 'builds'
   | 'pause'
   | 'resume'
   | 'dashboard'
@@ -108,6 +114,7 @@ const SUBCOMMANDS = new Set<Subcommand>([
   'opt-out',
   'demo',
   'build',
+  'builds',
   'pause',
   'resume',
   'dashboard',
@@ -288,6 +295,21 @@ async function handleBuild(rest: string[]): Promise<string> {
     'status: draft',
     `spec: ${result.specPath}`,
     `manifest: ${result.manifestPath}`,
+  ].join('\n')
+}
+
+async function handleBuilds(projectDir: string): Promise<string> {
+  const writer = await createStateWriter()
+  const builds = await writer.listBuildManifests(projectDir)
+  if (builds.length === 0) {
+    return `No builds found for ${projectDir}.`
+  }
+  return [
+    `Builds for ${projectDir}:`,
+    ...builds.map(
+      build =>
+        `- ${build.buildId} [${build.status}] updated=${build.updatedAt}`,
+    ),
   ].join('\n')
 }
 
@@ -474,6 +496,8 @@ export async function runKairosCommand(args: string): Promise<string> {
       return handleDemo(resolveProjectDir(rest[0]))
     case 'build':
       return handleBuild(rest)
+    case 'builds':
+      return handleBuilds(resolveProjectDir(rest[0]))
     case 'pause':
       return handlePause()
     case 'resume':
@@ -515,7 +539,7 @@ const kairos = {
   name: 'kairos',
   description: 'Inspect and control the KAIROS background daemon',
   argumentHint:
-    'status|list|opt-in|opt-out|demo|build|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
+    'status|list|opt-in|opt-out|demo|build|builds|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
   load: () => import('./kairos-ui.js'),
 } satisfies Command
 

@@ -1,4 +1,11 @@
-import { appendFile, mkdir, readFile, rename, writeFile } from 'fs/promises'
+import {
+  appendFile,
+  mkdir,
+  readFile,
+  readdir,
+  rename,
+  writeFile,
+} from 'fs/promises'
 import { dirname, join } from 'path'
 import { jsonStringify } from '../../utils/slowOperations.js'
 import {
@@ -17,6 +24,7 @@ import {
   getProjectKairosBuildDir,
   getProjectKairosBuildEventsPath,
   getProjectKairosBuildManifestPath,
+  getProjectKairosBuildsDir,
   getProjectKairosBuildResultPath,
   getProjectKairosBuildSpecPath,
   getProjectKairosBuildTranscriptPointerPath,
@@ -232,6 +240,36 @@ export async function createStateWriter() {
       )
       if (raw === null) return null
       return parseKairosBuildManifest(raw)
+    },
+    async listBuildManifests(
+      projectDir: string,
+    ): Promise<KairosBuildManifest[]> {
+      let entries: string[]
+      try {
+        entries = await readdir(getProjectKairosBuildsDir(projectDir))
+      } catch {
+        return []
+      }
+
+      const manifests = await Promise.all(
+        entries.map(async buildId => {
+          try {
+            const raw = await readJsonFile<unknown>(
+              getProjectKairosBuildManifestPath(projectDir, buildId),
+            )
+            return raw === null ? null : parseKairosBuildManifest(raw)
+          } catch {
+            return null
+          }
+        }),
+      )
+
+      return manifests
+        .filter((manifest): manifest is KairosBuildManifest => manifest !== null)
+        .sort((a, b) => {
+          const byUpdated = b.updatedAt.localeCompare(a.updatedAt)
+          return byUpdated === 0 ? a.buildId.localeCompare(b.buildId) : byUpdated
+        })
     },
     async writeBuildSpec(
       projectDir: string,

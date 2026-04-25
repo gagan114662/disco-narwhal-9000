@@ -117,4 +117,33 @@ describe('Kairos state writer build state', () => {
       }),
     ).rejects.toThrow('does not match path build id')
   })
+
+  test('lists build manifests newest first and ignores malformed build dirs', async () => {
+    const configDir = makeTempDir('kairos-build-list-config-')
+    const projectDir = makeTempDir('kairos-build-list-project-')
+    process.env.CLAUDE_CONFIG_DIR = configDir
+
+    const writer = await createStateWriter()
+    await writer.writeBuildManifest(projectDir, {
+      version: 1,
+      buildId: 'old-build',
+      projectDir,
+      tenantId: 'tenant-local',
+      status: 'draft',
+      createdAt: '2026-04-25T18:00:00.000Z',
+      updatedAt: '2026-04-25T18:00:00.000Z',
+    })
+    await writer.writeBuildManifest(projectDir, {
+      version: 1,
+      buildId: 'new-build',
+      projectDir,
+      tenantId: 'tenant-local',
+      status: 'succeeded',
+      createdAt: '2026-04-25T18:10:00.000Z',
+      updatedAt: '2026-04-25T18:15:00.000Z',
+    })
+
+    const builds = await writer.listBuildManifests(projectDir)
+    expect(builds.map(build => build.buildId)).toEqual(['new-build', 'old-build'])
+  })
 })

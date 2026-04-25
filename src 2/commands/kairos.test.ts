@@ -112,6 +112,7 @@ describe('/kairos command', () => {
     expect(out).toContain('/kairos opt-in')
     expect(out).toContain('/kairos demo')
     expect(out).toContain('/kairos build')
+    expect(out).toContain('/kairos builds')
     expect(out).toContain('/kairos cloud deploy')
     expect(out).toContain('/kairos cloud-sync')
   })
@@ -217,6 +218,34 @@ describe('/kairos command', () => {
     )
     expect(events).toContain('"kind":"build_created"')
     expect(events).toContain('"kind":"spec_written"')
+  })
+
+  test('builds lists persisted build manifests newest first', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'older-build',
+      now: () => new Date('2026-04-25T18:30:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} vendor onboarding form`)
+
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'newer-build',
+      now: () => new Date('2026-04-25T18:35:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request approval app`)
+
+    const out = await runKairosCommand(`builds ${projectDir}`)
+    expect(out.split('\n')).toEqual([
+      `Builds for ${projectDir}:`,
+      '- newer-build [draft] updated=2026-04-25T18:35:00.000Z',
+      '- older-build [draft] updated=2026-04-25T18:30:00.000Z',
+    ])
+  })
+
+  test('builds reports empty state clearly', async () => {
+    const projectDir = makeProjectDir()
+    const out = await runKairosCommand(`builds ${projectDir}`)
+    expect(out).toBe(`No builds found for ${projectDir}.`)
   })
 
   test('pause writes pause.json and resume clears it', async () => {
