@@ -1191,7 +1191,10 @@ describe('/kairos command', () => {
     const out = await runKairosCommand(
       `build-readiness ${projectDir} missing-build`,
     )
-    expect(out).toBe(`No build missing-build found for ${projectDir}.`)
+    expect(out.split('\n')).toEqual([
+      `No build missing-build found for ${projectDir}.`,
+      `builds command: /kairos builds ${projectDir}`,
+    ])
   })
 
   test('build-prd-outline prints persisted PRD sections in canonical order', async () => {
