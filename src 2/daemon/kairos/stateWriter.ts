@@ -2,10 +2,24 @@ import { appendFile, mkdir, readFile, rename, writeFile } from 'fs/promises'
 import { dirname, join } from 'path'
 import { jsonStringify } from '../../utils/slowOperations.js'
 import {
+  parseKairosBuildEvent,
+  parseKairosBuildManifest,
+  parseKairosBuildResult,
+  type KairosBuildEvent,
+  type KairosBuildManifest,
+  type KairosBuildResult,
+} from './buildState.js'
+import {
   getKairosGlobalCostsPath,
   getKairosGlobalEventsPath,
   getKairosPausePath,
   getKairosStateDir,
+  getProjectKairosBuildDir,
+  getProjectKairosBuildEventsPath,
+  getProjectKairosBuildManifestPath,
+  getProjectKairosBuildResultPath,
+  getProjectKairosBuildSpecPath,
+  getProjectKairosBuildTranscriptPointerPath,
   getProjectKairosCostsPath,
   getProjectKairosDir,
   getProjectKairosEventsPath,
@@ -159,6 +173,25 @@ async function readJsonFile<T>(path: string): Promise<T | null> {
   }
 }
 
+function assertBuildIdMatchesPath(buildId: string, pathBuildId: string): void {
+  if (buildId !== pathBuildId) {
+    throw new Error(
+      `KAIROS build state buildId ${buildId} does not match path build id ${pathBuildId}`,
+    )
+  }
+}
+
+function assertProjectDirMatchesPath(
+  projectDir: string,
+  pathProjectDir: string,
+): void {
+  if (projectDir !== pathProjectDir) {
+    throw new Error(
+      `KAIROS build manifest projectDir ${projectDir} does not match path projectDir ${pathProjectDir}`,
+    )
+  }
+}
+
 export type StateWriter = Awaited<ReturnType<typeof createStateWriter>>
 
 export async function createStateWriter() {
@@ -173,6 +206,78 @@ export async function createStateWriter() {
     },
     async ensureProjectDir(projectDir: string): Promise<void> {
       await mkdir(getProjectKairosDir(projectDir), { recursive: true })
+    },
+    async ensureBuildDir(projectDir: string, buildId: string): Promise<void> {
+      await mkdir(getProjectKairosBuildDir(projectDir, buildId), {
+        recursive: true,
+      })
+    },
+    async writeBuildManifest(
+      projectDir: string,
+      manifest: KairosBuildManifest,
+    ): Promise<void> {
+      const parsed = parseKairosBuildManifest(manifest)
+      assertProjectDirMatchesPath(parsed.projectDir, projectDir)
+      await writeJsonAtomic(
+        getProjectKairosBuildManifestPath(projectDir, parsed.buildId),
+        parsed,
+      )
+    },
+    async readBuildManifest(
+      projectDir: string,
+      buildId: string,
+    ): Promise<KairosBuildManifest | null> {
+      const raw = await readJsonFile<unknown>(
+        getProjectKairosBuildManifestPath(projectDir, buildId),
+      )
+      if (raw === null) return null
+      return parseKairosBuildManifest(raw)
+    },
+    async writeBuildSpec(
+      projectDir: string,
+      buildId: string,
+      spec: string,
+    ): Promise<void> {
+      const path = getProjectKairosBuildSpecPath(projectDir, buildId)
+      await enqueuePathWrite(path, async () => {
+        await mkdir(dirname(path), { recursive: true })
+        await writeFile(path, spec, 'utf8')
+      })
+    },
+    async appendBuildEvent(
+      projectDir: string,
+      buildId: string,
+      event: KairosBuildEvent,
+    ): Promise<void> {
+      const parsed = parseKairosBuildEvent(event)
+      assertBuildIdMatchesPath(parsed.buildId, buildId)
+      await appendJsonLine(
+        getProjectKairosBuildEventsPath(projectDir, buildId),
+        parsed,
+      )
+    },
+    async writeBuildTranscriptPointer(
+      projectDir: string,
+      buildId: string,
+      sessionId: string,
+    ): Promise<void> {
+      const path = getProjectKairosBuildTranscriptPointerPath(projectDir, buildId)
+      await enqueuePathWrite(path, async () => {
+        await mkdir(dirname(path), { recursive: true })
+        await writeFile(path, `${sessionId}\n`, 'utf8')
+      })
+    },
+    async writeBuildResult(
+      projectDir: string,
+      buildId: string,
+      result: KairosBuildResult,
+    ): Promise<void> {
+      const parsed = parseKairosBuildResult(result)
+      assertBuildIdMatchesPath(parsed.buildId, buildId)
+      await writeJsonAtomic(
+        getProjectKairosBuildResultPath(projectDir, buildId),
+        parsed,
+      )
     },
     async writeProjectStatus(status: ProjectStatus): Promise<void> {
       const dir = getProjectKairosDir(status.projectDir)
