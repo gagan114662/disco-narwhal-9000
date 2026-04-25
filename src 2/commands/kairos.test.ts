@@ -1178,6 +1178,20 @@ describe('/kairos command', () => {
     expect(out).toContain(
       'creating the minimum valid record persists it and shows it in a list',
     )
+    expect(out).toContain('Required TDD loop:')
+    expect(out).toContain(
+      '1. Add or update the narrow failing test for this slice.',
+    )
+    expect(out).toContain(
+      '2. Run that focused test and confirm it fails for the expected reason.',
+    )
+    expect(out).toContain('3. Implement only this slice.')
+    expect(out).toContain(
+      "4. Re-run the focused test, then the repo's standard verification.",
+    )
+    expect(out).toContain(
+      '5. Commit the passing slice before marking it complete.',
+    )
     expect(out).toContain('PRD anchors:')
     expect(out).toContain('functional requirements:')
     expect(out).toContain('- Intake form or record creation flow.')
