@@ -1140,6 +1140,22 @@ describe('/kairos command', () => {
     )
   })
 
+  test('build-next refuses a completed selected tracer bullet', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'next-build',
+      now: () => new Date('2026-04-25T19:54:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+    await runKairosCommand(`build-select ${projectDir} next-build TB-1`)
+    await runKairosCommand(`build-complete-slice ${projectDir} next-build`)
+
+    const out = await runKairosCommand(`build-next ${projectDir} next-build`)
+    expect(out).toBe(
+      'Selected tracer slice TB-1 is already complete for next-build. Run `/kairos build-select-next <buildId>` first.',
+    )
+  })
+
   test('pause writes pause.json and resume clears it', async () => {
     const pausePath = join(
       process.env.CLAUDE_CONFIG_DIR as string,

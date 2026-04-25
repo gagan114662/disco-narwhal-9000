@@ -1077,6 +1077,9 @@ async function handleBuildNext(rest: string[]): Promise<string> {
   if (!slice) {
     return `Selected tracer slice ${manifest.selectedSliceId} is missing for ${parsed.buildId}.`
   }
+  if ((manifest.completedSliceIds ?? []).includes(slice.id)) {
+    return `Selected tracer slice ${slice.id} is already complete for ${parsed.buildId}. Run \`/kairos build-select-next <buildId>\` first.`
+  }
   const anchorLines: string[] = ['PRD anchors:']
   appendBulletSection(
     anchorLines,
