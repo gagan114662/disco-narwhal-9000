@@ -43,6 +43,11 @@ const workflowFiles = [
   '.github/workflows/trunk-guard.yml',
 ]
 
+const workflowSupplyChainFiles = [
+  '.github/workflows/ci.yml',
+  '.github/workflows/permanent-structural-fix-daily.yml',
+]
+
 const allowedDisabledCommandStubs = [
   'src 2/commands/ant-trace/index.js',
   'src 2/commands/autofix-pr/index.js',
@@ -234,6 +239,30 @@ function proveWorkflowActionPins(repoRoot: string): void {
   console.log(`Workflow checkout pins verified: ${workflowFiles.join(', ')}`)
 }
 
+function proveWorkflowSupplyChainGates(repoRoot: string): void {
+  const missing: string[] = []
+
+  for (const file of workflowSupplyChainFiles) {
+    const workflow = readFileSync(join(repoRoot, file), 'utf8')
+    if (!workflow.includes('bun install --frozen-lockfile')) {
+      missing.push(`${file}: missing bun install --frozen-lockfile`)
+    }
+    if (!workflow.includes('bun audit')) {
+      missing.push(`${file}: missing bun audit`)
+    }
+  }
+
+  if (missing.length > 0) {
+    throw new Error(
+      `Workflow supply-chain gates must stay enabled:\n${missing.join('\n')}`,
+    )
+  }
+
+  console.log(
+    `Workflow supply-chain gates verified: ${workflowSupplyChainFiles.join(', ')}`,
+  )
+}
+
 function proveNoLiveIncompleteMarkers(repoRoot: string): void {
   const sourceFiles = trackedFiles(repoRoot, 'src 2').filter(file =>
     /\.(cjs|cts|js|jsx|mjs|mts|ts|tsx)$/.test(file),
@@ -412,6 +441,10 @@ function main(): void {
 
   step('workflow checkout actions are Node 24 ready', () => {
     proveWorkflowActionPins(repoRoot)
+  })
+
+  step('workflow supply-chain gates are enabled', () => {
+    proveWorkflowSupplyChainGates(repoRoot)
   })
 
   step('live incomplete markers are absent', () => {
