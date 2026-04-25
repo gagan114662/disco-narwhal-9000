@@ -403,6 +403,8 @@ describe('/kairos command', () => {
       'Events for events-build:',
       '- 2026-04-25T18:45:00.000Z build_created status=draft',
       `- 2026-04-25T18:45:00.000Z spec_written spec=${getProjectKairosBuildSpecPath(projectDir, 'events-build')}`,
+      `summary command: /kairos build-summary ${projectDir} events-build`,
+      `progress command: /kairos build-progress ${projectDir} events-build`,
     ])
   })
 
@@ -420,10 +422,16 @@ describe('/kairos command', () => {
       `build-events ${projectDir} events-build --kind slice_completed`,
     )
     const lines = out.split('\n')
-    expect(lines).toHaveLength(2)
+    expect(lines).toHaveLength(4)
     expect(lines[0]).toBe('Events for events-build kind=slice_completed:')
     expect(lines[1]).toContain(
       'slice_completed slice=TB-1 title=Record intake skeleton',
+    )
+    expect(lines[2]).toBe(
+      `summary command: /kairos build-summary ${projectDir} events-build`,
+    )
+    expect(lines[3]).toBe(
+      `progress command: /kairos build-progress ${projectDir} events-build`,
     )
   })
 

@@ -639,6 +639,8 @@ async function handleBuildEvents(rest: string[]): Promise<string> {
   return [
     `Events for ${parsed.buildId}${filter}:`,
     ...events.slice(-parsed.limit).map(event => `- ${formatBuildEvent(event)}`),
+    `summary command: /kairos build-summary ${manifest.projectDir} ${manifest.buildId}`,
+    `progress command: /kairos build-progress ${manifest.projectDir} ${manifest.buildId}`,
   ].join('\n')
 }
 
