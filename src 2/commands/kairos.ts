@@ -690,6 +690,8 @@ async function handleBuildAcceptance(rest: string[]): Promise<string> {
   return [
     `Acceptance checks for ${parsed.buildId}:`,
     ...manifest.acceptanceChecks.map(check => `- ${check}`),
+    `slices command: /kairos build-slices ${manifest.projectDir} ${manifest.buildId}`,
+    `next command: /kairos build-select-next-prompt ${manifest.projectDir} ${manifest.buildId}`,
   ].join('\n')
 }
 

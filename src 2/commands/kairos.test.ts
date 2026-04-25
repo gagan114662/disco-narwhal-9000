@@ -481,6 +481,8 @@ describe('/kairos command', () => {
       '- A reviewer can find and act on pending records.',
       '- Invalid or incomplete data is rejected with clear feedback.',
       '- Important changes are visible in an audit trail.',
+      `slices command: /kairos build-slices ${projectDir} acceptance-build`,
+      `next command: /kairos build-select-next-prompt ${projectDir} acceptance-build`,
     ])
   })
 
