@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  verify:
+  verify-matrix:
     strategy:
       fail-fast: false
       matrix:
@@ -111,3 +111,27 @@ jobs:
             src 2/dist/cli.js
             src 2/dist/dashboard-e2e-snapshot.json
           if-no-files-found: warn
+
+  # Umbrella job whose name matches the existing branch-protection required
+  # context `verify`. Every individual matrix job is reported as
+  # `verify-matrix (<os>, <bun-version>[, <experimental>])`, which doesn't
+  # match the required-checks list. This one fans-in their results so the
+  # rule can stay configured against a single, stable name.
+  verify:
+    needs: verify-matrix
+    runs-on: ubuntu-24.04
+    if: always()
+    steps:
+      - name: Verify all required matrix variants succeeded
+        env:
+          MATRIX_RESULT: ${{ needs.verify-matrix.result }}
+        run: |
+          echo "verify-matrix result: $MATRIX_RESULT"
+          # `success` is required. `skipped` and `failure` both block; the
+          # bun-latest variant is allowed to fail via continue-on-error so it
+          # does not flip the aggregate to failure.
+          if [ "$MATRIX_RESULT" != "success" ]; then
+            echo "::error::verify-matrix did not succeed (result=$MATRIX_RESULT)"
+            exit 1
+          fi
+          echo "All required verify-matrix variants succeeded."

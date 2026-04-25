@@ -25,8 +25,10 @@ These are the workflow job names that must succeed before a PR can merge.
 Add or remove from this list whenever the workflow grows; keep this doc and
 the live settings in sync.
 
-- `ci / verify (ubuntu-24.04, 1.3.11)`
-- `ci / verify (macos-14, 1.3.11)`
+- `ci / verify` — umbrella job whose name matches the existing `verify`
+  required context. It fans-in the `verify-matrix (...)` sub-jobs so the
+  branch-protection rule can stay configured against a single, stable
+  name even as the matrix grows.
 - `trunk-guard / block-trunk-changes`
 - `codeql / analyze (javascript-typescript)`
 - `secret-scan / trufflehog`
