@@ -152,7 +152,7 @@ const requiredDependabotUpdates = [
     time: '10:00',
     ignoredVersions: [
       { dependency: 'eslint', versions: ['>=10'] },
-      { dependency: 'ink', versions: ['>=7'] },
+      { dependency: 'ink', versions: ['>=6'] },
       { dependency: 'typescript', versions: ['>=6'] },
     ],
   },
