@@ -1292,7 +1292,10 @@ async function handleBuildPrdOutline(rest: string[]): Promise<string> {
     parsed.buildId,
   )
   if (!manifest) {
-    return `No build ${parsed.buildId} found for ${parsed.projectDir}.`
+    return [
+      `No build ${parsed.buildId} found for ${parsed.projectDir}.`,
+      `builds command: /kairos builds ${parsed.projectDir}`,
+    ].join('\n')
   }
 
   const lines = [
