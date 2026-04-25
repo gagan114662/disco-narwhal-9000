@@ -69,44 +69,179 @@ import {
   type HookCallbackMatcher,
   type PromptRequest,
   type PromptResponse,
-  isAsyncHookJSONOutput,
-  isSyncHookJSONOutput,
   type PermissionRequestResult,
 } from '../types/hooks.js'
+import type { PermissionUpdate } from 'src/entrypoints/agentSdkTypes.js'
+// The agentSdkTypes.js re-exports types from the upstream npm SDK, which
+// pre-dates many hook events the local CLI now supports (Setup, PermissionDenied,
+// PostCompact, StopFailure, TeammateIdle, TaskCreated, TaskCompleted,
+// ConfigChange, CwdChanged, FileChanged, InstructionsLoaded, Elicitation,
+// ElicitationResult, WorktreeCreate, WorktreeRemove). We derive the rich types
+// directly from the local Zod schemas so the union covers every event the CLI
+// emits today. Once the SDK type generator is rerun this block can fall back
+// to the SDK exports, but until then we shadow them here.
+import type { z } from 'zod/v4'
 import type {
-  HookEvent,
-  HookInput,
-  HookJSONOutput,
-  NotificationHookInput,
-  PostToolUseHookInput,
-  PostToolUseFailureHookInput,
-  PermissionDeniedHookInput,
-  PreCompactHookInput,
-  PostCompactHookInput,
-  PreToolUseHookInput,
-  SessionStartHookInput,
-  SessionEndHookInput,
-  SetupHookInput,
-  StopHookInput,
-  StopFailureHookInput,
-  SubagentStartHookInput,
-  SubagentStopHookInput,
-  TeammateIdleHookInput,
-  TaskCreatedHookInput,
-  TaskCompletedHookInput,
-  ConfigChangeHookInput,
-  CwdChangedHookInput,
-  FileChangedHookInput,
-  InstructionsLoadedHookInput,
-  UserPromptSubmitHookInput,
-  PermissionRequestHookInput,
-  ElicitationHookInput,
-  ElicitationResultHookInput,
-  PermissionUpdate,
-  ExitReason,
-  SyncHookJSONOutput,
-  AsyncHookJSONOutput,
-} from 'src/entrypoints/agentSdkTypes.js'
+  PreToolUseHookInputSchema as _PreToolUseHookInputSchema,
+  PostToolUseHookInputSchema as _PostToolUseHookInputSchema,
+  PostToolUseFailureHookInputSchema as _PostToolUseFailureHookInputSchema,
+  PermissionRequestHookInputSchema as _PermissionRequestHookInputSchema,
+  PermissionDeniedHookInputSchema as _PermissionDeniedHookInputSchema,
+  NotificationHookInputSchema as _NotificationHookInputSchema,
+  UserPromptSubmitHookInputSchema as _UserPromptSubmitHookInputSchema,
+  SessionStartHookInputSchema as _SessionStartHookInputSchema,
+  SessionEndHookInputSchema as _SessionEndHookInputSchema,
+  SetupHookInputSchema as _SetupHookInputSchema,
+  StopHookInputSchema as _StopHookInputSchema,
+  StopFailureHookInputSchema as _StopFailureHookInputSchema,
+  SubagentStartHookInputSchema as _SubagentStartHookInputSchema,
+  SubagentStopHookInputSchema as _SubagentStopHookInputSchema,
+  PreCompactHookInputSchema as _PreCompactHookInputSchema,
+  PostCompactHookInputSchema as _PostCompactHookInputSchema,
+  TeammateIdleHookInputSchema as _TeammateIdleHookInputSchema,
+  TaskCreatedHookInputSchema as _TaskCreatedHookInputSchema,
+  TaskCompletedHookInputSchema as _TaskCompletedHookInputSchema,
+  ElicitationHookInputSchema as _ElicitationHookInputSchema,
+  ElicitationResultHookInputSchema as _ElicitationResultHookInputSchema,
+  ConfigChangeHookInputSchema as _ConfigChangeHookInputSchema,
+  InstructionsLoadedHookInputSchema as _InstructionsLoadedHookInputSchema,
+  CwdChangedHookInputSchema as _CwdChangedHookInputSchema,
+  FileChangedHookInputSchema as _FileChangedHookInputSchema,
+  WorktreeCreateHookInputSchema as _WorktreeCreateHookInputSchema,
+  WorktreeRemoveHookInputSchema as _WorktreeRemoveHookInputSchema,
+  ExitReasonSchema as _ExitReasonSchema,
+  AsyncHookJSONOutputSchema as _AsyncHookJSONOutputSchema,
+  SyncHookJSONOutputSchema as _SyncHookJSONOutputSchema,
+} from 'src/entrypoints/sdk/coreSchemas.js'
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type _Infer<S extends () => any> = z.infer<ReturnType<S>>
+
+export type PreToolUseHookInput = _Infer<typeof _PreToolUseHookInputSchema>
+export type PostToolUseHookInput = _Infer<typeof _PostToolUseHookInputSchema>
+export type PostToolUseFailureHookInput = _Infer<
+  typeof _PostToolUseFailureHookInputSchema
+>
+export type PermissionRequestHookInput = _Infer<
+  typeof _PermissionRequestHookInputSchema
+>
+export type PermissionDeniedHookInput = _Infer<
+  typeof _PermissionDeniedHookInputSchema
+>
+export type NotificationHookInput = _Infer<typeof _NotificationHookInputSchema>
+export type UserPromptSubmitHookInput = _Infer<
+  typeof _UserPromptSubmitHookInputSchema
+>
+export type SessionStartHookInput = _Infer<typeof _SessionStartHookInputSchema>
+export type SessionEndHookInput = _Infer<typeof _SessionEndHookInputSchema>
+export type SetupHookInput = _Infer<typeof _SetupHookInputSchema>
+export type StopHookInput = _Infer<typeof _StopHookInputSchema>
+export type StopFailureHookInput = _Infer<typeof _StopFailureHookInputSchema>
+export type SubagentStartHookInput = _Infer<
+  typeof _SubagentStartHookInputSchema
+>
+export type SubagentStopHookInput = _Infer<typeof _SubagentStopHookInputSchema>
+export type PreCompactHookInput = _Infer<typeof _PreCompactHookInputSchema>
+export type PostCompactHookInput = _Infer<typeof _PostCompactHookInputSchema>
+export type TeammateIdleHookInput = _Infer<typeof _TeammateIdleHookInputSchema>
+export type TaskCreatedHookInput = _Infer<typeof _TaskCreatedHookInputSchema>
+export type TaskCompletedHookInput = _Infer<
+  typeof _TaskCompletedHookInputSchema
+>
+export type ElicitationHookInput = _Infer<typeof _ElicitationHookInputSchema>
+export type ElicitationResultHookInput = _Infer<
+  typeof _ElicitationResultHookInputSchema
+>
+export type ConfigChangeHookInput = _Infer<typeof _ConfigChangeHookInputSchema>
+export type InstructionsLoadedHookInput = _Infer<
+  typeof _InstructionsLoadedHookInputSchema
+>
+export type CwdChangedHookInput = _Infer<typeof _CwdChangedHookInputSchema>
+export type FileChangedHookInput = _Infer<typeof _FileChangedHookInputSchema>
+export type WorktreeCreateHookInput = _Infer<
+  typeof _WorktreeCreateHookInputSchema
+>
+export type WorktreeRemoveHookInput = _Infer<
+  typeof _WorktreeRemoveHookInputSchema
+>
+export type ExitReason = _Infer<typeof _ExitReasonSchema>
+export type AsyncHookJSONOutput = _Infer<typeof _AsyncHookJSONOutputSchema>
+export type SyncHookJSONOutput = _Infer<typeof _SyncHookJSONOutputSchema>
+export type HookJSONOutput = AsyncHookJSONOutput | SyncHookJSONOutput
+
+export type HookEvent =
+  | 'PreToolUse'
+  | 'PostToolUse'
+  | 'PostToolUseFailure'
+  | 'Notification'
+  | 'UserPromptSubmit'
+  | 'SessionStart'
+  | 'SessionEnd'
+  | 'Stop'
+  | 'StopFailure'
+  | 'SubagentStart'
+  | 'SubagentStop'
+  | 'PreCompact'
+  | 'PostCompact'
+  | 'PermissionRequest'
+  | 'PermissionDenied'
+  | 'Setup'
+  | 'TeammateIdle'
+  | 'TaskCreated'
+  | 'TaskCompleted'
+  | 'Elicitation'
+  | 'ElicitationResult'
+  | 'ConfigChange'
+  | 'WorktreeCreate'
+  | 'WorktreeRemove'
+  | 'InstructionsLoaded'
+  | 'CwdChanged'
+  | 'FileChanged'
+
+export type HookInput =
+  | PreToolUseHookInput
+  | PostToolUseHookInput
+  | PostToolUseFailureHookInput
+  | NotificationHookInput
+  | UserPromptSubmitHookInput
+  | SessionStartHookInput
+  | SessionEndHookInput
+  | StopHookInput
+  | StopFailureHookInput
+  | SubagentStartHookInput
+  | SubagentStopHookInput
+  | PreCompactHookInput
+  | PostCompactHookInput
+  | PermissionRequestHookInput
+  | PermissionDeniedHookInput
+  | SetupHookInput
+  | TeammateIdleHookInput
+  | TaskCreatedHookInput
+  | TaskCompletedHookInput
+  | ElicitationHookInput
+  | ElicitationResultHookInput
+  | ConfigChangeHookInput
+  | InstructionsLoadedHookInput
+  | CwdChangedHookInput
+  | FileChangedHookInput
+  | WorktreeCreateHookInput
+  | WorktreeRemoveHookInput
+
+// Local type guards typed against the rich HookJSONOutput union above. The
+// guards in '../types/hooks.js' are typed against the upstream SDK's narrower
+// HookJSONOutput, so re-defining them here keeps narrowing aligned with the
+// schema that hookJSONOutputSchema() actually validates against.
+function isAsyncHookJSONOutput(
+  json: HookJSONOutput,
+): json is AsyncHookJSONOutput {
+  return 'async' in json && json.async === true
+}
+
+function isSyncHookJSONOutput(
+  json: HookJSONOutput,
+): json is SyncHookJSONOutput {
+  return !('async' in json && json.async === true)
+}
 import type { StatusLineCommandInput } from '../types/statusLine.js'
 import type { ElicitResult } from '@modelcontextprotocol/sdk/types.js'
 import type { FileSuggestionCommandInput } from '../types/fileSuggestion.js'
@@ -2047,7 +2182,16 @@ async function* executeHooks({
       : undefined
     for (const [i, { hook }] of matchingHooks.entries()) {
       if (hook.type === 'callback') {
-        await hook.callback(hookInput, toolUseID, signal, i, context)
+        // Cast through Parameters<> so the rich local HookInput satisfies
+        // the SDK-typed callback signature; runtime callbacks accept any
+        // hook variant.
+        await hook.callback(
+          hookInput as Parameters<typeof hook.callback>[0],
+          toolUseID,
+          signal,
+          i,
+          context,
+        )
       }
     }
     const totalDurationMs = Date.now() - batchStartTime
@@ -2121,11 +2265,11 @@ async function* executeHooks({
   // Lazy-once stringify of hookInput. Shared across all command/prompt/agent/http
   // hooks in this batch (hookInput is never mutated). Callback/function hooks
   // return before reaching this, so batches with only those pay no stringify cost.
-  let jsonInputResult:
+  type JsonInputResult =
     | { ok: true; value: string }
     | { ok: false; error: unknown }
-    | undefined
-  function getJsonInput() {
+  let jsonInputResult: JsonInputResult | undefined
+  function getJsonInput(): JsonInputResult {
     if (jsonInputResult !== undefined) {
       return jsonInputResult
     }
@@ -3093,8 +3237,11 @@ async function executeHooksOutsideREPL({
 
         try {
           const toolUseID = randomUUID()
+          // Cast through Parameters<> so the rich local HookInput satisfies
+          // the SDK-typed callback signature; runtime callbacks accept any
+          // hook variant.
           const json = await hook.callback(
-            hookInput,
+            hookInput as Parameters<typeof hook.callback>[0],
             toolUseID,
             abortSignal,
             hookIndex,
@@ -4861,8 +5008,12 @@ async function executeHookCallback({
         updateAttributionState: toolUseContext.updateAttributionState,
       }
     : undefined
+  // HookCallback.callback's input parameter is typed against the upstream SDK's
+  // narrower HookInput union. Cast through Parameters<> so any rich variant
+  // (WorktreeCreate, FileChanged, ...) we add locally still satisfies the SDK
+  // signature at the call site — runtime callbacks accept any HookInput shape.
   const json = await hook.callback(
-    hookInput,
+    hookInput as Parameters<typeof hook.callback>[0],
     toolUseID,
     signal,
     hookIndex,
