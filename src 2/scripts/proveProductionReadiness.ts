@@ -102,6 +102,10 @@ function runTimestamp(check: PullRequestCheck): number {
   return Date.parse(check.completedAt ?? check.startedAt ?? '') || 0
 }
 
+function workflowRunTimestamp(run: RunResult): number {
+  return Date.parse(run.createdAt) || 0
+}
+
 function latestChecks(checks: PullRequestCheck[]): PullRequestCheck[] {
   const latest = new Map<string, PullRequestCheck>()
   for (const check of checks) {
@@ -114,6 +118,16 @@ function latestChecks(checks: PullRequestCheck[]): PullRequestCheck[] {
   return [...latest.values()]
 }
 
+function latestWorkflowRun(
+  runs: RunResult[],
+  workflowName: string,
+  headSha: string,
+): RunResult | undefined {
+  return runs
+    .filter(run => run.workflowName === workflowName && run.headSha === headSha)
+    .sort((a, b) => workflowRunTimestamp(b) - workflowRunTimestamp(a))[0]
+}
+
 function trackedFiles(repoRoot: string, prefix: string): string[] {
   const output = run('git', ['ls-files', prefix], repoRoot, true)
   return output ? output.split('\n').filter(Boolean) : []
@@ -124,9 +138,7 @@ function assertLatestWorkflowGreen(
   workflowName: string,
   headSha: string,
 ): void {
-  const runForHead = runs.find(
-    run => run.workflowName === workflowName && run.headSha === headSha,
-  )
+  const runForHead = latestWorkflowRun(runs, workflowName, headSha)
   if (!runForHead) {
     throw new Error(`No ${workflowName} run found for origin/main ${headSha}`)
   }
