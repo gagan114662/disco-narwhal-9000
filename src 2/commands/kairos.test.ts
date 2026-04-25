@@ -622,6 +622,7 @@ describe('/kairos command', () => {
       '2. What fields are required, optional, or sensitive?',
       '3. What notifications or integrations are required?',
       '4. What retention, export, or compliance constraints apply?',
+      `next command: /kairos build-answer ${projectDir} questions-build 2 <answer>`,
     ])
   })
 

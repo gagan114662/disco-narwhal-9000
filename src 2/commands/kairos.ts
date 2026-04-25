@@ -788,10 +788,13 @@ async function handleBuildUnanswered(rest: string[]): Promise<string> {
   if (unanswered.length === 0) {
     return `No unanswered clarifying questions for ${parsed.buildId}.`
   }
+  const firstUnansweredQuestionNumber =
+    findFirstUnansweredClarifyingQuestionNumber(manifest)
 
   return [
     `Unanswered clarifying questions for ${parsed.buildId}:`,
     ...unanswered,
+    `next command: /kairos build-answer ${parsed.projectDir} ${parsed.buildId} ${firstUnansweredQuestionNumber} <answer>`,
   ].join('\n')
 }
 
@@ -1155,6 +1158,17 @@ function renderUnansweredClarifyingQuestions(
       ? []
       : [`${questionNumber}. ${question}`]
   })
+}
+
+function findFirstUnansweredClarifyingQuestionNumber(
+  manifest: KairosBuildManifest,
+): number {
+  const questionIndex = manifest.clarifyingQuestions?.findIndex(
+    (_, index) => !manifest.clarifyingQuestionAnswers?.[String(index + 1)],
+  )
+  return questionIndex === undefined || questionIndex < 0
+    ? 0
+    : questionIndex + 1
 }
 
 async function handleBuildPrdOutline(rest: string[]): Promise<string> {
