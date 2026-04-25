@@ -889,6 +889,7 @@ describe('/kairos command', () => {
       'remaining slices: 2',
       'next slice: TB-2 Review workflow path',
       `next command: /kairos build-next ${projectDir} progress-build`,
+      `readiness command: /kairos build-readiness ${projectDir} progress-build`,
       '- TB-1 Record intake skeleton [complete]',
       '- TB-2 Review workflow path [selected]',
       '- TB-3 Validation and role guardrails [pending]',
@@ -914,6 +915,7 @@ describe('/kairos command', () => {
       'remaining slices: 3',
       'next slice: TB-1 Record intake skeleton',
       `next command: /kairos build-select-next-prompt ${projectDir} progress-build`,
+      `readiness command: /kairos build-readiness ${projectDir} progress-build`,
       '- TB-1 Record intake skeleton [pending]',
       '- TB-2 Review workflow path [pending]',
       '- TB-3 Validation and role guardrails [pending]',
@@ -944,6 +946,9 @@ describe('/kairos command', () => {
     expect(out).toContain('readiness: blocked')
     expect(out).toContain('next slice: —')
     expect(out).toContain('next command: —')
+    expect(out).toContain(
+      `readiness command: /kairos build-readiness ${projectDir} progress-build`,
+    )
   })
 
   test('build-progress reports a missing build clearly', async () => {

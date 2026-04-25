@@ -933,6 +933,7 @@ async function handleBuildProgress(rest: string[]): Promise<string> {
     `remaining slices: ${remainingCount}`,
     `next slice: ${nextSliceLabel}`,
     `next command: ${nextCommand}`,
+    `readiness command: /kairos build-readiness ${manifest.projectDir} ${manifest.buildId}`,
     ...manifest.tracerSlices.map(slice =>
       formatTracerSliceProgress(
         slice,
