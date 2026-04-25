@@ -433,6 +433,8 @@ function formatBuildEvent(event: KairosBuildEvent): string {
       return `${event.t} spec_written spec=${event.specPath}`
     case 'slice_selected':
       return `${event.t} slice_selected slice=${event.sliceId} title=${event.title}`
+    case 'next_slice_prompt_rendered':
+      return `${event.t} next_slice_prompt_rendered slice=${event.sliceId} title=${event.title}`
     case 'agent_event_recorded':
       return `${event.t} agent_event_recorded run=${event.runId} event=${event.eventKind}`
     case 'build_result_written':
@@ -562,6 +564,16 @@ async function handleBuildNext(rest: string[]): Promise<string> {
   if (!slice) {
     return `Selected tracer slice ${manifest.selectedSliceId} is missing for ${parsed.buildId}.`
   }
+
+  await writer.appendBuildEvent(parsed.projectDir, parsed.buildId, {
+    version: 1,
+    kind: 'next_slice_prompt_rendered',
+    buildId: parsed.buildId,
+    tenantId: manifest.tenantId,
+    t: new Date().toISOString(),
+    sliceId: slice.id,
+    title: slice.title,
+  })
 
   return [
     `Build next slice: ${slice.id} ${slice.title}`,

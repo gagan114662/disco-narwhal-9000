@@ -423,6 +423,11 @@ describe('/kairos command', () => {
       'add the smallest form, persistence path, and list view needed for one record',
     )
     expect(out).toContain('Run verification before committing.')
+
+    const eventsOut = await runKairosCommand(`build-events ${projectDir} next-build`)
+    expect(eventsOut).toContain(
+      'next_slice_prompt_rendered slice=TB-1 title=Record intake skeleton',
+    )
   })
 
   test('build-next requires a selected tracer bullet', async () => {
