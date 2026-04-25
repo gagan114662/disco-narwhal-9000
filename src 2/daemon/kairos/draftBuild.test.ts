@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import {
   createDraftAcceptanceChecks,
+  createDraftAssumptions,
   createDraftClarifyingQuestions,
   createDraftFunctionalRequirements,
   createDraftTracerSlices,
@@ -92,6 +93,15 @@ describe('draft build PRD rendering', () => {
       'List/detail views for submitted records.',
       'Role-aware approval or status workflow where applicable.',
       'Audit trail for important state changes.',
+    ])
+  })
+
+  test('creates deterministic assumptions for vague briefs', () => {
+    expect(createDraftAssumptions()).toEqual([
+      'The first build targets a browser-based internal workflow tool.',
+      'A human reviewer will confirm roles, fields, and compliance constraints before implementation.',
+      'Local single-tenant state is acceptable until deployment requirements are known.',
+      'Auditability is required for approval or status changes.',
     ])
   })
 })

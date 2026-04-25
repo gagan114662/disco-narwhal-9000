@@ -116,6 +116,15 @@ export function createDraftFunctionalRequirements(): string[] {
   ]
 }
 
+export function createDraftAssumptions(): string[] {
+  return [
+    'The first build targets a browser-based internal workflow tool.',
+    'A human reviewer will confirm roles, fields, and compliance constraints before implementation.',
+    'Local single-tenant state is acceptable until deployment requirements are known.',
+    'Auditability is required for approval or status changes.',
+  ]
+}
+
 export function createDraftClarifyingQuestions(): string[] {
   return [
     'Who are the exact user roles and approvers?',
@@ -140,6 +149,7 @@ export function renderDraftPrd(brief: string): string {
   const functionalRequirements = createDraftFunctionalRequirements()
   const acceptanceChecks = createDraftAcceptanceChecks()
   const clarifyingQuestions = createDraftClarifyingQuestions()
+  const assumptions = createDraftAssumptions()
   return [
     `# ${title}`,
     '',
@@ -165,6 +175,10 @@ export function renderDraftPrd(brief: string): string {
     '- Convert the brief into a buildable internal workflow app.',
     '- Preserve spec clauses as future eval and audit anchors.',
     '- Identify missing compliance, data, and approval requirements before build.',
+    '',
+    '## Assumptions',
+    '',
+    ...assumptions.map(assumption => `- ${assumption}`),
     '',
     '## Non-Goals',
     '',
@@ -217,6 +231,7 @@ export async function createDraftBuild(
   const functionalRequirements = createDraftFunctionalRequirements()
   const acceptanceChecks = createDraftAcceptanceChecks()
   const clarifyingQuestions = createDraftClarifyingQuestions()
+  const assumptions = createDraftAssumptions()
 
   await writer.writeBuildManifest(projectDir, {
     version: KAIROS_BUILD_STATE_VERSION,
@@ -228,6 +243,7 @@ export async function createDraftBuild(
     functionalRequirements,
     acceptanceChecks,
     clarifyingQuestions,
+    assumptions,
     tracerSlices,
     status: 'draft',
     createdAt: timestamp,

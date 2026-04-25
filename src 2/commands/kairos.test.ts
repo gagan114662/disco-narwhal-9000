@@ -122,6 +122,7 @@ describe('/kairos command', () => {
     expect(out).toContain('/kairos build-questions')
     expect(out).toContain('/kairos build-requirements')
     expect(out).toContain('/kairos build-summary')
+    expect(out).toContain('/kairos build-assumptions')
     expect(out).toContain('/kairos cloud deploy')
     expect(out).toContain('/kairos cloud-sync')
   })
@@ -227,6 +228,12 @@ describe('/kairos command', () => {
         'List/detail views for submitted records.',
         'Role-aware approval or status workflow where applicable.',
         'Audit trail for important state changes.',
+      ],
+      assumptions: [
+        'The first build targets a browser-based internal workflow tool.',
+        'A human reviewer will confirm roles, fields, and compliance constraints before implementation.',
+        'Local single-tenant state is acceptable until deployment requirements are known.',
+        'Auditability is required for approval or status changes.',
       ],
       tracerSlices: [
         {
@@ -489,6 +496,7 @@ describe('/kairos command', () => {
       'functional requirements: 4',
       'acceptance checks: 4',
       'clarifying questions: 4',
+      'assumptions: 4',
       'tracer slices: 3',
       'brief: leave request app',
     ])
@@ -498,6 +506,34 @@ describe('/kairos command', () => {
     const projectDir = makeProjectDir()
     const out = await runKairosCommand(
       `build-summary ${projectDir} missing-build`,
+    )
+    expect(out).toBe(`No build missing-build found for ${projectDir}.`)
+  })
+
+  test('build-assumptions prints persisted draft assumptions', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'assumptions-build',
+      now: () => new Date('2026-04-25T19:25:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+
+    const out = await runKairosCommand(
+      `build-assumptions ${projectDir} assumptions-build`,
+    )
+    expect(out.split('\n')).toEqual([
+      'Assumptions for assumptions-build:',
+      '- The first build targets a browser-based internal workflow tool.',
+      '- A human reviewer will confirm roles, fields, and compliance constraints before implementation.',
+      '- Local single-tenant state is acceptable until deployment requirements are known.',
+      '- Auditability is required for approval or status changes.',
+    ])
+  })
+
+  test('build-assumptions reports a missing build clearly', async () => {
+    const projectDir = makeProjectDir()
+    const out = await runKairosCommand(
+      `build-assumptions ${projectDir} missing-build`,
     )
     expect(out).toBe(`No build missing-build found for ${projectDir}.`)
   })
