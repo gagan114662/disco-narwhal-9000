@@ -74,6 +74,7 @@ const KAIROS_BUILD_EVENT_KIND_LIST: KairosBuildEventKind[] = [
   'slice_selected',
   'next_slice_prompt_rendered',
   'slice_completed',
+  'clarifying_question_answered',
   'agent_event_recorded',
   'build_result_written',
   'build_failed',
@@ -586,6 +587,8 @@ function formatBuildEvent(event: KairosBuildEvent): string {
       return `${event.t} next_slice_prompt_rendered slice=${event.sliceId} title=${event.title}`
     case 'slice_completed':
       return `${event.t} slice_completed slice=${event.sliceId} title=${event.title}`
+    case 'clarifying_question_answered':
+      return `${event.t} clarifying_question_answered question=${event.questionNumber} answer=${event.answer}`
     case 'agent_event_recorded':
       return `${event.t} agent_event_recorded run=${event.runId} event=${event.eventKind}`
     case 'build_result_written':
@@ -738,6 +741,16 @@ async function handleBuildAnswer(rest: string[]): Promise<string> {
       [String(parsed.questionNumber)]: parsed.answer,
     },
     updatedAt: new Date().toISOString(),
+  })
+  await writer.appendBuildEvent(parsed.projectDir, parsed.buildId, {
+    version: 1,
+    kind: 'clarifying_question_answered',
+    buildId: parsed.buildId,
+    tenantId: manifest.tenantId,
+    t: new Date().toISOString(),
+    questionNumber: parsed.questionNumber,
+    question: questions[parsed.questionNumber - 1],
+    answer: parsed.answer,
   })
 
   return `Answered question ${parsed.questionNumber} for ${parsed.buildId}: ${parsed.answer}`

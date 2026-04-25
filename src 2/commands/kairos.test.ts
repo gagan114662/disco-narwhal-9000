@@ -422,7 +422,7 @@ describe('/kairos command', () => {
     const out = await runKairosCommand('build-events events-build --kind nope')
     expect(out.split('\n')).toEqual([
       'Unknown build event kind: nope',
-      'Supported kinds: build_created, build_status_changed, spec_written, slice_selected, next_slice_prompt_rendered, slice_completed, agent_event_recorded, build_result_written, build_failed',
+      'Supported kinds: build_created, build_status_changed, spec_written, slice_selected, next_slice_prompt_rendered, slice_completed, clarifying_question_answered, agent_event_recorded, build_result_written, build_failed',
       'Usage: /kairos build-events [projectDir] <buildId> [lines] [--kind <kind>]',
     ])
   })
@@ -536,6 +536,13 @@ describe('/kairos command', () => {
       '3. What notifications or integrations are required?',
       '4. What retention, export, or compliance constraints apply?',
     ])
+
+    const eventsOut = await runKairosCommand(
+      `build-events ${projectDir} questions-build --kind clarifying_question_answered`,
+    )
+    expect(eventsOut).toContain(
+      'clarifying_question_answered question=1 answer=employee manager and HR approver',
+    )
   })
 
   test('build-questions reports a missing build clearly', async () => {
