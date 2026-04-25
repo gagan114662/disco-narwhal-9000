@@ -711,12 +711,16 @@ async function handleBuildProgress(rest: string[]): Promise<string> {
     ) ??
     manifest.tracerSlices.find(slice => !completedSliceIds.has(slice.id))
   const nextSliceLabel = nextSlice ? `${nextSlice.id} ${nextSlice.title}` : '—'
+  const nextCommand = nextSlice
+    ? `/kairos build-next ${manifest.projectDir} ${manifest.buildId}`
+    : '—'
   return [
     `Build progress for ${parsed.buildId}:`,
     `selected slice: ${formatOptionalValue(manifest.selectedSliceId)}`,
     `completed slices: ${completedCount}/${totalCount}`,
     `remaining slices: ${remainingCount}`,
     `next slice: ${nextSliceLabel}`,
+    `next command: ${nextCommand}`,
     ...manifest.tracerSlices.map(slice =>
       formatTracerSliceProgress(
         slice,

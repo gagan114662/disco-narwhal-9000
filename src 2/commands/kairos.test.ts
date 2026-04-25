@@ -709,6 +709,7 @@ describe('/kairos command', () => {
       'completed slices: 1/3',
       'remaining slices: 2',
       'next slice: TB-2 Review workflow path',
+      `next command: /kairos build-next ${projectDir} progress-build`,
       '- TB-1 Record intake skeleton [complete]',
       '- TB-2 Review workflow path [selected]',
       '- TB-3 Validation and role guardrails [pending]',
@@ -737,6 +738,7 @@ describe('/kairos command', () => {
     expect(out).toContain('completed slices: 3/3')
     expect(out).toContain('remaining slices: 0')
     expect(out).toContain('next slice: —')
+    expect(out).toContain('next command: —')
   })
 
   test('build-progress reports a missing build clearly', async () => {
