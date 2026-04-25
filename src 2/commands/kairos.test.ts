@@ -1243,6 +1243,7 @@ describe('/kairos command', () => {
     expect(out).toContain('traceability seeds:')
     expect(out).toContain('- BRIEF-1 [brief] leave request app')
     expect(out).toContain('Stress-test before coding:')
+    expect(out).toContain('Clarifying questions answered: 0/4')
     expect(out).toContain('assumptions:')
     expect(out).toContain(
       '- The first build targets a browser-based internal workflow tool.',

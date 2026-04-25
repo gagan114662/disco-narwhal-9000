@@ -802,10 +802,7 @@ async function handleBuildSummary(rest: string[]): Promise<string> {
   const latestEventLabel = latestEvent
     ? `${latestEvent.kind} at ${latestEvent.t}`
     : '—'
-  const questionCount = manifest.clarifyingQuestions?.length ?? 0
-  const answeredQuestionCount = Object.keys(
-    manifest.clarifyingQuestionAnswers ?? {},
-  ).filter(key => Number(key) >= 1 && Number(key) <= questionCount).length
+  const questionReadiness = countAnsweredClarifyingQuestions(manifest)
 
   return [
     `Build summary for ${parsed.buildId}:`,
@@ -818,8 +815,8 @@ async function handleBuildSummary(rest: string[]): Promise<string> {
     `non-goals: ${manifest.nonGoals?.length ?? 0}`,
     `functional requirements: ${manifest.functionalRequirements?.length ?? 0}`,
     `acceptance checks: ${manifest.acceptanceChecks?.length ?? 0}`,
-    `clarifying questions: ${questionCount}`,
-    `answered questions: ${answeredQuestionCount}/${questionCount}`,
+    `clarifying questions: ${questionReadiness.total}`,
+    `answered questions: ${questionReadiness.answered}/${questionReadiness.total}`,
     `assumptions: ${manifest.assumptions?.length ?? 0}`,
     `risks: ${manifest.risks?.length ?? 0}`,
     `tracer slices: ${manifest.tracerSlices?.length ?? 0}`,
@@ -997,6 +994,17 @@ function appendTraceabilitySeedSection(
     'traceability seeds:',
     ...seeds.map(seed => `- ${seed.id} [${seed.source}] ${seed.text}`),
   )
+}
+
+function countAnsweredClarifyingQuestions(manifest: KairosBuildManifest): {
+  answered: number
+  total: number
+} {
+  const total = manifest.clarifyingQuestions?.length ?? 0
+  const answered = Object.keys(manifest.clarifyingQuestionAnswers ?? {}).filter(
+    key => Number(key) >= 1 && Number(key) <= total,
+  ).length
+  return { answered, total }
 }
 
 async function handleBuildPrdOutline(rest: string[]): Promise<string> {
@@ -1266,7 +1274,11 @@ async function handleBuildNext(rest: string[]): Promise<string> {
   )
   appendBulletSection(anchorLines, 'acceptance checks', manifest.acceptanceChecks)
   appendTraceabilitySeedSection(anchorLines, manifest.traceabilitySeeds)
+  const questionReadiness = countAnsweredClarifyingQuestions(manifest)
   const stressLines: string[] = ['Stress-test before coding:']
+  stressLines.push(
+    `Clarifying questions answered: ${questionReadiness.answered}/${questionReadiness.total}`,
+  )
   appendBulletSection(stressLines, 'assumptions', manifest.assumptions)
   appendBulletSection(stressLines, 'risks', manifest.risks)
   appendNumberedSection(
