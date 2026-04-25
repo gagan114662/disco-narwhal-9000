@@ -581,27 +581,37 @@ function proveDependabotPolicy(repoRoot: string): void {
 
 function proveWorkflowActionPins(repoRoot: string): void {
   const badPins: string[] = []
+  // Accept either the literal `actions/checkout@v5` or a SHA-pinned form
+  // followed by a `# v5` comment on the same line. SHA pinning is required
+  // by the supply-chain hardening gate (.github/workflows/*.yml were
+  // converted to commit-SHA references), so the check needs to recognize
+  // SHA + version-comment as equivalent to the bare `@v5` tag.
+  const PIN_RE =
+    /actions\/checkout@(?<pin>[^\s]+)(?:[ \t]*#[ \t]*(?<comment>[^\n]*))?/g
   for (const file of workflowFiles) {
     const workflow = readFileSync(join(repoRoot, file), 'utf8')
-    const checkoutPins = [
-      ...workflow.matchAll(/actions\/checkout@([^\s]+)/g),
-    ].map(match => match[1]!)
+    const matches = [...workflow.matchAll(PIN_RE)]
 
-    if (checkoutPins.length === 0) {
+    if (matches.length === 0) {
       badPins.push(`${file}: no actions/checkout pin found`)
       continue
     }
 
-    for (const pin of checkoutPins) {
-      if (pin !== 'v5') {
-        badPins.push(`${file}: actions/checkout@${pin}`)
+    for (const m of matches) {
+      const pin = m.groups?.pin ?? ''
+      const comment = (m.groups?.comment ?? '').trim()
+      const isLiteralV5 = pin === 'v5'
+      const isShaWithV5Comment =
+        /^[0-9a-f]{40}$/.test(pin) && /^v5(\b|$)/.test(comment)
+      if (!isLiteralV5 && !isShaWithV5Comment) {
+        badPins.push(`${file}: actions/checkout@${pin}${comment ? ` # ${comment}` : ''}`)
       }
     }
   }
 
   if (badPins.length > 0) {
     throw new Error(
-      `Workflow checkout actions must stay on Node 24-ready actions/checkout@v5:\n${badPins.join('\n')}`,
+      `Workflow checkout actions must stay on Node 24-ready actions/checkout@v5 (literal tag or SHA pin with "# v5" comment):\n${badPins.join('\n')}`,
     )
   }
 
