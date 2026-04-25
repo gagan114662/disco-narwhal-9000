@@ -868,6 +868,8 @@ async function handleBuildSummary(rest: string[]): Promise<string> {
     `completed slices: ${manifest.completedSliceIds?.length ?? 0}`,
     `traceability seeds: ${manifest.traceabilitySeeds?.length ?? 0}`,
     `last event: ${latestEventLabel}`,
+    `progress command: /kairos build-progress ${manifest.projectDir} ${manifest.buildId}`,
+    `readiness command: /kairos build-readiness ${manifest.projectDir} ${manifest.buildId}`,
     `brief: ${formatOptionalValue(manifest.brief)}`,
   ].join('\n')
 }
