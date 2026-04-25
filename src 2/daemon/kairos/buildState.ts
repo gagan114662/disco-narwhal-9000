@@ -61,6 +61,8 @@ const kairosBuildEventBaseSchema = {
   buildId: z.string().min(1),
   tenantId: z.string().min(1),
   t: z.string().min(1),
+  auditPrevHash: z.string().min(1).nullable().optional(),
+  auditHash: z.string().min(1).optional(),
 }
 
 export const kairosBuildEventSchema = z.discriminatedUnion('kind', [

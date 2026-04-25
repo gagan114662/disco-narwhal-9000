@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
+import { createHash } from 'crypto'
 import { mkdtempSync, readFileSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
@@ -21,6 +22,27 @@ function makeTempDir(prefix: string): string {
 
 function readJson(path: string): unknown {
   return JSON.parse(readFileSync(path, 'utf8'))
+}
+
+function sortForHash(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(sortForHash)
+  }
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([, entryValue]) => entryValue !== undefined)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, entryValue]) => [key, sortForHash(entryValue)]),
+    )
+  }
+  return value
+}
+
+function sha256Json(value: unknown): string {
+  return createHash('sha256')
+    .update(JSON.stringify(sortForHash(value)))
+    .digest('hex')
 }
 
 describe('Kairos state writer build state', () => {
@@ -83,21 +105,86 @@ describe('Kairos state writer build state', () => {
     expect(readFileSync(join(buildDir, 'events.jsonl'), 'utf8')).toContain(
       '"kind":"build_created"',
     )
-    expect(await writer.readBuildEvents(projectDir, buildId)).toEqual([
-      {
+    const events = await writer.readBuildEvents(projectDir, buildId)
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({
+      version: 1,
+      kind: 'build_created',
+      buildId,
+      tenantId: 'tenant-local',
+      t: '2026-04-25T18:00:00.000Z',
+      status: 'draft',
+      auditPrevHash: null,
+    })
+    expect(events[0]?.auditHash).toBe(
+      sha256Json({
         version: 1,
         kind: 'build_created',
         buildId,
         tenantId: 'tenant-local',
         t: '2026-04-25T18:00:00.000Z',
         status: 'draft',
-      },
-    ])
+        auditPrevHash: null,
+      }),
+    )
     expect(readJson(join(buildDir, 'result.json'))).toMatchObject({
       buildId,
       status: 'succeeded',
       summary: 'Generated CRUD scaffold',
     })
+  })
+
+  test('hash-links appended build events', async () => {
+    const configDir = makeTempDir('kairos-build-events-config-')
+    const projectDir = makeTempDir('kairos-build-events-project-')
+    process.env.CLAUDE_CONFIG_DIR = configDir
+
+    const writer = await createStateWriter()
+    const buildId = 'hash-build'
+
+    await writer.appendBuildEvent(projectDir, buildId, {
+      version: 1,
+      kind: 'build_created',
+      buildId,
+      tenantId: 'tenant-local',
+      t: '2026-04-25T18:00:00.000Z',
+      status: 'draft',
+    })
+    await writer.appendBuildEvent(projectDir, buildId, {
+      version: 1,
+      kind: 'spec_written',
+      buildId,
+      tenantId: 'tenant-local',
+      t: '2026-04-25T18:01:00.000Z',
+      specPath: '/tmp/spec.md',
+    })
+
+    const events = await writer.readBuildEvents(projectDir, buildId)
+    expect(events).toHaveLength(2)
+    expect(events[0]?.auditPrevHash).toBeNull()
+    expect(events[0]?.auditHash).toBe(
+      sha256Json({
+        version: 1,
+        kind: 'build_created',
+        buildId,
+        tenantId: 'tenant-local',
+        t: '2026-04-25T18:00:00.000Z',
+        status: 'draft',
+        auditPrevHash: null,
+      }),
+    )
+    expect(events[1]?.auditPrevHash).toBe(events[0]?.auditHash)
+    expect(events[1]?.auditHash).toBe(
+      sha256Json({
+        version: 1,
+        kind: 'spec_written',
+        buildId,
+        tenantId: 'tenant-local',
+        t: '2026-04-25T18:01:00.000Z',
+        specPath: '/tmp/spec.md',
+        auditPrevHash: events[0]?.auditHash,
+      }),
+    )
   })
 
   test('rejects invalid build state before writing it', async () => {

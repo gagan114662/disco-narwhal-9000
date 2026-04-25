@@ -6,6 +6,7 @@ import {
   rename,
   writeFile,
 } from 'fs/promises'
+import { createHash } from 'crypto'
 import { dirname, join } from 'path'
 import { jsonStringify } from '../../utils/slowOperations.js'
 import {
@@ -172,6 +173,38 @@ async function appendJsonLine(path: string, value: unknown): Promise<void> {
   })
 }
 
+function sortForAuditHash(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(sortForAuditHash)
+  }
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([, entryValue]) => entryValue !== undefined)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, entryValue]) => [key, sortForAuditHash(entryValue)]),
+    )
+  }
+  return value
+}
+
+function calculateAuditHash(event: KairosBuildEvent): string {
+  const { auditHash: _auditHash, ...eventWithoutHash } = event
+  return createHash('sha256')
+    .update(jsonStringify(sortForAuditHash(eventWithoutHash)))
+    .digest('hex')
+}
+
+function readLastBuildEventHash(raw: string): string | null {
+  const lastLine = raw
+    .split(/\r?\n/)
+    .reverse()
+    .find(line => line.trim().length > 0)
+  if (!lastLine) return null
+  const event = parseKairosBuildEvent(JSON.parse(lastLine))
+  return event.auditHash ?? null
+}
+
 async function readJsonFile<T>(path: string): Promise<T | null> {
   try {
     const raw = await readFile(path, 'utf8')
@@ -302,10 +335,26 @@ export async function createStateWriter() {
     ): Promise<void> {
       const parsed = parseKairosBuildEvent(event)
       assertBuildIdMatchesPath(parsed.buildId, buildId)
-      await appendJsonLine(
-        getProjectKairosBuildEventsPath(projectDir, buildId),
-        parsed,
-      )
+      const path = getProjectKairosBuildEventsPath(projectDir, buildId)
+      await enqueuePathWrite(path, async () => {
+        let raw = ''
+        try {
+          raw = await readFile(path, 'utf8')
+        } catch {
+          raw = ''
+        }
+        const eventWithPrevHash = {
+          ...parsed,
+          auditPrevHash: readLastBuildEventHash(raw),
+          auditHash: undefined,
+        }
+        const eventWithHash = {
+          ...eventWithPrevHash,
+          auditHash: calculateAuditHash(eventWithPrevHash),
+        }
+        await mkdir(dirname(path), { recursive: true })
+        await appendFile(path, `${jsonStringify(eventWithHash)}\n`, 'utf8')
+      })
     },
     async readBuildEvents(
       projectDir: string,
