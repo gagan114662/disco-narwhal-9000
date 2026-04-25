@@ -7,7 +7,7 @@ updates:
       day: "monday"
       time: "10:00"
       timezone: "America/Toronto"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 5
     groups:
       otel:
         patterns:
@@ -41,7 +41,7 @@ updates:
       day: "monday"
       time: "10:30"
       timezone: "America/Toronto"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 5
     groups:
       gh-actions-all:
         patterns:
