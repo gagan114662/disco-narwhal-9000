@@ -1606,6 +1606,12 @@ describe('/kairos command', () => {
     expect(out).toContain(
       `After the commit, mark this slice complete with \`/kairos build-complete-slice ${projectDir} next-build\`.`,
     )
+    expect(out).toContain(
+      `Track progress with \`/kairos build-progress ${projectDir} next-build\`.`,
+    )
+    expect(out).toContain(
+      `Check readiness with \`/kairos build-readiness ${projectDir} next-build\`.`,
+    )
 
     const eventsOut = await runKairosCommand(`build-events ${projectDir} next-build`)
     expect(eventsOut).toContain(

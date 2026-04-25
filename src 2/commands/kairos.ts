@@ -1569,6 +1569,8 @@ async function handleBuildNext(rest: string[]): Promise<string> {
     '',
     'Run verification before committing.',
     `After the commit, mark this slice complete with \`/kairos build-complete-slice ${manifest.projectDir} ${manifest.buildId}\`.`,
+    `Track progress with \`/kairos build-progress ${manifest.projectDir} ${manifest.buildId}\`.`,
+    `Check readiness with \`/kairos build-readiness ${manifest.projectDir} ${manifest.buildId}\`.`,
   ].join('\n')
 }
 
