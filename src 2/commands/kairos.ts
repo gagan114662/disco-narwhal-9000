@@ -990,9 +990,11 @@ async function handleBuildReadiness(rest: string[]): Promise<string> {
     blockers.length > 0
       ? ['blockers:', ...blockers.map(blocker => `- ${blocker}`)]
       : ['blockers: none']
+  const readinessState = blockers.length > 0 ? 'blocked' : 'ready'
 
   return [
     `Build readiness for ${parsed.buildId}:`,
+    `readiness: ${readinessState}`,
     `selected slice: ${selectedSliceLabel}`,
     `completed slices: ${completedSlices}/${totalSlices}`,
     `clarifying questions answered: ${questionReadiness.answered}/${questionReadiness.total}`,
