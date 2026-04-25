@@ -844,7 +844,10 @@ describe('/kairos command', () => {
     const out = await runKairosCommand(
       `build-users ${projectDir} missing-build`,
     )
-    expect(out).toBe(`No build missing-build found for ${projectDir}.`)
+    expect(out.split('\n')).toEqual([
+      `No build missing-build found for ${projectDir}.`,
+      `builds command: /kairos builds ${projectDir}`,
+    ])
   })
 
   test('build-problem prints persisted draft problem statement', async () => {
