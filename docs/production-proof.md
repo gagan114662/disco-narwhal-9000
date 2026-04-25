@@ -35,7 +35,8 @@ bun run proof:production
 - Repository security settings keep Dependabot security updates, secret
   scanning, and secret scanning push protection enabled.
 - Dependabot version-update policy watches Bun dependencies under `src 2/` and
-  GitHub Actions weekly, with a bounded open-PR limit.
+  GitHub Actions weekly, with a bounded open-PR limit and known-breaking major
+  lines ignored until deliberate upgrade work lands.
 - Current open PR check rollups have no red latest checks.
 - Workflow checkout actions stay pinned to Node 24-ready `actions/checkout@v5`.
 - GitHub `ci` and `permanent-structural-fix-daily` workflows keep

@@ -66,6 +66,10 @@ type DependabotUpdate = {
     timezone?: string
   }
   'open-pull-requests-limit'?: number
+  ignore?: Array<{
+    'dependency-name'?: string
+    versions?: string[]
+  }>
 }
 
 type DependabotConfig = {
@@ -146,11 +150,19 @@ const requiredDependabotUpdates = [
     ecosystem: 'bun',
     directory: '/src 2',
     time: '10:00',
+    ignoredVersions: [
+      { dependency: 'eslint', versions: ['>=10'] },
+      { dependency: 'ink', versions: ['>=7'] },
+      { dependency: 'typescript', versions: ['>=6'] },
+    ],
   },
   {
     ecosystem: 'github-actions',
     directory: '/',
     time: '10:30',
+    ignoredVersions: [
+      { dependency: 'actions/checkout', versions: ['>=6'] },
+    ],
   },
 ]
 
@@ -528,6 +540,26 @@ function proveDependabotPolicy(repoRoot: string): void {
       failures.push(
         `${required.ecosystem} updates must cap open PRs at 5`,
       )
+    }
+
+    for (const ignored of required.ignoredVersions) {
+      const ignoreRule = (update.ignore ?? []).find(
+        candidate => candidate['dependency-name'] === ignored.dependency,
+      )
+      if (!ignoreRule) {
+        failures.push(
+          `${required.ecosystem} updates must ignore known-breaking ${ignored.dependency} versions`,
+        )
+        continue
+      }
+
+      for (const version of ignored.versions) {
+        if (!(ignoreRule.versions ?? []).includes(version)) {
+          failures.push(
+            `${required.ecosystem} updates must ignore ${ignored.dependency} ${version}`,
+          )
+        }
+      }
     }
   }
 
