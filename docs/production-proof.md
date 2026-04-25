@@ -26,20 +26,23 @@ bun run proof:production
 - Disabled command stubs are explicit and bounded.
 - SDK unsupported surfaces are explicit and bounded.
 
-## Current Receipt
+## Capture The Current Receipt
 
-Latest proven main:
+Do not hard-code a "current main" SHA in this document. Merging the receipt
+itself creates a newer merge commit, so a committed SHA can go stale
+immediately. Capture the live receipt instead:
 
-```text
-0c197c304295b031b0131c6427bb4a53590e8f19
+```bash
+git switch main
+git pull --ff-only
+git rev-parse HEAD
+gh run list --branch main --limit 4 \
+  --json databaseId,workflowName,headSha,status,conclusion,url,createdAt
+cd "src 2"
+bun run proof:production
 ```
 
-Passing remote runs:
-
-- CI: https://github.com/gagan114662/disco-narwhal-9000/actions/runs/24931296063
-- Daily structural workflow: https://github.com/gagan114662/disco-narwhal-9000/actions/runs/24931308173
-
-Local proof result:
+The local proof result must end with:
 
 ```text
 411 pass
