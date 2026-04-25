@@ -29,6 +29,17 @@ type RunView = {
   jobs: RunJob[]
 }
 
+type BranchProtection = {
+  required_status_checks?: {
+    strict: boolean
+    contexts?: string[]
+    checks?: Array<{ context: string }>
+  }
+  enforce_admins?: { enabled: boolean }
+  allow_force_pushes?: { enabled: boolean }
+  allow_deletions?: { enabled: boolean }
+}
+
 type PullRequestCheck = {
   name?: string
   status?: string
@@ -85,6 +96,8 @@ const requiredHostedWorkflowSteps: Record<string, string[]> = {
     'Run static production proof gates',
   ],
 }
+
+const requiredMainBranchChecks = ['block-trunk-changes', 'verify']
 
 const allowedDisabledCommandStubs = [
   'src 2/commands/ant-trace/index.js',
@@ -176,6 +189,15 @@ function trackedFiles(repoRoot: string, prefix: string): string[] {
   return output ? output.split('\n').filter(Boolean) : []
 }
 
+function repoSlug(repoRoot: string): string {
+  return run(
+    'gh',
+    ['repo', 'view', '--json', 'nameWithOwner', '--jq', '.nameWithOwner'],
+    repoRoot,
+    true,
+  )
+}
+
 function assertLatestWorkflowGreen(
   runs: RunResult[],
   workflowName: string,
@@ -262,6 +284,55 @@ function proveRemoteMain(repoRoot: string): void {
   )
   proveHostedWorkflowSteps(repoRoot, ciRun)
   proveHostedWorkflowSteps(repoRoot, dailyRun)
+}
+
+function proveMainBranchProtection(repoRoot: string): void {
+  const protection = json<BranchProtection>(
+    'gh',
+    ['api', `repos/${repoSlug(repoRoot)}/branches/main/protection`],
+    repoRoot,
+  )
+  const requiredChecks = new Set([
+    ...(protection.required_status_checks?.contexts ?? []),
+    ...(protection.required_status_checks?.checks ?? []).map(
+      check => check.context,
+    ),
+  ])
+  const failures: string[] = []
+
+  if (protection.required_status_checks?.strict !== true) {
+    failures.push('main branch must require branches to be up to date')
+  }
+
+  for (const check of requiredMainBranchChecks) {
+    if (!requiredChecks.has(check)) {
+      failures.push(`main branch must require status check "${check}"`)
+    }
+  }
+
+  if (protection.enforce_admins?.enabled !== true) {
+    failures.push('main branch protection must include administrators')
+  }
+
+  if (protection.allow_force_pushes?.enabled !== false) {
+    failures.push('main branch must not allow force pushes')
+  }
+
+  if (protection.allow_deletions?.enabled !== false) {
+    failures.push('main branch must not allow deletions')
+  }
+
+  if (failures.length > 0) {
+    throw new Error(
+      `Main branch protection is not production-ready:\n${failures.join('\n')}`,
+    )
+  }
+
+  console.log(
+    `Main branch protection verified: required checks ${requiredMainBranchChecks.join(
+      ', ',
+    )}`,
+  )
 }
 
 function proveOpenPrs(repoRoot: string): void {
@@ -617,6 +688,10 @@ function main(): void {
 
   step('latest main workflows are green for origin/main', () => {
     proveRemoteMain(repoRoot)
+  })
+
+  step('main branch protection requires green checks', () => {
+    proveMainBranchProtection(repoRoot)
   })
 
   step('open PR check rollups have no current red checks', () => {
