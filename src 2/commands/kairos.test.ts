@@ -722,6 +722,17 @@ describe('/kairos command', () => {
     ])
   })
 
+  test('build-unanswered reports a missing build clearly', async () => {
+    const projectDir = makeProjectDir()
+    const out = await runKairosCommand(
+      `build-unanswered ${projectDir} missing-build`,
+    )
+    expect(out.split('\n')).toEqual([
+      `No build missing-build found for ${projectDir}.`,
+      `builds command: /kairos builds ${projectDir}`,
+    ])
+  })
+
   test('build-questions reports a missing build clearly', async () => {
     const projectDir = makeProjectDir()
     const out = await runKairosCommand(
