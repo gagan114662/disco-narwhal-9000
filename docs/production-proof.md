@@ -25,6 +25,9 @@ bun run proof:production
   main commit.
 - Latest `origin/main` `permanent-structural-fix-daily` workflow is completed
   and successful for the exact main commit.
+- Hosted GitHub job receipts include successful required steps for frozen
+  install, dependency audit, production pipeline/tests or daily structural fix,
+  and static production proof.
 - Current open PR check rollups have no red latest checks.
 - Workflow checkout actions stay pinned to Node 24-ready `actions/checkout@v5`.
 - GitHub `ci` and `permanent-structural-fix-daily` workflows keep
@@ -49,13 +52,15 @@ cd "src 2"
 bun run proof:production
 ```
 
-The local proof result must end with:
+The local proof result must include the hosted-step receipt lines and end with:
 
 ```text
 411 pass
 0 fail
 No vulnerabilities found
 No focused, skipped, pending, or expected-failing tests found across 65 test files
+ci hosted steps verified
+permanent-structural-fix-daily hosted steps verified
 PRODUCTION PROOF PASSED
 ```
 
