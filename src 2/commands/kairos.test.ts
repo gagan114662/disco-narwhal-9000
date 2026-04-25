@@ -938,12 +938,16 @@ describe('/kairos command', () => {
     const out = await runKairosCommand(
       `build-readiness ${projectDir} readiness-build`,
     )
-    expect(out.split('\n')).toEqual([
+    const lines = out.split('\n')
+    expect(lines.slice(0, 5)).toEqual([
       'Build readiness for readiness-build:',
       'selected slice: TB-1 Record intake skeleton',
       'completed slices: 0/3',
       'clarifying questions answered: 1/4',
       'unanswered clarifying questions: 3',
+    ])
+    expect(lines[5]?.startsWith('last event: slice_selected at ')).toBe(true)
+    expect(lines.slice(6)).toEqual([
       'next command: /kairos build-next ' + projectDir + ' readiness-build',
       'blockers:',
       '- 2. What fields are required, optional, or sensitive?',
@@ -963,12 +967,16 @@ describe('/kairos command', () => {
     const out = await runKairosCommand(
       `build-readiness ${projectDir} readiness-build`,
     )
-    expect(out.split('\n')).toEqual([
+    const lines = out.split('\n')
+    expect(lines.slice(0, 5)).toEqual([
       'Build readiness for readiness-build:',
       'selected slice: —',
       'completed slices: 0/3',
       'clarifying questions answered: 0/4',
       'unanswered clarifying questions: 4',
+    ])
+    expect(lines[5]?.startsWith('last event: spec_written at ')).toBe(true)
+    expect(lines.slice(6)).toEqual([
       'next command: /kairos build-select-next-prompt ' +
         projectDir +
         ' readiness-build',
@@ -1010,12 +1018,16 @@ describe('/kairos command', () => {
     const out = await runKairosCommand(
       `build-readiness ${projectDir} readiness-build`,
     )
-    expect(out.split('\n')).toEqual([
+    const lines = out.split('\n')
+    expect(lines.slice(0, 5)).toEqual([
       'Build readiness for readiness-build:',
       'selected slice: TB-3 Validation and role guardrails',
       'completed slices: 3/3',
       'clarifying questions answered: 4/4',
       'unanswered clarifying questions: 0',
+    ])
+    expect(lines[5]?.startsWith('last event: slice_completed at ')).toBe(true)
+    expect(lines.slice(6)).toEqual([
       'next command: —',
       'blockers: none',
     ])

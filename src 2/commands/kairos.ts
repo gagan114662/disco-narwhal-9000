@@ -939,6 +939,11 @@ async function handleBuildReadiness(rest: string[]): Promise<string> {
     return `No build ${parsed.buildId} found for ${parsed.projectDir}.`
   }
 
+  const events = await writer.readBuildEvents(parsed.projectDir, parsed.buildId)
+  const latestEvent = events.at(-1)
+  const latestEventLabel = latestEvent
+    ? `${latestEvent.kind} at ${latestEvent.t}`
+    : '—'
   const completedSliceIds = new Set(manifest.completedSliceIds ?? [])
   const totalSlices = manifest.tracerSlices?.length ?? 0
   const completedSlices =
@@ -980,6 +985,7 @@ async function handleBuildReadiness(rest: string[]): Promise<string> {
     `completed slices: ${completedSlices}/${totalSlices}`,
     `clarifying questions answered: ${questionReadiness.answered}/${questionReadiness.total}`,
     `unanswered clarifying questions: ${unansweredQuestions.length}`,
+    `last event: ${latestEventLabel}`,
     `next command: ${nextCommand}`,
     ...blockerLines,
   ].join('\n')
