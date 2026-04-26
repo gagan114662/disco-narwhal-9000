@@ -1407,16 +1407,21 @@ function verifyKairosGeneratedAppArchives(
       const relativePath = readStringField(file, 'relativePath')
       const contentBase64 = readStringField(file, 'contentBase64')
       const expectedSha256 = readStringField(file, 'sha256')
+      const expectedSizeBytes = file.sizeBytes
       if (
         !isSafeArchiveRelativePath(relativePath) ||
         !contentBase64 ||
-        !expectedSha256
+        !expectedSha256 ||
+        typeof expectedSizeBytes !== 'number'
       ) {
         return false
       }
 
       const content = Buffer.from(contentBase64, 'base64')
-      return createHash('sha256').update(content).digest('hex') === expectedSha256
+      return (
+        content.byteLength === expectedSizeBytes &&
+        createHash('sha256').update(content).digest('hex') === expectedSha256
+      )
     }),
   )
 }
