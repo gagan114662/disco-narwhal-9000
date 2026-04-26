@@ -878,7 +878,18 @@ export async function verifySoftwareFactoryBuild(
     addCheck(
       'project-eval-pack',
       projectEvalPack?.buildId === spec.buildId &&
-        projectEvalPack.cases.length === evalPack.cases.length,
+        projectEvalPack.appId === spec.appId &&
+        projectEvalPack.cases.length === evalPack.cases.length &&
+        evalPack.cases.every((testCase, index) => {
+          const projectCase = projectEvalPack?.cases[index]
+          return (
+            projectCase?.id === testCase.id &&
+            projectCase.clauseId === testCase.clauseId &&
+            projectCase.assertion === testCase.assertion &&
+            projectCase.gates.length === testCase.gates.length &&
+            testCase.gates.every(gate => projectCase.gates.includes(gate))
+          )
+        }),
       projectEvalPack
         ? `${projectEvalPack.cases.length}/${evalPack.cases.length} repo eval case(s) written`
         : 'repo eval pack missing',

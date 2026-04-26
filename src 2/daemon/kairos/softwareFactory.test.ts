@@ -189,6 +189,35 @@ describe('software factory build', () => {
     ).toBe(false)
   })
 
+  test('verification catches stale repo-local eval packs', async () => {
+    const configDir = makeTempDir('kairos-sf-config-')
+    const projectDir = makeTempDir('kairos-sf-project-')
+    process.env.CLAUDE_CONFIG_DIR = configDir
+
+    const result = await runSoftwareFactoryBuild({
+      projectDir,
+      brief: 'Build a vendor approval app with reviewer approval.',
+      now: () => new Date('2026-04-26T12:00:00.000Z'),
+      generateId: () => 'project-eval',
+    })
+    const projectEvalPack = readJson(result.projectEvalPackPath) as {
+      cases: Array<{ clauseId: string }>
+    }
+    if (projectEvalPack.cases[0]) {
+      projectEvalPack.cases[0].clauseId = 'CL-999'
+    }
+    writeFileSync(
+      result.projectEvalPackPath,
+      `${JSON.stringify(projectEvalPack)}\n`,
+    )
+
+    const verification = await verifySoftwareFactoryBuild(result.buildId)
+    expect(verification.ok).toBe(false)
+    expect(
+      verification.checks.find(check => check.id === 'project-eval-pack')?.ok,
+    ).toBe(false)
+  })
+
   test('traceability scan records untraceable code drift in the audit chain', async () => {
     const configDir = makeTempDir('kairos-sf-config-')
     const projectDir = makeTempDir('kairos-sf-project-')
