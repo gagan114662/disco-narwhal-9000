@@ -1376,7 +1376,10 @@ function verifyKairosTenantRestoreEvents(
       return false
     }
 
+    const auditEventNumber =
+      typeof auditEvent.eventNumber === 'number' ? auditEvent.eventNumber : null
     return (
+      auditEventNumber === index + 1 &&
       parsed.kind === readStringField(auditEvent, 'kind') &&
       parsed.t === readStringField(auditEvent, 't') &&
       (parsed.auditPrevHash ?? null) ===
