@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
+import { pathToFileURL } from 'url'
 import {
   acceptSoftwareFactoryChange,
   acceptSoftwareFactoryReconciliation,
@@ -240,6 +241,19 @@ describe('software factory build', () => {
     )
     expect(appSource).not.toContain(scriptPayload)
     expect(appSource).not.toContain(imagePayload)
+
+    const appModule = (await import(
+      pathToFileURL(join(result.appDir, 'src', 'app.ts')).href
+    )) as {
+      renderAppShell: (
+        records: Array<{ id: string; title: string; status: string }>,
+      ) => string
+    }
+    const rendered = appModule.renderAppShell([
+      { id: 'rec-1', title: imagePayload, status: 'pending' },
+    ])
+    expect(rendered).toContain('&lt;img src=x onerror=alert(1)&gt;')
+    expect(rendered).not.toContain(imagePayload)
   })
 
   test('traceability scan records untraceable code drift in the audit chain', async () => {

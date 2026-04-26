@@ -671,6 +671,25 @@ type RecordState = {
   status: string
 }
 
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, char => {
+    switch (char) {
+      case '&':
+        return '&amp;'
+      case '<':
+        return '&lt;'
+      case '>':
+        return '&gt;'
+      case '"':
+        return '&quot;'
+      case "'":
+        return '&#39;'
+      default:
+        return char
+    }
+  })
+}
+
 export function renderAppShell(records: RecordState[]): string {
   return \`<!doctype html>
 <html lang="en">
@@ -689,7 +708,7 @@ ${clauseList}
       </section>
       <section aria-label="Records">
         <h2>Records</h2>
-        <pre>\${JSON.stringify(records, null, 2)}</pre>
+        <pre>\${escapeHtml(JSON.stringify(records, null, 2))}</pre>
       </section>
     </main>
   </body>
