@@ -1407,6 +1407,9 @@ function verifyKairosGeneratedAppArchives(
     if (readStringField(generatedApp, 'buildId') !== buildId) {
       return false
     }
+    if (!isKairosBuildStatus(generatedApp.status)) {
+      return false
+    }
     const seenRelativePaths = new Set<string>()
     return readArrayField(generatedApp, 'files').every(file => {
       const relativePath = readStringField(file, 'relativePath')
@@ -1517,7 +1520,9 @@ function verifyKairosKnowledgeGraphArchive(
   )
 }
 
-function readKairosBuildStatus(value: unknown): KairosBuildManifest['status'] {
+function isKairosBuildStatus(
+  value: unknown,
+): value is KairosBuildManifest['status'] {
   switch (value) {
     case 'draft':
     case 'queued':
@@ -1526,10 +1531,14 @@ function readKairosBuildStatus(value: unknown): KairosBuildManifest['status'] {
     case 'succeeded':
     case 'failed':
     case 'cancelled':
-      return value
+      return true
     default:
-      return 'draft'
+      return false
   }
+}
+
+function readKairosBuildStatus(value: unknown): KairosBuildManifest['status'] {
+  return isKairosBuildStatus(value) ? value : 'draft'
 }
 
 async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
