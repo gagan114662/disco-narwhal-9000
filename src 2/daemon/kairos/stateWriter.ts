@@ -213,6 +213,28 @@ function assertProjectDirMatchesPath(
 
 export type StateWriter = Awaited<ReturnType<typeof createStateWriter>>
 
+function redactBuildEventForStorage(event: KairosBuildEvent): KairosBuildEvent {
+  switch (event.kind) {
+    case 'spec_written':
+      return {
+        ...event,
+        specPath: '[redacted]',
+      }
+    case 'build_result_written':
+      return {
+        ...event,
+        resultPath: '[redacted]',
+      }
+    case 'build_failed':
+      return {
+        ...event,
+        errorMessage: '[redacted]',
+      }
+    default:
+      return event
+  }
+}
+
 export async function createStateWriter() {
   await mkdir(getKairosStateDir(), { recursive: true })
 
@@ -313,13 +335,7 @@ export async function createStateWriter() {
     ): Promise<void> {
       const parsed = parseKairosBuildEvent(event)
       assertBuildIdMatchesPath(parsed.buildId, buildId)
-      const eventForStorage =
-        parsed.kind === 'build_failed'
-          ? {
-              ...parsed,
-              errorMessage: '[redacted]',
-            }
-          : parsed
+      const eventForStorage = redactBuildEventForStorage(parsed)
       const path = getProjectKairosBuildEventsPath(projectDir, buildId)
       await enqueuePathWrite(path, async () => {
         let raw = ''

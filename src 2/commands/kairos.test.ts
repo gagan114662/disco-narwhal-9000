@@ -505,6 +505,12 @@ describe('/kairos command', () => {
       'utf8',
     )
     expect(persistedEvents).not.toContain(
+      getProjectKairosBuildSpecPath(projectDir, buildId),
+    )
+    expect(persistedEvents).not.toContain(
+      getProjectKairosBuildResultPath(projectDir, buildId),
+    )
+    expect(persistedEvents).not.toContain(
       '/Users/alice/customer-one/secrets.txt',
     )
     expect(persistedEvents).not.toContain('jane@example.com')

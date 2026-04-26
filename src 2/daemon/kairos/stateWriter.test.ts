@@ -137,9 +137,18 @@ describe('Kairos state writer build state', () => {
       t: '2026-04-25T18:01:00.000Z',
       specPath: '/tmp/spec.md',
     })
+    await writer.appendBuildEvent(projectDir, buildId, {
+      version: 1,
+      kind: 'build_result_written',
+      buildId,
+      tenantId: 'tenant-local',
+      t: '2026-04-25T18:02:00.000Z',
+      status: 'succeeded',
+      resultPath: '/tmp/result.json',
+    })
 
     const events = await writer.readBuildEvents(projectDir, buildId)
-    expect(events).toHaveLength(2)
+    expect(events).toHaveLength(3)
     expect(events[0]?.auditPrevHash).toBeNull()
     expect(events[0]?.auditHash).toBe(
       calculateKairosBuildEventAuditHash({
@@ -153,6 +162,10 @@ describe('Kairos state writer build state', () => {
       }),
     )
     expect(events[1]?.auditPrevHash).toBe(events[0]?.auditHash)
+    expect(events[1]).toMatchObject({
+      kind: 'spec_written',
+      specPath: '[redacted]',
+    })
     expect(events[1]?.auditHash).toBe(
       calculateKairosBuildEventAuditHash({
         version: 1,
@@ -160,8 +173,25 @@ describe('Kairos state writer build state', () => {
         buildId,
         tenantId: 'tenant-local',
         t: '2026-04-25T18:01:00.000Z',
-        specPath: '/tmp/spec.md',
+        specPath: '[redacted]',
         auditPrevHash: events[0]?.auditHash,
+      }),
+    )
+    expect(events[2]?.auditPrevHash).toBe(events[1]?.auditHash)
+    expect(events[2]).toMatchObject({
+      kind: 'build_result_written',
+      resultPath: '[redacted]',
+    })
+    expect(events[2]?.auditHash).toBe(
+      calculateKairosBuildEventAuditHash({
+        version: 1,
+        kind: 'build_result_written',
+        buildId,
+        tenantId: 'tenant-local',
+        t: '2026-04-25T18:02:00.000Z',
+        status: 'succeeded',
+        resultPath: '[redacted]',
+        auditPrevHash: events[1]?.auditHash,
       }),
     )
   })
