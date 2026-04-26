@@ -1351,6 +1351,23 @@ function isSelectedSliceIdValid(
   )
 }
 
+function isCompletedSliceIdsValid(
+  completedSliceIds: unknown,
+  tracerSlices: unknown,
+): completedSliceIds is string[] {
+  if (!isNonEmptyStringArray(completedSliceIds)) {
+    return false
+  }
+  if (completedSliceIds.length === 0) {
+    return true
+  }
+  if (!isTracerSliceArray(tracerSlices)) {
+    return false
+  }
+  const tracerSliceIds = new Set(tracerSlices.map(slice => slice.id))
+  return completedSliceIds.every(sliceId => tracerSliceIds.has(sliceId))
+}
+
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every(item => typeof item === 'string')
 }
@@ -1711,8 +1728,9 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
     const traceabilitySeedsShapeValid = isTraceabilitySeedArray(
       metadata.traceabilitySeeds,
     )
-    const completedSliceIdsShapeValid = isNonEmptyStringArray(
+    const completedSliceIdsShapeValid = isCompletedSliceIdsValid(
       build.completedSliceIds,
+      metadata.tracerSlices,
     )
     const selectedSliceIdShapeValid = isSelectedSliceIdValid(
       build.selectedSliceId,
