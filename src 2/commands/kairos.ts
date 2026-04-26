@@ -1627,6 +1627,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
     const restore = readRecordField(build, 'restore')
     const restoreEventsShapeValid = restore ? isRecordArray(restore.events) : false
     const restoreEvents = restore ? readArrayField(restore, 'events') : []
+    const generatedAppsShapeValid = isRecordArray(build.generatedApps)
     const generatedApps = readArrayField(build, 'generatedApps')
     const metadata = readRecordField(build, 'metadata') ?? {}
     const evalCases = readArrayField(build, 'evalCases')
@@ -1675,7 +1676,9 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
         events,
         restoreEvents,
       )
-    const appsValid = verifyKairosGeneratedAppArchives(buildId, generatedApps)
+    const appsValid =
+      generatedAppsShapeValid &&
+      verifyKairosGeneratedAppArchives(buildId, generatedApps)
     const evalsValid = verifyKairosEvalCaseArchives(
       buildId,
       metadata,
