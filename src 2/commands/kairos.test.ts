@@ -1279,6 +1279,40 @@ describe('/kairos command', () => {
     expect(traceabilityOut).toContain('BRIEF-1')
   })
 
+  test('import tenant restores clarifying question answers', async () => {
+    const sourceProjectDir = makeProjectDir()
+    const targetProjectDir = makeProjectDir()
+    const exportPath = join(makeTempConfigDir(), 'tenant-import-answers.json')
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'tenant-import-answers-build',
+      now: () => new Date('2026-04-25T20:47:00.000Z'),
+    })
+    await runKairosCommand(`build ${sourceProjectDir} answer restore`)
+    await runKairosCommand(
+      `build-answer ${sourceProjectDir} tenant-import-answers-build 1 employee manager and HR approver`,
+    )
+    writeFileSync(
+      exportPath,
+      await runKairosCommand(`export tenant ${sourceProjectDir}`),
+    )
+
+    await runKairosCommand(`import tenant ${exportPath} ${targetProjectDir}`)
+    const questionsOut = await runKairosCommand(
+      `build-questions ${targetProjectDir} tenant-import-answers-build`,
+    )
+
+    expect(questionsOut.split('\n')).toEqual([
+      'Clarifying questions for tenant-import-answers-build:',
+      '1. Who are the exact user roles and approvers?',
+      '   answer: employee manager and HR approver',
+      '2. What fields are required, optional, or sensitive?',
+      '3. What notifications or integrations are required?',
+      '4. What retention, export, or compliance constraints apply?',
+      `unanswered command: /kairos build-unanswered ${targetProjectDir} tenant-import-answers-build`,
+      `next command: /kairos build-answer ${targetProjectDir} tenant-import-answers-build 2 <answer>`,
+    ])
+  })
+
   test('import tenant restores generated app files', async () => {
     const sourceProjectDir = makeProjectDir()
     const targetProjectDir = makeProjectDir()

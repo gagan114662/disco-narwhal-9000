@@ -1221,6 +1221,7 @@ async function handleExport(rest: string[]): Promise<string> {
           functionalRequirements: manifest.functionalRequirements ?? [],
           acceptanceChecks: manifest.acceptanceChecks ?? [],
           clarifyingQuestions: manifest.clarifyingQuestions ?? [],
+          clarifyingQuestionAnswers: manifest.clarifyingQuestionAnswers ?? {},
           assumptions: manifest.assumptions ?? [],
           risks: manifest.risks ?? [],
           tracerSlices: manifest.tracerSlices ?? [],
@@ -1401,6 +1402,19 @@ function isNonEmptyStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every(isNonEmptyString)
 }
 
+function isNonEmptyStringRecord(
+  value: unknown,
+): value is Record<string, string> {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    Object.entries(value).every(
+      ([key, item]) => isNonEmptyString(key) && isNonEmptyString(item),
+    )
+  )
+}
+
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0
 }
@@ -1432,6 +1446,14 @@ function readStringArrayField(
   return Array.isArray(field)
     ? field.filter((item): item is string => typeof item === 'string')
     : []
+}
+
+function readStringRecordField(
+  value: Record<string, unknown>,
+  key: string,
+): Record<string, string> | undefined {
+  const field = value[key]
+  return isNonEmptyStringRecord(field) ? field : undefined
 }
 
 function readTracerSlicesField(
@@ -1777,6 +1799,9 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
     const clarifyingQuestionsShapeValid = isNonEmptyStringArray(
       metadata.clarifyingQuestions,
     )
+    const clarifyingQuestionAnswersShapeValid = isNonEmptyStringRecord(
+      metadata.clarifyingQuestionAnswers,
+    )
     const assumptionsShapeValid = isNonEmptyStringArray(metadata.assumptions)
     const risksShapeValid = isNonEmptyStringArray(metadata.risks)
     const knowledgeGraph = readRecordField(build, 'knowledgeGraph')
@@ -1858,6 +1883,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
       goalsShapeValid &&
       nonGoalsShapeValid &&
       clarifyingQuestionsShapeValid &&
+      clarifyingQuestionAnswersShapeValid &&
       assumptionsShapeValid &&
       risksShapeValid
     const restoreStatus = restoreValid ? '' : ' restore=invalid'
@@ -1943,6 +1969,10 @@ async function handleImport(rest: string[]): Promise<string> {
       ),
       acceptanceChecks: readStringArrayField(metadata, 'acceptanceChecks'),
       clarifyingQuestions: readStringArrayField(metadata, 'clarifyingQuestions'),
+      clarifyingQuestionAnswers: readStringRecordField(
+        metadata,
+        'clarifyingQuestionAnswers',
+      ),
       assumptions: readStringArrayField(metadata, 'assumptions'),
       risks: readStringArrayField(metadata, 'risks'),
       tracerSlices: readTracerSlicesField(metadata),
