@@ -353,17 +353,22 @@ async function listSourceFilesRecursive(dir: string): Promise<string[]> {
 
 async function findUntraceableSourceFiles(
   appDir: string,
-): Promise<{ sourceFiles: string[]; untraceableFiles: string[] }> {
+): Promise<{
+  sourceFiles: string[]
+  sourceByFile: Map<string, string>
+  untraceableFiles: string[]
+}> {
   const sourceFiles = await listSourceFilesRecursive(appDir)
-  const untraceableFiles = (
-    await Promise.all(
-      sourceFiles.map(async file => {
-        const source = await readFile(file, 'utf8')
-        return source.includes('kairos:clause=') ? null : file
-      }),
-    )
-  ).filter((file): file is string => file !== null)
-  return { sourceFiles, untraceableFiles }
+  const sourceEntries = await Promise.all(
+    sourceFiles.map(
+      async file => [file, await readFile(file, 'utf8')] as const,
+    ),
+  )
+  const sourceByFile = new Map(sourceEntries)
+  const untraceableFiles = sourceEntries
+    .filter(([, source]) => !source.includes('kairos:clause='))
+    .map(([file]) => file)
+  return { sourceFiles, sourceByFile, untraceableFiles }
 }
 
 function verifyAuditChain(events: SoftwareFactoryAuditEvent[]): {
@@ -966,25 +971,23 @@ export async function verifySoftwareFactoryBuild(
       `${traceClauseIds.size}/${clauseIds.size} clause(s) recorded in app manifest`,
     )
 
-    const markerChecks = await Promise.all(
-      manifest.traceability.map(async trace => {
-        try {
-          const sourceFile = assertSafeGeneratedSourcePath(trace.file)
-          const source = await readFile(join(manifest.appDir, sourceFile), 'utf8')
-          return source.includes(trace.marker)
-        } catch {
-          return false
-        }
-      }),
-    )
+    const { sourceFiles, sourceByFile, untraceableFiles } =
+      await findUntraceableSourceFiles(manifest.appDir)
+    const markerChecks = manifest.traceability.map(trace => {
+      try {
+        const sourceFile = assertSafeGeneratedSourcePath(trace.file)
+        const source = sourceByFile.get(join(manifest.appDir, sourceFile))
+        return source?.includes(trace.marker) === true
+      } catch {
+        return false
+      }
+    })
     addCheck(
       'code-markers',
       markerChecks.every(Boolean) && markerChecks.length >= clauseIds.size,
       `${markerChecks.filter(Boolean).length}/${markerChecks.length} trace marker(s) found in generated code`,
     )
 
-    const { sourceFiles, untraceableFiles } =
-      await findUntraceableSourceFiles(manifest.appDir)
     addCheck(
       'untraceable-code',
       untraceableFiles.length === 0,
