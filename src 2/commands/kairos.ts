@@ -1400,9 +1400,13 @@ function isSafeArchiveRelativePath(relativePath: string): boolean {
 }
 
 function verifyKairosGeneratedAppArchives(
+  buildId: string,
   generatedApps: Record<string, unknown>[],
 ): boolean {
   return generatedApps.every(generatedApp => {
+    if (readStringField(generatedApp, 'buildId') !== buildId) {
+      return false
+    }
     const seenRelativePaths = new Set<string>()
     return readArrayField(generatedApp, 'files').every(file => {
       const relativePath = readStringField(file, 'relativePath')
@@ -1639,7 +1643,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
       events,
       restoreEvents,
     )
-    const appsValid = verifyKairosGeneratedAppArchives(generatedApps)
+    const appsValid = verifyKairosGeneratedAppArchives(buildId, generatedApps)
     const evalsValid = verifyKairosEvalCaseArchives(
       buildId,
       metadata,
