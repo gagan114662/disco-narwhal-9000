@@ -1640,6 +1640,9 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
     const evalCasesShapeValid = isRecordArray(build.evalCases)
     const evalCases = readArrayField(build, 'evalCases')
     const acceptanceChecksShapeValid = isStringArray(metadata.acceptanceChecks)
+    const functionalRequirementsShapeValid = isStringArray(
+      metadata.functionalRequirements,
+    )
     const tracerSlicesShapeValid = isRecordArray(metadata.tracerSlices)
     const traceabilitySeedsShapeValid = isRecordArray(metadata.traceabilitySeeds)
     const knowledgeGraph = readRecordField(build, 'knowledgeGraph')
@@ -1699,6 +1702,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
         evalCases,
       )
     const graphValid =
+      functionalRequirementsShapeValid &&
       tracerSlicesShapeValid &&
       traceabilitySeedsShapeValid &&
       verifyKairosKnowledgeGraphArchive(
