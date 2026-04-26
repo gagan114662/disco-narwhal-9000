@@ -1716,7 +1716,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
     const specShapeValid =
       spec !== null &&
       spec.format === 'markdown' &&
-      typeof spec.body === 'string'
+      isNonEmptyString(spec.body)
     const briefShapeValid = isOptionalNonEmptyString(metadata.brief)
     const problemShapeValid = isOptionalNonEmptyString(metadata.problem)
     const usersShapeValid = isNonEmptyStringArray(metadata.users)
