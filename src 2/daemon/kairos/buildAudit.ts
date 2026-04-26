@@ -1,4 +1,4 @@
-import { createHash } from 'crypto'
+import { createHash, createHmac } from 'crypto'
 import { jsonStringify } from '../../utils/slowOperations.js'
 import type { KairosBuildEvent } from './buildState.js'
 
@@ -14,6 +14,20 @@ export type KairosBuildAuditVerification =
       reason: 'missing hash' | 'prev hash mismatch' | 'hash mismatch'
       expected?: string | null
       actual?: string | null
+    }
+
+export type KairosAuditExportSignature =
+  | {
+      version: 1
+      status: 'unsigned'
+      reason: 'KAIROS_AUDIT_SIGNING_KEY not configured'
+    }
+  | {
+      version: 1
+      status: 'signed'
+      algorithm: 'hmac-sha256'
+      keyId: string
+      signature: string
     }
 
 function sortForAuditHash(value: unknown): unknown {
@@ -72,6 +86,27 @@ export function calculateKairosAuditExportHash(value: unknown): string {
   return createHash('sha256')
     .update(jsonStringify(sortForAuditHash(value)))
     .digest('hex')
+}
+
+export function signKairosAuditExportHash(
+  exportHash: string,
+): KairosAuditExportSignature {
+  const signingKey = process.env.KAIROS_AUDIT_SIGNING_KEY?.trim()
+  if (!signingKey) {
+    return {
+      version: 1,
+      status: 'unsigned',
+      reason: 'KAIROS_AUDIT_SIGNING_KEY not configured',
+    }
+  }
+
+  return {
+    version: 1,
+    status: 'signed',
+    algorithm: 'hmac-sha256',
+    keyId: process.env.KAIROS_AUDIT_SIGNING_KEY_ID?.trim() || 'local-env',
+    signature: createHmac('sha256', signingKey).update(exportHash).digest('hex'),
+  }
 }
 
 export function verifyKairosBuildEventAuditChain(

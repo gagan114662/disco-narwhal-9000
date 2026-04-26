@@ -19,6 +19,7 @@ import {
 import {
   calculateKairosAuditExportHash,
   verifyKairosBuildEventAuditChain,
+  signKairosAuditExportHash,
 } from '../daemon/kairos/buildAudit.js'
 import {
   KAIROS_BUILD_STATE_VERSION,
@@ -810,10 +811,12 @@ async function handleBuildAuditExport(rest: string[]): Promise<string> {
       auditHash: event.auditHash ?? null,
     })),
   }
+  const exportHash = calculateKairosAuditExportHash(auditExport)
   return jsonStringify(
     {
       ...auditExport,
-      exportHash: calculateKairosAuditExportHash(auditExport),
+      exportHash,
+      auditSignature: signKairosAuditExportHash(exportHash),
     },
     null,
     2,

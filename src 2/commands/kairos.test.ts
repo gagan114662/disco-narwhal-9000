@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { createHmac } from 'crypto'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { mkdirSync } from 'fs'
 import { tmpdir } from 'os'
@@ -106,6 +107,8 @@ afterEach(() => {
   __resetKairosCloudSyncDepsForTesting()
   delete process.env.CLAUDE_CONFIG_DIR
   delete process.env.KAIROS_DASHBOARD_URL
+  delete process.env.KAIROS_AUDIT_SIGNING_KEY
+  delete process.env.KAIROS_AUDIT_SIGNING_KEY_ID
   for (const dir of TEMP_DIRS.splice(0, TEMP_DIRS.length)) {
     rmSync(dir, { recursive: true, force: true })
   }
@@ -641,6 +644,11 @@ describe('/kairos command', () => {
         version: number
         eventFields: string[]
       }
+      auditSignature: {
+        version: number
+        status: string
+        reason?: string
+      }
       events: Array<{
         eventNumber: number
         kind: string
@@ -666,6 +674,11 @@ describe('/kairos command', () => {
         'build_failed.errorMessage',
       ],
     })
+    expect(auditExport.auditSignature).toEqual({
+      version: 1,
+      status: 'unsigned',
+      reason: 'KAIROS_AUDIT_SIGNING_KEY not configured',
+    })
     expect(auditExport.projectDir).toBeUndefined()
     expect(auditExport.projectDirHash).toBe(
       calculateKairosAuditExportHash({
@@ -678,6 +691,7 @@ describe('/kairos command', () => {
       calculateKairosAuditExportHash({
         ...auditExport,
         exportHash: undefined,
+        auditSignature: undefined,
       }),
     )
     expect(auditExport.events).toHaveLength(2)
@@ -698,6 +712,41 @@ describe('/kairos command', () => {
     expect(out).not.toContain(
       getProjectKairosBuildSpecPath(projectDir, 'audit-export-build'),
     )
+  })
+
+  test('build-audit-export signs the export hash when a signing key is configured', async () => {
+    const projectDir = makeProjectDir()
+    process.env.KAIROS_AUDIT_SIGNING_KEY = 'test-signing-key'
+    process.env.KAIROS_AUDIT_SIGNING_KEY_ID = 'test-key-1'
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'signed-audit-export-build',
+      now: () => new Date('2026-04-25T20:12:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} signed export`)
+
+    const out = await runKairosCommand(
+      `build-audit-export ${projectDir} signed-audit-export-build`,
+    )
+    const auditExport = JSON.parse(out) as {
+      exportHash: string
+      auditSignature: {
+        version: number
+        status: string
+        algorithm: string
+        keyId: string
+        signature: string
+      }
+    }
+
+    expect(auditExport.auditSignature).toEqual({
+      version: 1,
+      status: 'signed',
+      algorithm: 'hmac-sha256',
+      keyId: 'test-key-1',
+      signature: createHmac('sha256', 'test-signing-key')
+        .update(auditExport.exportHash)
+        .digest('hex'),
+    })
   })
 
   test('build-slices prints selectable tracer bullets', async () => {
