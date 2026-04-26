@@ -1308,6 +1308,10 @@ function isRecordArray(value: unknown): value is Array<Record<string, unknown>> 
   )
 }
 
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every(item => typeof item === 'string')
+}
+
 function readStringField(
   value: Record<string, unknown>,
   key: string,
@@ -1635,6 +1639,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
     const metadata = readRecordField(build, 'metadata') ?? {}
     const evalCasesShapeValid = isRecordArray(build.evalCases)
     const evalCases = readArrayField(build, 'evalCases')
+    const acceptanceChecksShapeValid = isStringArray(metadata.acceptanceChecks)
     const tracerSlicesShapeValid = isRecordArray(metadata.tracerSlices)
     const traceabilitySeedsShapeValid = isRecordArray(metadata.traceabilitySeeds)
     const knowledgeGraph = readRecordField(build, 'knowledgeGraph')
@@ -1687,6 +1692,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
       verifyKairosGeneratedAppArchives(buildId, generatedApps)
     const evalsValid =
       evalCasesShapeValid &&
+      acceptanceChecksShapeValid &&
       verifyKairosEvalCaseArchives(
         buildId,
         metadata,
