@@ -5112,6 +5112,59 @@ describe('/kairos command', () => {
     ).toBe(false)
   })
 
+  test('import tenant rejects signed audit signature key relabeling', async () => {
+    const sourceProjectDir = makeProjectDir()
+    const targetProjectDir = makeProjectDir()
+    const exportPath = join(
+      makeTempConfigDir(),
+      'tenant-import-audit-signature-key-tampered.json',
+    )
+    process.env.KAIROS_AUDIT_SIGNING_KEY = 'tenant-signing-key'
+    process.env.KAIROS_AUDIT_SIGNING_KEY_ID = 'tenant-key-1'
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'tenant-import-audit-signature-key-tampered-build',
+      now: () => new Date('2026-04-25T20:19:00.000Z'),
+    })
+    await runKairosCommand(`build ${sourceProjectDir} tenant audit key tamper`)
+    const tenantExport = JSON.parse(
+      await runKairosCommand(`export tenant ${sourceProjectDir}`),
+    ) as {
+      archiveHash: string
+      builds: Array<{
+        audit: {
+          auditSignature: {
+            keyId: string
+          }
+        }
+      }>
+    }
+    tenantExport.builds[0]!.audit.auditSignature.keyId = 'other-key'
+    const { archiveHash: _archiveHash, ...archiveHashMaterial } = tenantExport
+    tenantExport.archiveHash = calculateKairosAuditExportHash(
+      archiveHashMaterial,
+    )
+    writeFileSync(exportPath, JSON.stringify(tenantExport, null, 2))
+
+    const importOut = await runKairosCommand(
+      `import tenant ${exportPath} ${targetProjectDir}`,
+    )
+
+    expect(importOut.split('\n')).toEqual([
+      'Tenant archive invalid.',
+      'archive hash: valid',
+      'builds: 1',
+      '- tenant-import-audit-signature-key-tampered-build: audit=valid signature=invalid merkle=valid',
+    ])
+    expect(
+      existsSync(
+        getProjectKairosBuildManifestPath(
+          targetProjectDir,
+          'tenant-import-audit-signature-key-tampered-build',
+        ),
+      ),
+    ).toBe(false)
+  })
+
   test('import tenant rejects non-object audit event entries', async () => {
     const sourceProjectDir = makeProjectDir()
     const targetProjectDir = makeProjectDir()

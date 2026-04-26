@@ -50,6 +50,7 @@ export type KairosAuditExportSignatureVerification =
         | 'unsupported signature algorithm'
         | 'malformed signature'
         | 'signing key not configured'
+        | 'key id mismatch'
         | 'signature mismatch'
     }
 
@@ -198,6 +199,11 @@ export function verifyKairosAuditExportSignature(
   const signingKey = process.env.KAIROS_AUDIT_SIGNING_KEY?.trim()
   if (!signingKey) {
     return { valid: false, reason: 'signing key not configured' }
+  }
+  const expectedKeyId =
+    process.env.KAIROS_AUDIT_SIGNING_KEY_ID?.trim() || 'local-env'
+  if (signatureRecord.keyId !== expectedKeyId) {
+    return { valid: false, reason: 'key id mismatch' }
   }
 
   const expectedSignature = createHmac('sha256', signingKey)
