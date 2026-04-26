@@ -1402,20 +1402,23 @@ function isSafeArchiveRelativePath(relativePath: string): boolean {
 function verifyKairosGeneratedAppArchives(
   generatedApps: Record<string, unknown>[],
 ): boolean {
-  return generatedApps.every(generatedApp =>
-    readArrayField(generatedApp, 'files').every(file => {
+  return generatedApps.every(generatedApp => {
+    const seenRelativePaths = new Set<string>()
+    return readArrayField(generatedApp, 'files').every(file => {
       const relativePath = readStringField(file, 'relativePath')
       const contentBase64 = readStringField(file, 'contentBase64')
       const expectedSha256 = readStringField(file, 'sha256')
       const expectedSizeBytes = file.sizeBytes
       if (
         !isSafeArchiveRelativePath(relativePath) ||
+        seenRelativePaths.has(relativePath) ||
         !contentBase64 ||
         !expectedSha256 ||
         typeof expectedSizeBytes !== 'number'
       ) {
         return false
       }
+      seenRelativePaths.add(relativePath)
 
       const content = Buffer.from(contentBase64, 'base64')
       return (
@@ -1423,8 +1426,8 @@ function verifyKairosGeneratedAppArchives(
         content.byteLength === expectedSizeBytes &&
         createHash('sha256').update(content).digest('hex') === expectedSha256
       )
-    }),
-  )
+    })
+  })
 }
 
 function buildKairosEvalCaseArchivesFromMetadata(
