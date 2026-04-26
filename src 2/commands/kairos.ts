@@ -1299,6 +1299,15 @@ function readArrayField(
     : []
 }
 
+function isRecordArray(value: unknown): value is Array<Record<string, unknown>> {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      item => item !== null && typeof item === 'object' && !Array.isArray(item),
+    )
+  )
+}
+
 function readStringField(
   value: Record<string, unknown>,
   key: string,
@@ -1578,12 +1587,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
   const expectedArchiveHash =
     calculateKairosAuditExportHash(archiveHashMaterial)
   const archiveHashValid = archive.archiveHash === expectedArchiveHash
-  if (
-    !Array.isArray(archive.builds) ||
-    archive.builds.some(
-      build => build === null || typeof build !== 'object' || Array.isArray(build),
-    )
-  ) {
+  if (!isRecordArray(archive.builds)) {
     return 'Tenant archive invalid: builds contains non-object entries.'
   }
   const builds = readArrayField(archive, 'builds')
@@ -1618,6 +1622,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
         line: `- ${buildId}: audit=invalid signature=invalid merkle=invalid`,
       }
     }
+    const auditEventsShapeValid = isRecordArray(audit.events)
     const events = readArrayField(audit, 'events')
     const restore = readRecordField(build, 'restore')
     const restoreEvents = restore ? readArrayField(restore, 'events') : []
@@ -1659,6 +1664,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
       audit.merkleRoot === calculateKairosBuildAuditMerkleRoot(eventHashes)
     const lastEventHash = readStringField(events[events.length - 1] ?? {}, 'auditHash')
     const eventSummaryValid =
+      auditEventsShapeValid &&
       audit.eventCount === events.length && audit.lastHash === lastEventHash
     const restoreValid = verifyKairosTenantRestoreEvents(
       buildId,
