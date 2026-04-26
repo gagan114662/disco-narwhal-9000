@@ -1326,6 +1326,49 @@ describe('/kairos command', () => {
     expect(result.appDir).not.toContain(sourceProjectDir)
   })
 
+  test('import tenant restores empty generated app files', async () => {
+    const sourceProjectDir = makeProjectDir()
+    const targetProjectDir = makeProjectDir()
+    const appDir = join(sourceProjectDir, 'generated-app')
+    const exportPath = join(makeTempConfigDir(), 'tenant-import-empty-app-file.json')
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'tenant-import-empty-app-file-build',
+      now: () => new Date('2026-04-25T20:12:00.000Z'),
+    })
+    await runKairosCommand(`build ${sourceProjectDir} tenant empty app file`)
+    mkdirSync(join(appDir, 'src'), { recursive: true })
+    writeFileSync(join(appDir, 'src', 'empty.txt'), '')
+    const writer = await createStateWriter()
+    await writer.writeBuildResult(
+      sourceProjectDir,
+      'tenant-import-empty-app-file-build',
+      {
+        version: 1,
+        buildId: 'tenant-import-empty-app-file-build',
+        tenantId: 'local',
+        status: 'succeeded',
+        completedAt: '2026-04-25T20:13:00.000Z',
+        summary: 'Generated app artifact ready.',
+        appDir,
+      },
+    )
+    writeFileSync(
+      exportPath,
+      await runKairosCommand(`export tenant ${sourceProjectDir}`),
+    )
+
+    await runKairosCommand(`import tenant ${exportPath} ${targetProjectDir}`)
+
+    const restoredAppDir = join(
+      getProjectKairosBuildDir(targetProjectDir, 'tenant-import-empty-app-file-build'),
+      'generated-apps',
+      '0',
+    )
+    expect(readFileSync(join(restoredAppDir, 'src', 'empty.txt'), 'utf8')).toBe(
+      '',
+    )
+  })
+
   test('import tenant rejects tampered generated app files', async () => {
     const sourceProjectDir = makeProjectDir()
     const targetProjectDir = makeProjectDir()

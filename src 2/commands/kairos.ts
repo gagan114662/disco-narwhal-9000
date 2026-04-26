@@ -1048,10 +1048,10 @@ async function restoreKairosGeneratedAppArchives(
     const files = readArrayField(generatedApp, 'files')
     for (const file of files) {
       const relativePath = readStringField(file, 'relativePath')
-      const contentBase64 = readStringField(file, 'contentBase64')
-      if (!relativePath || !contentBase64) {
+      if (!relativePath || typeof file.contentBase64 !== 'string') {
         continue
       }
+      const contentBase64 = file.contentBase64
 
       const targetPath = resolve(appDir, relativePath)
       if (!isPathInside(appDir, targetPath)) {
@@ -1406,13 +1406,14 @@ function verifyKairosGeneratedAppArchives(
     const seenRelativePaths = new Set<string>()
     return readArrayField(generatedApp, 'files').every(file => {
       const relativePath = readStringField(file, 'relativePath')
-      const contentBase64 = readStringField(file, 'contentBase64')
+      const contentBase64 =
+        typeof file.contentBase64 === 'string' ? file.contentBase64 : null
       const expectedSha256 = readStringField(file, 'sha256')
       const expectedSizeBytes = file.sizeBytes
       if (
         !isSafeArchiveRelativePath(relativePath) ||
         seenRelativePaths.has(relativePath) ||
-        !contentBase64 ||
+        contentBase64 === null ||
         !expectedSha256 ||
         typeof expectedSizeBytes !== 'number'
       ) {
