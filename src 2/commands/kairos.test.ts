@@ -4670,6 +4670,82 @@ describe('/kairos command', () => {
     ).toBe(false)
   })
 
+  test('import tenant rejects failure metadata on valid audit exports', async () => {
+    const sourceProjectDir = makeProjectDir()
+    const targetProjectDir = makeProjectDir()
+    const exportPath = join(
+      makeTempConfigDir(),
+      'tenant-import-audit-failure-tampered.json',
+    )
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'tenant-import-audit-failure-tampered-build',
+      now: () => new Date('2026-04-25T20:12:00.000Z'),
+    })
+    await runKairosCommand(`build ${sourceProjectDir} tenant audit failure tamper`)
+    const tenantExport = JSON.parse(
+      await runKairosCommand(`export tenant ${sourceProjectDir}`),
+    ) as {
+      archiveHash: string
+      version: number
+      projectDirHash: string
+      builds: Array<{
+        buildId: string
+        tenantId: string
+        audit: {
+          valid: boolean
+          eventCount: number
+          lastHash: string
+          merkleRoot: string
+          exportHash: string
+          erasureSummary: unknown
+          redactionPolicy: unknown
+          failure?: unknown
+          events: Array<Record<string, unknown>>
+        }
+      }>
+    }
+    const build = tenantExport.builds[0]!
+    build.audit.failure = { reason: 'fake failure on a valid audit export' }
+    build.audit.exportHash = calculateKairosAuditExportHash({
+      version: tenantExport.version,
+      buildId: build.buildId,
+      projectDirHash: tenantExport.projectDirHash,
+      tenantId: build.tenantId,
+      valid: build.audit.valid,
+      eventCount: build.audit.eventCount,
+      lastHash: build.audit.lastHash,
+      merkleRoot: build.audit.merkleRoot,
+      erasureSummary: build.audit.erasureSummary,
+      redactionPolicy: build.audit.redactionPolicy,
+      failure: build.audit.failure,
+      events: build.audit.events,
+    })
+    const { archiveHash: _archiveHash, ...archiveHashMaterial } = tenantExport
+    tenantExport.archiveHash = calculateKairosAuditExportHash(
+      archiveHashMaterial,
+    )
+    writeFileSync(exportPath, JSON.stringify(tenantExport, null, 2))
+
+    const importOut = await runKairosCommand(
+      `import tenant ${exportPath} ${targetProjectDir}`,
+    )
+
+    expect(importOut.split('\n')).toEqual([
+      'Tenant archive invalid.',
+      'archive hash: valid',
+      'builds: 1',
+      '- tenant-import-audit-failure-tampered-build: audit=invalid signature=unsigned merkle=valid',
+    ])
+    expect(
+      existsSync(
+        getProjectKairosBuildManifestPath(
+          targetProjectDir,
+          'tenant-import-audit-failure-tampered-build',
+        ),
+      ),
+    ).toBe(false)
+  })
+
   test('import tenant rejects non-object audit event entries', async () => {
     const sourceProjectDir = makeProjectDir()
     const targetProjectDir = makeProjectDir()
