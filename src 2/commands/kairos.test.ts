@@ -837,6 +837,27 @@ describe('/kairos command', () => {
     )
   })
 
+  test('build-audit-anchor-verify validates a filesystem anchor against current build audit state', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'verify-anchor-build',
+      now: () => new Date('2026-04-25T20:12:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} verify anchor`)
+    await runKairosCommand(`build-audit-anchor ${projectDir} verify-anchor-build`)
+
+    const out = await runKairosCommand(
+      `build-audit-anchor-verify ${projectDir} verify-anchor-build`,
+    )
+
+    expect(out.split('\n')).toEqual([
+      'Audit anchor valid for verify-anchor-build.',
+      'anchor hash: valid',
+      'export hash: valid',
+      'audit signature: unsigned reason=KAIROS_AUDIT_SIGNING_KEY not configured',
+    ])
+  })
+
   test('build-slices prints selectable tracer bullets', async () => {
     const projectDir = makeProjectDir()
     __setKairosBuildDepsForTesting({

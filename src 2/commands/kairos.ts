@@ -144,6 +144,7 @@ const HELP_TEXT = `Usage:
 /kairos build-audit-export [projectDir] <buildId>
 /kairos build-audit-export-verify <exportJsonPath>
 /kairos build-audit-anchor [projectDir] <buildId>
+/kairos build-audit-anchor-verify [projectDir] <buildId>
 /kairos pause
 /kairos resume
 /kairos dashboard
@@ -200,6 +201,7 @@ type Subcommand =
   | 'build-audit-export'
   | 'build-audit-export-verify'
   | 'build-audit-anchor'
+  | 'build-audit-anchor-verify'
   | 'pause'
   | 'resume'
   | 'dashboard'
@@ -249,6 +251,7 @@ const SUBCOMMANDS = new Set<Subcommand>([
   'build-audit-export',
   'build-audit-export-verify',
   'build-audit-anchor',
+  'build-audit-anchor-verify',
   'pause',
   'resume',
   'dashboard',
@@ -982,6 +985,111 @@ async function handleBuildAuditAnchor(rest: string[]): Promise<string> {
     `anchor: ${anchorPath}`,
     `merkle root: ${anchor.merkleRoot}`,
     `export hash: ${exportHash}`,
+  ].join('\n')
+}
+
+async function handleBuildAuditAnchorVerify(rest: string[]): Promise<string> {
+  const parsed = parseBuildShowArgs(rest)
+  if (parsed === null) {
+    return 'Usage: /kairos build-audit-anchor-verify [projectDir] <buildId>'
+  }
+
+  const writer = await createStateWriter()
+  const manifest = await writer.readBuildManifest(
+    parsed.projectDir,
+    parsed.buildId,
+  )
+  if (!manifest) {
+    return [
+      `No build ${parsed.buildId} found for ${parsed.projectDir}.`,
+      `builds command: /kairos builds ${parsed.projectDir}`,
+    ].join('\n')
+  }
+
+  const anchorPath = getProjectKairosBuildAuditAnchorPath(
+    manifest.projectDir,
+    manifest.buildId,
+  )
+  let parsedAnchor: unknown
+  try {
+    parsedAnchor = safeParseJSON(await readFile(anchorPath, 'utf8'), false)
+  } catch {
+    return `Audit anchor invalid for ${manifest.buildId}: cannot read anchor.`
+  }
+  if (
+    parsedAnchor === null ||
+    typeof parsedAnchor !== 'object' ||
+    Array.isArray(parsedAnchor)
+  ) {
+    return `Audit anchor invalid for ${manifest.buildId}: file does not contain a JSON object.`
+  }
+
+  const anchor = parsedAnchor as Record<string, unknown>
+  if (typeof anchor.anchorHash !== 'string') {
+    return `Audit anchor invalid for ${manifest.buildId}: missing anchorHash.`
+  }
+  const expectedAnchorHash = calculateKairosAuditExportHash({
+    ...anchor,
+    anchorHash: undefined,
+  })
+  if (anchor.anchorHash !== expectedAnchorHash) {
+    return [
+      `Audit anchor invalid for ${manifest.buildId}.`,
+      'anchor hash: invalid',
+      `expected: ${expectedAnchorHash}`,
+      `actual: ${anchor.anchorHash}`,
+    ].join('\n')
+  }
+
+  const events = await writer.readBuildEvents(parsed.projectDir, parsed.buildId)
+  const verification = verifyKairosBuildEventAuditChain(events)
+  if (!verification.valid) {
+    return [
+      `Audit anchor invalid for ${manifest.buildId}.`,
+      'anchor hash: valid',
+      `audit chain: invalid event=${verification.eventNumber} reason=${verification.reason}`,
+    ].join('\n')
+  }
+
+  const auditExport = buildKairosAuditExportEnvelope(
+    manifest,
+    events,
+    verification,
+  )
+  const expectedExportHash = calculateKairosAuditExportHash(auditExport)
+  if (anchor.exportHash !== expectedExportHash) {
+    return [
+      `Audit anchor invalid for ${manifest.buildId}.`,
+      'anchor hash: valid',
+      'export hash: invalid',
+      `expected: ${expectedExportHash}`,
+      `actual: ${String(anchor.exportHash)}`,
+    ].join('\n')
+  }
+
+  const signatureVerification = verifyKairosAuditExportSignature(
+    expectedExportHash,
+    anchor.auditSignature,
+  )
+  if (!signatureVerification.valid) {
+    return [
+      `Audit anchor invalid for ${manifest.buildId}.`,
+      'anchor hash: valid',
+      'export hash: valid',
+      `audit signature: invalid reason=${signatureVerification.reason}`,
+    ].join('\n')
+  }
+
+  const signatureLine =
+    signatureVerification.status === 'unsigned'
+      ? `audit signature: unsigned reason=${signatureVerification.reason}`
+      : `audit signature: valid key=${signatureVerification.keyId} algorithm=${signatureVerification.algorithm}`
+
+  return [
+    `Audit anchor valid for ${manifest.buildId}.`,
+    'anchor hash: valid',
+    'export hash: valid',
+    signatureLine,
   ].join('\n')
 }
 
@@ -2393,6 +2501,8 @@ export async function runKairosCommand(args: string): Promise<string> {
       return handleBuildAuditExportVerify(rest)
     case 'build-audit-anchor':
       return handleBuildAuditAnchor(rest)
+    case 'build-audit-anchor-verify':
+      return handleBuildAuditAnchorVerify(rest)
     case 'pause':
       return handlePause()
     case 'resume':
@@ -2434,7 +2544,7 @@ const kairos = {
   name: 'kairos',
   description: 'Inspect and control the KAIROS background daemon',
   argumentHint:
-    'status|list|opt-in|opt-out|demo|build|builds|build-show|build-events|build-slices|build-select|build-select-next|build-select-next-prompt|build-next|build-complete-slice|build-acceptance|build-questions|build-answer|build-redact-answer|build-unanswered|build-requirements|build-summary|build-progress|build-readiness|build-assumptions|build-risks|build-goals|build-non-goals|build-users|build-problem|build-traceability|build-prd-outline|build-audit-verify|build-audit-export|build-audit-export-verify|build-audit-anchor|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
+    'status|list|opt-in|opt-out|demo|build|builds|build-show|build-events|build-slices|build-select|build-select-next|build-select-next-prompt|build-next|build-complete-slice|build-acceptance|build-questions|build-answer|build-redact-answer|build-unanswered|build-requirements|build-summary|build-progress|build-readiness|build-assumptions|build-risks|build-goals|build-non-goals|build-users|build-problem|build-traceability|build-prd-outline|build-audit-verify|build-audit-export|build-audit-export-verify|build-audit-anchor|build-audit-anchor-verify|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
   load: () => import('./kairos-ui.js'),
 } satisfies Command
 
