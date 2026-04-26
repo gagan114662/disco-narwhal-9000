@@ -1547,6 +1547,9 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
     calculateKairosAuditExportHash(archiveHashMaterial)
   const archiveHashValid = archive.archiveHash === expectedArchiveHash
   const builds = readArrayField(archive, 'builds')
+  if (archive.buildCount !== builds.length) {
+    return `Tenant archive invalid: buildCount mismatch ${String(archive.buildCount ?? 'missing')} != ${builds.length}.`
+  }
   const projectDirHash =
     typeof archive.projectDirHash === 'string' ? archive.projectDirHash : null
   const version = archive.version
