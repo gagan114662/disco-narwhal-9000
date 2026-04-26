@@ -31,13 +31,25 @@ function sortForAuditHash(value: unknown): unknown {
   return value
 }
 
-function redactBuildEventAuditPayload(
-  event: KairosBuildEvent,
-): KairosBuildEvent | (Omit<KairosBuildEvent, 'answer'> & { answer: string }) {
-  if (event.kind !== 'clarifying_question_answered') return event
-  return {
-    ...event,
-    answer: '[redacted]',
+function redactBuildEventAuditPayload(event: KairosBuildEvent): KairosBuildEvent {
+  switch (event.kind) {
+    case 'clarifying_question_answered':
+      return {
+        ...event,
+        answer: '[redacted]',
+      }
+    case 'spec_written':
+      return {
+        ...event,
+        specPath: '[redacted]',
+      }
+    case 'build_result_written':
+      return {
+        ...event,
+        resultPath: '[redacted]',
+      }
+    default:
+      return event
   }
 }
 

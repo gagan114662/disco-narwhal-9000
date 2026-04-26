@@ -31,4 +31,51 @@ describe('KAIROS build audit hashing', () => {
       }),
     )
   })
+
+  test('redacts filesystem paths from audit hash material', () => {
+    const specEvent: KairosBuildEvent = {
+      version: 1,
+      kind: 'spec_written',
+      buildId: 'build-123',
+      tenantId: 'tenant-local',
+      t: '2026-04-25T20:12:00.000Z',
+      specPath: '/Users/alice/customer-one/.claude/kairos/builds/build-123/spec.md',
+      auditPrevHash: null,
+    }
+    const resultEvent: KairosBuildEvent = {
+      version: 1,
+      kind: 'build_result_written',
+      buildId: 'build-123',
+      tenantId: 'tenant-local',
+      t: '2026-04-25T20:13:00.000Z',
+      status: 'succeeded',
+      resultPath:
+        '/Users/alice/customer-one/.claude/kairos/builds/build-123/result.json',
+      auditPrevHash: 'previous-hash',
+    }
+
+    expect(calculateKairosBuildEventAuditHash(specEvent)).toBe(
+      calculateKairosBuildEventAuditHash({
+        ...specEvent,
+        specPath:
+          '/Users/bob/customer-two/.claude/kairos/builds/build-123/spec.md',
+      }),
+    )
+    expect(calculateKairosBuildEventAuditHash(resultEvent)).toBe(
+      calculateKairosBuildEventAuditHash({
+        ...resultEvent,
+        resultPath:
+          '/Users/bob/customer-two/.claude/kairos/builds/build-123/result.json',
+      }),
+    )
+    expect(calculateKairosBuildEventAuditHash(specEvent)).not.toBe(
+      calculateKairosBuildEventAuditHash({
+        ...specEvent,
+        kind: 'build_result_written',
+        status: 'succeeded',
+        resultPath:
+          '/Users/alice/customer-one/.claude/kairos/builds/build-123/result.json',
+      }),
+    )
+  })
 })

@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { createHash } from 'crypto'
 import { mkdtempSync, readFileSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
+import { calculateKairosBuildEventAuditHash } from './buildAudit.js'
 import { createStateWriter } from './stateWriter.js'
 
 const TEMP_DIRS: string[] = []
@@ -22,27 +22,6 @@ function makeTempDir(prefix: string): string {
 
 function readJson(path: string): unknown {
   return JSON.parse(readFileSync(path, 'utf8'))
-}
-
-function sortForHash(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(sortForHash)
-  }
-  if (value !== null && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value)
-        .filter(([, entryValue]) => entryValue !== undefined)
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([key, entryValue]) => [key, sortForHash(entryValue)]),
-    )
-  }
-  return value
-}
-
-function sha256Json(value: unknown): string {
-  return createHash('sha256')
-    .update(JSON.stringify(sortForHash(value)))
-    .digest('hex')
 }
 
 describe('Kairos state writer build state', () => {
@@ -117,7 +96,7 @@ describe('Kairos state writer build state', () => {
       auditPrevHash: null,
     })
     expect(events[0]?.auditHash).toBe(
-      sha256Json({
+      calculateKairosBuildEventAuditHash({
         version: 1,
         kind: 'build_created',
         buildId,
@@ -163,7 +142,7 @@ describe('Kairos state writer build state', () => {
     expect(events).toHaveLength(2)
     expect(events[0]?.auditPrevHash).toBeNull()
     expect(events[0]?.auditHash).toBe(
-      sha256Json({
+      calculateKairosBuildEventAuditHash({
         version: 1,
         kind: 'build_created',
         buildId,
@@ -175,7 +154,7 @@ describe('Kairos state writer build state', () => {
     )
     expect(events[1]?.auditPrevHash).toBe(events[0]?.auditHash)
     expect(events[1]?.auditHash).toBe(
-      sha256Json({
+      calculateKairosBuildEventAuditHash({
         version: 1,
         kind: 'spec_written',
         buildId,
