@@ -29,6 +29,7 @@ import {
   parseKairosBuildEvent,
   type KairosBuildEvent,
   type KairosBuildManifest,
+  type KairosBuildTraceabilitySeed,
   type KairosBuildTracerSlice,
 } from '../daemon/kairos/buildState.js'
 import type { Command } from '../types/command.js'
@@ -1000,6 +1001,20 @@ async function handleExport(rest: string[]): Promise<string> {
         updatedAt: manifest.updatedAt,
         selectedSliceId: manifest.selectedSliceId ?? null,
         completedSliceIds: manifest.completedSliceIds ?? [],
+        metadata: {
+          brief: manifest.brief,
+          problem: manifest.problem,
+          users: manifest.users ?? [],
+          goals: manifest.goals ?? [],
+          nonGoals: manifest.nonGoals ?? [],
+          functionalRequirements: manifest.functionalRequirements ?? [],
+          acceptanceChecks: manifest.acceptanceChecks ?? [],
+          clarifyingQuestions: manifest.clarifyingQuestions ?? [],
+          assumptions: manifest.assumptions ?? [],
+          risks: manifest.risks ?? [],
+          tracerSlices: manifest.tracerSlices ?? [],
+          traceabilitySeeds: manifest.traceabilitySeeds ?? [],
+        },
         spec: {
           format: 'markdown',
           body: (await writer.readBuildSpec(projectDir, manifest.buildId)) ?? '',
@@ -1084,6 +1099,37 @@ function readStringArrayField(
   return Array.isArray(field)
     ? field.filter((item): item is string => typeof item === 'string')
     : []
+}
+
+function readTracerSlicesField(
+  value: Record<string, unknown>,
+): KairosBuildTracerSlice[] {
+  return readArrayField(value, 'tracerSlices')
+    .map(slice => ({
+      id: readStringField(slice, 'id'),
+      title: readStringField(slice, 'title'),
+      testFirst: readStringField(slice, 'testFirst'),
+      implement: readStringField(slice, 'implement'),
+    }))
+    .filter(
+      (slice): slice is KairosBuildTracerSlice =>
+        Boolean(slice.id && slice.title && slice.testFirst && slice.implement),
+    )
+}
+
+function readTraceabilitySeedsField(
+  value: Record<string, unknown>,
+): KairosBuildTraceabilitySeed[] {
+  return readArrayField(value, 'traceabilitySeeds')
+    .map(seed => ({
+      id: readStringField(seed, 'id'),
+      source: readStringField(seed, 'source'),
+      text: readStringField(seed, 'text'),
+    }))
+    .filter(
+      (seed): seed is KairosBuildTraceabilitySeed =>
+        Boolean(seed.id && seed.source && seed.text),
+    )
 }
 
 function readKairosBuildStatus(value: unknown): KairosBuildManifest['status'] {
@@ -1225,6 +1271,7 @@ async function handleImport(rest: string[]): Promise<string> {
     const tenantId = readStringField(build, 'tenantId', 'local')
     const spec = readRecordField(build, 'spec')
     const restore = readRecordField(build, 'restore')
+    const metadata = readRecordField(build, 'metadata') ?? {}
     const events = restore ? readArrayField(restore, 'events') : []
     const selectedSliceId = readStringField(build, 'selectedSliceId')
     const manifest: KairosBuildManifest = {
@@ -1233,6 +1280,21 @@ async function handleImport(rest: string[]): Promise<string> {
       projectDir,
       tenantId,
       title: readStringField(build, 'title', buildId),
+      brief: readStringField(metadata, 'brief') || undefined,
+      problem: readStringField(metadata, 'problem') || undefined,
+      users: readStringArrayField(metadata, 'users'),
+      goals: readStringArrayField(metadata, 'goals'),
+      nonGoals: readStringArrayField(metadata, 'nonGoals'),
+      functionalRequirements: readStringArrayField(
+        metadata,
+        'functionalRequirements',
+      ),
+      acceptanceChecks: readStringArrayField(metadata, 'acceptanceChecks'),
+      clarifyingQuestions: readStringArrayField(metadata, 'clarifyingQuestions'),
+      assumptions: readStringArrayField(metadata, 'assumptions'),
+      risks: readStringArrayField(metadata, 'risks'),
+      tracerSlices: readTracerSlicesField(metadata),
+      traceabilitySeeds: readTraceabilitySeedsField(metadata),
       status: readKairosBuildStatus(build.status),
       createdAt: readStringField(build, 'createdAt', new Date(0).toISOString()),
       updatedAt: readStringField(build, 'updatedAt', new Date(0).toISOString()),

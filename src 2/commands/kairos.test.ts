@@ -1119,6 +1119,42 @@ describe('/kairos command', () => {
     ])
   })
 
+  test('import tenant restores structured PRD metadata', async () => {
+    const sourceProjectDir = makeProjectDir()
+    const targetProjectDir = makeProjectDir()
+    const exportPath = join(makeTempConfigDir(), 'tenant-import-metadata.json')
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'tenant-import-metadata-build',
+      now: () => new Date('2026-04-25T20:12:00.000Z'),
+    })
+    await runKairosCommand(`build ${sourceProjectDir} metadata restore`)
+    writeFileSync(
+      exportPath,
+      await runKairosCommand(`export tenant ${sourceProjectDir}`),
+    )
+
+    await runKairosCommand(`import tenant ${exportPath} ${targetProjectDir}`)
+    const requirementsOut = await runKairosCommand(
+      `build-requirements ${targetProjectDir} tenant-import-metadata-build`,
+    )
+    const slicesOut = await runKairosCommand(
+      `build-slices ${targetProjectDir} tenant-import-metadata-build`,
+    )
+    const traceabilityOut = await runKairosCommand(
+      `build-traceability ${targetProjectDir} tenant-import-metadata-build`,
+    )
+
+    expect(requirementsOut).toContain(
+      'Functional requirements for tenant-import-metadata-build:',
+    )
+    expect(requirementsOut).toContain('- Intake form or record creation flow.')
+    expect(slicesOut).toContain('Slices for tenant-import-metadata-build:')
+    expect(slicesOut).toContain('TB-1')
+    expect(slicesOut).toContain('test:')
+    expect(traceabilityOut).toContain('Traceability seeds for tenant-import-metadata-build:')
+    expect(traceabilityOut).toContain('BRIEF-1')
+  })
+
   test('build-audit-export-verify validates a signed audit export file', async () => {
     const projectDir = makeProjectDir()
     const exportPath = join(makeTempConfigDir(), 'audit-export.json')
