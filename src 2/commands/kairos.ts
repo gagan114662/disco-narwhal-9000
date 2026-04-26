@@ -1653,6 +1653,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
       metadata.clarifyingQuestions,
     )
     const assumptionsShapeValid = isStringArray(metadata.assumptions)
+    const risksShapeValid = isStringArray(metadata.risks)
     const knowledgeGraph = readRecordField(build, 'knowledgeGraph')
     const auditHashMaterial = {
       version,
@@ -1724,7 +1725,8 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
       goalsShapeValid &&
       nonGoalsShapeValid &&
       clarifyingQuestionsShapeValid &&
-      assumptionsShapeValid
+      assumptionsShapeValid &&
+      risksShapeValid
     const restoreStatus = restoreValid ? '' : ' restore=invalid'
     const eventsStatus = eventSummaryValid ? '' : ' events=invalid'
     const appsStatus = appsValid ? '' : ' apps=invalid'
