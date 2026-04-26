@@ -1867,6 +1867,26 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
     return 'Tenant archive invalid: builds contains non-object entries.'
   }
   const builds = readArrayField(archive, 'builds')
+  const expectedBuildEnvelopeKeys = [
+    'buildId',
+    'tenantId',
+    'title',
+    'status',
+    'createdAt',
+    'updatedAt',
+    'selectedSliceId',
+    'completedSliceIds',
+    'metadata',
+    'spec',
+    'audit',
+    'restore',
+    'generatedApps',
+    'knowledgeGraph',
+    'evalCases',
+  ]
+  if (builds.some(build => !hasExactKeys(build, expectedBuildEnvelopeKeys))) {
+    return 'Tenant archive invalid: unexpected build envelope fields.'
+  }
   if (builds.some(build => !isNonEmptyString(build.buildId))) {
     return 'Tenant archive invalid: buildId must be a non-empty string.'
   }

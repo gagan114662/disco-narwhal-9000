@@ -4482,6 +4482,49 @@ describe('/kairos command', () => {
     ).toBe(false)
   })
 
+  test('import tenant rejects unexpected build envelope fields', async () => {
+    const sourceProjectDir = makeProjectDir()
+    const targetProjectDir = makeProjectDir()
+    const exportPath = join(
+      makeTempConfigDir(),
+      'tenant-import-extra-build-field-tampered.json',
+    )
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'tenant-import-extra-build-field-tampered-build',
+      now: () => new Date('2026-04-25T20:23:00.000Z'),
+    })
+    await runKairosCommand(`build ${sourceProjectDir} tenant build envelope extra`)
+    const tenantExport = JSON.parse(
+      await runKairosCommand(`export tenant ${sourceProjectDir}`),
+    ) as {
+      archiveHash: string
+      builds: Array<Record<string, unknown>>
+    }
+    tenantExport.builds[0]!.unexpectedField =
+      'not part of a portable archive build'
+    const { archiveHash: _archiveHash, ...archiveHashMaterial } = tenantExport
+    tenantExport.archiveHash = calculateKairosAuditExportHash(
+      archiveHashMaterial,
+    )
+    writeFileSync(exportPath, JSON.stringify(tenantExport, null, 2))
+
+    const importOut = await runKairosCommand(
+      `import tenant ${exportPath} ${targetProjectDir}`,
+    )
+
+    expect(importOut).toBe(
+      'Tenant archive invalid: unexpected build envelope fields.',
+    )
+    expect(
+      existsSync(
+        getProjectKairosBuildManifestPath(
+          targetProjectDir,
+          'tenant-import-extra-build-field-tampered-build',
+        ),
+      ),
+    ).toBe(false)
+  })
+
   test('import tenant rejects mismatched archive tenant ids', async () => {
     const sourceProjectDir = makeProjectDir()
     const targetProjectDir = makeProjectDir()
