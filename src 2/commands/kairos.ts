@@ -1666,7 +1666,18 @@ function verifyKairosGeneratedAppArchives(
   buildId: string,
   generatedApps: Record<string, unknown>[],
 ): boolean {
+  const expectedGeneratedAppKeys = [
+    'buildId',
+    'status',
+    'completedAt',
+    'summary',
+    'appDirHash',
+    'files',
+  ]
   return generatedApps.every(generatedApp => {
+    if (!hasExactKeys(generatedApp, expectedGeneratedAppKeys)) {
+      return false
+    }
     if (readStringField(generatedApp, 'buildId') !== buildId) {
       return false
     }
