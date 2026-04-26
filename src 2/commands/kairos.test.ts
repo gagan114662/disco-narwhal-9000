@@ -1248,7 +1248,8 @@ describe('/kairos command', () => {
       'unanswered clarifying questions: 3',
     ])
     expect(lines[6]?.startsWith('last event: slice_selected at ')).toBe(true)
-    expect(lines.slice(7)).toEqual([
+    expect(lines[7]).toMatch(/^audit: valid events=4 last=[a-f0-9]{64}$/)
+    expect(lines.slice(8)).toEqual([
       'next command: /kairos build-next ' + projectDir + ' readiness-build',
       'questions command: /kairos build-unanswered ' +
         projectDir +
@@ -1281,7 +1282,8 @@ describe('/kairos command', () => {
       'unanswered clarifying questions: 4',
     ])
     expect(lines[6]?.startsWith('last event: spec_written at ')).toBe(true)
-    expect(lines.slice(7)).toEqual([
+    expect(lines[7]).toMatch(/^audit: valid events=2 last=[a-f0-9]{64}$/)
+    expect(lines.slice(8)).toEqual([
       'next command: /kairos build-select-next-prompt ' +
         projectDir +
         ' readiness-build',
@@ -1336,9 +1338,71 @@ describe('/kairos command', () => {
       'unanswered clarifying questions: 0',
     ])
     expect(lines[6]?.startsWith('last event: slice_completed at ')).toBe(true)
-    expect(lines.slice(7)).toEqual([
+    expect(lines[7]).toMatch(/^audit: valid events=12 last=[a-f0-9]{64}$/)
+    expect(lines.slice(8)).toEqual([
       'next command: —',
       'blockers: none',
+    ])
+  })
+
+  test('build-readiness blocks when the audit chain is invalid', async () => {
+    const projectDir = makeProjectDir()
+    const zeroHash =
+      '0000000000000000000000000000000000000000000000000000000000000000'
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'readiness-audit-build',
+      now: () => new Date('2026-04-25T20:50:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+    for (const [questionNumber, answer] of [
+      [1, 'employee manager and HR approver'],
+      [2, 'dates reason and sensitive notes'],
+      [3, 'email notifications only'],
+      [4, 'retain records for seven years'],
+    ] as const) {
+      await runKairosCommand(
+        `build-answer ${projectDir} readiness-audit-build ${questionNumber} ${answer}`,
+      )
+    }
+    for (const sliceId of ['TB-1', 'TB-2', 'TB-3']) {
+      await runKairosCommand(
+        `build-select ${projectDir} readiness-audit-build ${sliceId}`,
+      )
+      await runKairosCommand(
+        `build-complete-slice ${projectDir} readiness-audit-build`,
+      )
+    }
+    const eventsPath = getProjectKairosBuildEventsPath(
+      projectDir,
+      'readiness-audit-build',
+    )
+    writeFileSync(
+      eventsPath,
+      readFileSync(eventsPath, 'utf8').replace(
+        /"auditHash":"[a-f0-9]{64}"/,
+        `"auditHash":"${zeroHash}"`,
+      ),
+      'utf8',
+    )
+
+    const out = await runKairosCommand(
+      `build-readiness ${projectDir} readiness-audit-build`,
+    )
+    const lines = out.split('\n')
+    expect(lines.slice(0, 6)).toEqual([
+      'Build readiness for readiness-audit-build:',
+      'readiness: blocked',
+      'selected slice: TB-3 Validation and role guardrails',
+      'completed slices: 3/3',
+      'clarifying questions answered: 4/4',
+      'unanswered clarifying questions: 0',
+    ])
+    expect(lines[6]?.startsWith('last event: slice_completed at ')).toBe(true)
+    expect(lines.slice(7)).toEqual([
+      'audit: invalid event=1 reason=hash mismatch',
+      'next command: —',
+      'blockers:',
+      '- Build audit chain is invalid at event 1: hash mismatch.',
     ])
   })
 

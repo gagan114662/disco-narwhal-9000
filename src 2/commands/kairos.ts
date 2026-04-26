@@ -1153,6 +1153,7 @@ async function handleBuildReadiness(rest: string[]): Promise<string> {
   }
 
   const events = await writer.readBuildEvents(parsed.projectDir, parsed.buildId)
+  const auditVerification = verifyKairosBuildEventAuditChain(events)
   const latestEvent = events.at(-1)
   const latestEventLabel = latestEvent
     ? `${latestEvent.kind} at ${latestEvent.t}`
@@ -1181,11 +1182,17 @@ async function handleBuildReadiness(rest: string[]): Promise<string> {
   }
   const questionReadiness = countAnsweredClarifyingQuestions(manifest)
   const unansweredQuestions = renderUnansweredClarifyingQuestions(manifest)
+  const auditBlockers = auditVerification.valid
+    ? []
+    : [
+        `Build audit chain is invalid at event ${auditVerification.eventNumber}: ${auditVerification.reason}.`,
+      ]
   const blockers = [
     ...(hasIncompleteSlice && !selectedSliceIsIncomplete
       ? ['Select an incomplete tracer slice before running build-next.']
       : []),
     ...unansweredQuestions,
+    ...auditBlockers,
   ]
   const blockerLines =
     blockers.length > 0
@@ -1207,6 +1214,7 @@ async function handleBuildReadiness(rest: string[]): Promise<string> {
     `clarifying questions answered: ${questionReadiness.answered}/${questionReadiness.total}`,
     `unanswered clarifying questions: ${unansweredQuestions.length}`,
     `last event: ${latestEventLabel}`,
+    formatBuildAuditSummary(events),
     `next command: ${nextCommand}`,
     ...questionCommandLines,
     ...blockerLines,
