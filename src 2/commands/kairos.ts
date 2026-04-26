@@ -1931,6 +1931,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
     'tracerSlices',
     'traceabilitySeeds',
   ]
+  const expectedBuildSpecKeys = ['format', 'body']
   const buildLines = builds.map(build => {
     const buildId =
       typeof build.buildId === 'string' ? build.buildId : 'unknown-build'
@@ -1981,6 +1982,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
     const updatedAtShapeValid = isNonEmptyString(build.updatedAt)
     const specShapeValid =
       spec !== null &&
+      hasExactKeys(spec, expectedBuildSpecKeys) &&
       spec.format === 'markdown' &&
       isNonEmptyString(spec.body)
     const briefShapeValid = isOptionalNonEmptyString(metadata.brief)
