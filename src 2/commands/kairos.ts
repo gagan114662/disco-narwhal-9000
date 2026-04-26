@@ -1312,6 +1312,12 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every(item => typeof item === 'string')
 }
 
+function isOptionalStringOrNull(
+  value: unknown,
+): value is string | null | undefined {
+  return value === undefined || value === null || typeof value === 'string'
+}
+
 function readStringField(
   value: Record<string, unknown>,
   key: string,
@@ -1646,6 +1652,9 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
     const tracerSlicesShapeValid = isRecordArray(metadata.tracerSlices)
     const traceabilitySeedsShapeValid = isRecordArray(metadata.traceabilitySeeds)
     const completedSliceIdsShapeValid = isStringArray(build.completedSliceIds)
+    const selectedSliceIdShapeValid = isOptionalStringOrNull(
+      build.selectedSliceId,
+    )
     const usersShapeValid = isStringArray(metadata.users)
     const goalsShapeValid = isStringArray(metadata.goals)
     const nonGoalsShapeValid = isStringArray(metadata.nonGoals)
@@ -1721,6 +1730,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
       )
     const manifestValid =
       completedSliceIdsShapeValid &&
+      selectedSliceIdShapeValid &&
       usersShapeValid &&
       goalsShapeValid &&
       nonGoalsShapeValid &&
