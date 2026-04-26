@@ -1133,6 +1133,33 @@ describe('/kairos command', () => {
     expect(readFileSync(exportPath, 'utf8')).not.toContain(appDir)
   })
 
+  test('export tenant derives portable eval cases from acceptance checks', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'tenant-eval-export-build',
+      now: () => new Date('2026-04-25T20:12:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} tenant eval export`)
+
+    const tenantExport = JSON.parse(
+      await runKairosCommand(`export tenant ${projectDir}`),
+    ) as {
+      builds: Array<{
+        evalCases: Array<{
+          id: string
+          source: string
+          assertion: string
+        }>
+      }>
+    }
+
+    expect(tenantExport.builds[0]?.evalCases[0]).toEqual({
+      id: 'tenant-eval-export-build-AC-1',
+      source: 'acceptance_check',
+      assertion: 'A user can create a valid record from the primary form.',
+    })
+  })
+
   test('import tenant restores a portable archive into a fresh project', async () => {
     const sourceProjectDir = makeProjectDir()
     const targetProjectDir = makeProjectDir()

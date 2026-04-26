@@ -884,6 +884,16 @@ function buildKairosTenantRestoreEvent(event: KairosBuildEvent): KairosBuildEven
   }
 }
 
+function buildKairosEvalCaseArchives(
+  manifest: KairosBuildManifest,
+): Record<string, unknown>[] {
+  return (manifest.acceptanceChecks ?? []).map((assertion, index) => ({
+    id: `${manifest.buildId}-AC-${index + 1}`,
+    source: 'acceptance_check',
+    assertion,
+  }))
+}
+
 type KairosTenantArchiveFile = {
   relativePath: string
   contentBase64: string
@@ -1207,7 +1217,7 @@ async function handleExport(rest: string[]): Promise<string> {
           nodes: [],
           edges: [],
         },
-        evalCases: [],
+        evalCases: buildKairosEvalCaseArchives(manifest),
       }
     }),
   )
