@@ -1337,13 +1337,24 @@ function isTracerSliceArray(
 function isTraceabilitySeedArray(
   value: unknown,
 ): value is Array<Record<string, unknown>> {
+  if (!isRecordArray(value)) {
+    return false
+  }
+  const seedIds = new Set<string>()
   return (
-    isRecordArray(value) &&
     value.every(
-      seed =>
-        isNonEmptyString(seed.id) &&
-        isNonEmptyString(seed.source) &&
-        isNonEmptyString(seed.text),
+      seed => {
+        if (
+          !isNonEmptyString(seed.id) ||
+          !isNonEmptyString(seed.source) ||
+          !isNonEmptyString(seed.text) ||
+          seedIds.has(seed.id)
+        ) {
+          return false
+        }
+        seedIds.add(seed.id)
+        return true
+      },
     )
   )
 }

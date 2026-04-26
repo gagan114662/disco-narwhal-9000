@@ -2599,6 +2599,74 @@ describe('/kairos command', () => {
     ).toBe(false)
   })
 
+  test('import tenant rejects duplicate traceability seed ids', async () => {
+    const sourceProjectDir = makeProjectDir()
+    const targetProjectDir = makeProjectDir()
+    const exportPath = join(makeTempConfigDir(), 'tenant-import-duplicate-traceability-seed-tampered.json')
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'tenant-import-duplicate-traceability-seed-tampered-build',
+      now: () => new Date('2026-04-25T20:46:00.000Z'),
+    })
+    await runKairosCommand(`build ${sourceProjectDir} tenant duplicate seed tamper`)
+    const tenantExport = JSON.parse(
+      await runKairosCommand(`export tenant ${sourceProjectDir}`),
+    ) as {
+      archiveHash: string
+      builds: Array<{
+        knowledgeGraph: {
+          nodes: Array<{
+            id: string
+            kind: string
+            label: string
+            source?: string
+          }>
+        }
+        metadata: {
+          traceabilitySeeds: Array<{
+            id: string
+            source: string
+            text: string
+          }>
+        }
+      }>
+    }
+    const seed = tenantExport.builds[0]!.metadata.traceabilitySeeds[0]!
+    const seedNodeIndex = tenantExport.builds[0]!.knowledgeGraph.nodes.findIndex(
+      node => node.kind === 'traceability_seed' && node.id === seed.id,
+    )
+    tenantExport.builds[0]!.metadata.traceabilitySeeds.push({ ...seed })
+    tenantExport.builds[0]!.knowledgeGraph.nodes.splice(seedNodeIndex + 1, 0, {
+      id: seed.id,
+      kind: 'traceability_seed',
+      label: seed.text,
+      source: seed.source,
+    })
+    const { archiveHash: _archiveHash, ...archiveHashMaterial } = tenantExport
+    tenantExport.archiveHash = calculateKairosAuditExportHash(
+      archiveHashMaterial,
+    )
+    writeFileSync(exportPath, JSON.stringify(tenantExport, null, 2))
+
+    const importOut = await runKairosCommand(
+      `import tenant ${exportPath} ${targetProjectDir}`,
+    )
+
+    expect(importOut.split('\n')).toEqual([
+      'Tenant archive invalid.',
+      'archive hash: valid',
+      'builds: 1',
+      '- tenant-import-duplicate-traceability-seed-tampered-build: audit=valid signature=unsigned merkle=valid graph=invalid',
+    ])
+    expect(
+      existsSync(
+        getProjectKairosBuildManifestPath(
+          targetProjectDir,
+          'tenant-import-duplicate-traceability-seed-tampered-build',
+        ),
+      ),
+    ).toBe(false)
+  })
+
   test('import tenant rejects non-string completed slice entries', async () => {
     const sourceProjectDir = makeProjectDir()
     const targetProjectDir = makeProjectDir()
