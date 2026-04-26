@@ -16,7 +16,10 @@ import {
   createDraftBuild,
   type CreateDraftBuildDeps,
 } from '../daemon/kairos/draftBuild.js'
-import { verifyKairosBuildEventAuditChain } from '../daemon/kairos/buildAudit.js'
+import {
+  calculateKairosAuditExportHash,
+  verifyKairosBuildEventAuditChain,
+} from '../daemon/kairos/buildAudit.js'
 import {
   KAIROS_BUILD_STATE_VERSION,
   type KairosBuildEvent,
@@ -738,30 +741,34 @@ async function handleBuildAuditExport(rest: string[]): Promise<string> {
 
   const events = await writer.readBuildEvents(parsed.projectDir, parsed.buildId)
   const verification = verifyKairosBuildEventAuditChain(events)
+  const auditExport = {
+    version: KAIROS_BUILD_STATE_VERSION,
+    buildId: manifest.buildId,
+    projectDir: manifest.projectDir,
+    tenantId: manifest.tenantId,
+    valid: verification.valid,
+    eventCount: events.length,
+    lastHash: verification.valid ? verification.lastHash : null,
+    failure: verification.valid
+      ? undefined
+      : {
+          eventNumber: verification.eventNumber,
+          reason: verification.reason,
+          expected: verification.expected ?? null,
+          actual: verification.actual ?? null,
+        },
+    events: events.map((event, index) => ({
+      eventNumber: index + 1,
+      kind: event.kind,
+      t: event.t,
+      auditPrevHash: event.auditPrevHash ?? null,
+      auditHash: event.auditHash ?? null,
+    })),
+  }
   return jsonStringify(
     {
-      version: KAIROS_BUILD_STATE_VERSION,
-      buildId: manifest.buildId,
-      projectDir: manifest.projectDir,
-      tenantId: manifest.tenantId,
-      valid: verification.valid,
-      eventCount: events.length,
-      lastHash: verification.valid ? verification.lastHash : null,
-      failure: verification.valid
-        ? undefined
-        : {
-            eventNumber: verification.eventNumber,
-            reason: verification.reason,
-            expected: verification.expected ?? null,
-            actual: verification.actual ?? null,
-          },
-      events: events.map((event, index) => ({
-        eventNumber: index + 1,
-        kind: event.kind,
-        t: event.t,
-        auditPrevHash: event.auditPrevHash ?? null,
-        auditHash: event.auditHash ?? null,
-      })),
+      ...auditExport,
+      exportHash: calculateKairosAuditExportHash(auditExport),
     },
     null,
     2,

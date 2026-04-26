@@ -40,6 +40,12 @@ export function calculateKairosBuildEventAuditHash(
     .digest('hex')
 }
 
+export function calculateKairosAuditExportHash(value: unknown): string {
+  return createHash('sha256')
+    .update(jsonStringify(sortForAuditHash(value)))
+    .digest('hex')
+}
+
 export function verifyKairosBuildEventAuditChain(
   events: KairosBuildEvent[],
 ): KairosBuildAuditVerification {
