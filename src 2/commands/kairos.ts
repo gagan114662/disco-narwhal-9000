@@ -1536,6 +1536,9 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
   if (archive.exportType !== 'kairos_tenant_portable_archive') {
     return `Tenant archive invalid: unsupported exportType ${String(archive.exportType ?? 'missing')}.`
   }
+  if (archive.version !== KAIROS_BUILD_STATE_VERSION) {
+    return `Tenant archive invalid: unsupported version ${String(archive.version ?? 'missing')}.`
+  }
   if (typeof archive.archiveHash !== 'string') {
     return 'Tenant archive invalid: missing archiveHash.'
   }
@@ -1546,10 +1549,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
   const builds = readArrayField(archive, 'builds')
   const projectDirHash =
     typeof archive.projectDirHash === 'string' ? archive.projectDirHash : null
-  const version =
-    typeof archive.version === 'number'
-      ? archive.version
-      : KAIROS_BUILD_STATE_VERSION
+  const version = archive.version
   const buildLines = builds.map(build => {
     const buildId =
       typeof build.buildId === 'string' ? build.buildId : 'unknown-build'
