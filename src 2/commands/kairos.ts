@@ -1337,6 +1337,20 @@ function isTraceabilitySeedArray(
   )
 }
 
+function isSelectedSliceIdValid(
+  selectedSliceId: unknown,
+  tracerSlices: unknown,
+): boolean {
+  if (selectedSliceId === undefined || selectedSliceId === null) {
+    return true
+  }
+  return (
+    isNonEmptyString(selectedSliceId) &&
+    isTracerSliceArray(tracerSlices) &&
+    tracerSlices.some(slice => slice.id === selectedSliceId)
+  )
+}
+
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every(item => typeof item === 'string')
 }
@@ -1347,12 +1361,6 @@ function isNonEmptyStringArray(value: unknown): value is string[] {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0
-}
-
-function isOptionalStringOrNull(
-  value: unknown,
-): value is string | null | undefined {
-  return value === undefined || value === null || isNonEmptyString(value)
 }
 
 function isOptionalString(value: unknown): value is string | undefined {
@@ -1706,8 +1714,9 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
     const completedSliceIdsShapeValid = isNonEmptyStringArray(
       build.completedSliceIds,
     )
-    const selectedSliceIdShapeValid = isOptionalStringOrNull(
+    const selectedSliceIdShapeValid = isSelectedSliceIdValid(
       build.selectedSliceId,
+      metadata.tracerSlices,
     )
     const statusShapeValid = isKairosBuildStatus(build.status)
     const titleShapeValid = isNonEmptyString(build.title)
