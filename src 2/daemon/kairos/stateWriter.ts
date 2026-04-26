@@ -313,6 +313,13 @@ export async function createStateWriter() {
     ): Promise<void> {
       const parsed = parseKairosBuildEvent(event)
       assertBuildIdMatchesPath(parsed.buildId, buildId)
+      const eventForStorage =
+        parsed.kind === 'build_failed'
+          ? {
+              ...parsed,
+              errorMessage: '[redacted]',
+            }
+          : parsed
       const path = getProjectKairosBuildEventsPath(projectDir, buildId)
       await enqueuePathWrite(path, async () => {
         let raw = ''
@@ -322,7 +329,7 @@ export async function createStateWriter() {
           raw = ''
         }
         const eventWithPrevHash = {
-          ...parsed,
+          ...eventForStorage,
           auditPrevHash: readLastBuildEventHash(raw),
           auditHash: undefined,
         }

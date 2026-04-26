@@ -658,7 +658,7 @@ function formatBuildEvent(event: KairosBuildEvent): string {
     case 'build_result_written':
       return `${event.t} build_result_written status=${event.status} result=[redacted]${auditSuffix}`
     case 'build_failed':
-      return `${event.t} build_failed error=${event.errorMessage}${auditSuffix}`
+      return `${event.t} build_failed error=[redacted]${auditSuffix}`
   }
 }
 

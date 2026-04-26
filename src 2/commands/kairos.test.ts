@@ -473,6 +473,15 @@ describe('/kairos command', () => {
       status: 'succeeded',
       resultPath: getProjectKairosBuildResultPath(projectDir, buildId),
     })
+    await writer.appendBuildEvent(projectDir, buildId, {
+      version: 1,
+      kind: 'build_failed',
+      buildId,
+      tenantId: 'local',
+      t: '2026-04-25T18:49:00.000Z',
+      errorMessage:
+        'failed reading /Users/alice/customer-one/secrets.txt for jane@example.com',
+    })
 
     const out = await runKairosCommand(
       `build-events ${projectDir} ${buildId} 10`,
@@ -485,9 +494,20 @@ describe('/kairos command', () => {
     expect(out).toContain(
       'build_result_written status=succeeded result=[redacted]',
     )
+    expect(out).toContain('build_failed error=[redacted]')
     expect(out).not.toContain(getProjectKairosBuildSpecPath(projectDir, buildId))
     expect(out).not.toContain(getProjectKairosBuildResultPath(projectDir, buildId))
     expect(out).not.toContain('ssn 123-45-6789')
+    expect(out).not.toContain('/Users/alice/customer-one/secrets.txt')
+    expect(out).not.toContain('jane@example.com')
+    const persistedEvents = readFileSync(
+      getProjectKairosBuildEventsPath(projectDir, buildId),
+      'utf8',
+    )
+    expect(persistedEvents).not.toContain(
+      '/Users/alice/customer-one/secrets.txt',
+    )
+    expect(persistedEvents).not.toContain('jane@example.com')
   })
 
   test('build-events filters persisted events by kind', async () => {

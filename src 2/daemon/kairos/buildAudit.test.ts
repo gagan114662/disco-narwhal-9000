@@ -78,4 +78,32 @@ describe('KAIROS build audit hashing', () => {
       }),
     )
   })
+
+  test('redacts build failure messages from audit hash material', () => {
+    const event: KairosBuildEvent = {
+      version: 1,
+      kind: 'build_failed',
+      buildId: 'build-123',
+      tenantId: 'tenant-local',
+      t: '2026-04-25T20:14:00.000Z',
+      errorMessage:
+        'failed reading /Users/alice/customer-one/secrets.txt for jane@example.com',
+      auditPrevHash: 'previous-hash',
+    }
+
+    expect(calculateKairosBuildEventAuditHash(event)).toBe(
+      calculateKairosBuildEventAuditHash({
+        ...event,
+        errorMessage:
+          'failed reading /Users/bob/customer-two/secrets.txt for bob@example.com',
+      }),
+    )
+    expect(calculateKairosBuildEventAuditHash(event)).not.toBe(
+      calculateKairosBuildEventAuditHash({
+        ...event,
+        kind: 'build_created',
+        status: 'failed',
+      }),
+    )
+  })
 })

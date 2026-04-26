@@ -48,6 +48,11 @@ function redactBuildEventAuditPayload(event: KairosBuildEvent): KairosBuildEvent
         ...event,
         resultPath: '[redacted]',
       }
+    case 'build_failed':
+      return {
+        ...event,
+        errorMessage: '[redacted]',
+      }
     default:
       return event
   }
