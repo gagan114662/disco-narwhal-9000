@@ -13,6 +13,7 @@ import {
   calculateKairosBuildAuditMerkleRoot,
 } from '../daemon/kairos/buildAudit.js'
 import {
+  getProjectKairosBuildAuditAnchorPath,
   getProjectKairosBuildEventsPath,
   getProjectKairosBuildManifestPath,
   getProjectKairosBuildResultPath,
@@ -782,6 +783,58 @@ describe('/kairos command', () => {
       'export hash: valid',
       'audit signature: valid key=verify-key-1 algorithm=hmac-sha256',
     ])
+  })
+
+  test('build-audit-anchor writes a filesystem anchor for the build audit root', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'anchor-audit-build',
+      now: () => new Date('2026-04-25T20:12:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} anchor export`)
+
+    const out = await runKairosCommand(
+      `build-audit-anchor ${projectDir} anchor-audit-build`,
+    )
+    const anchorPath = getProjectKairosBuildAuditAnchorPath(
+      projectDir,
+      'anchor-audit-build',
+    )
+    const anchor = readJson(anchorPath) as {
+      version: number
+      anchorType: string
+      buildId: string
+      tenantId: string
+      anchoredAt: string
+      eventCount: number
+      lastHash: string
+      merkleRoot: string
+      exportHash: string
+      anchorHash: string
+    }
+
+    expect(out.split('\n')).toEqual([
+      'Audit anchor written for anchor-audit-build.',
+      `anchor: ${anchorPath}`,
+      `merkle root: ${anchor.merkleRoot}`,
+      `export hash: ${anchor.exportHash}`,
+    ])
+    expect(anchor).toMatchObject({
+      version: 1,
+      anchorType: 'filesystem',
+      buildId: 'anchor-audit-build',
+      tenantId: 'local',
+      anchoredAt: '2026-04-25T20:12:00.000Z',
+      eventCount: 2,
+    })
+    expect(anchor.lastHash).toMatch(/^[a-f0-9]{64}$/)
+    expect(anchor.merkleRoot).toMatch(/^[a-f0-9]{64}$/)
+    expect(anchor.anchorHash).toBe(
+      calculateKairosAuditExportHash({
+        ...anchor,
+        anchorHash: undefined,
+      }),
+    )
   })
 
   test('build-slices prints selectable tracer bullets', async () => {

@@ -98,6 +98,13 @@ export function getProjectKairosBuildEventsPath(
   return join(getProjectKairosBuildDir(projectDir, buildId), 'events.jsonl')
 }
 
+export function getProjectKairosBuildAuditAnchorPath(
+  projectDir: string,
+  buildId: string,
+): string {
+  return join(getProjectKairosBuildDir(projectDir, buildId), 'audit-anchor.json')
+}
+
 export function getProjectKairosBuildResultPath(
   projectDir: string,
   buildId: string,
