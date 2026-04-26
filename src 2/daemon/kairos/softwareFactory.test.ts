@@ -341,6 +341,31 @@ describe('software factory build', () => {
     expect(auditEvents.at(-1)?.kind).toBe('reconciliation.proposed')
   })
 
+  test('accepting reconciliation rejects proposals for a different build', async () => {
+    const configDir = makeTempDir('kairos-sf-config-')
+    const projectDir = makeTempDir('kairos-sf-project-')
+    process.env.CLAUDE_CONFIG_DIR = configDir
+
+    const result = await runSoftwareFactoryBuild({
+      projectDir,
+      brief: 'Build a contract approval app with reviewer approval.',
+      now: () => new Date('2026-04-26T12:00:00.000Z'),
+      generateId: () => 'wrong-reconcile',
+    })
+    writeFileSync(
+      join(result.appDir, 'src', 'contract-risk.ts'),
+      'export function contractRisk(): number { return 7 }\n',
+    )
+    const proposed = await proposeSoftwareFactoryReconciliation(result.buildId)
+    const proposal = readJson(proposed.proposalPath) as { buildId: string }
+    proposal.buildId = 'sf-other-build'
+    writeFileSync(proposed.proposalPath, `${JSON.stringify(proposal)}\n`)
+
+    await expect(
+      acceptSoftwareFactoryReconciliation(result.buildId),
+    ).rejects.toThrow('Cannot accept reconciliation proposal')
+  })
+
   test('accepting reconciliation revises spec, eval pack, trace markers, and audit', async () => {
     const configDir = makeTempDir('kairos-sf-config-')
     const projectDir = makeTempDir('kairos-sf-project-')
@@ -452,6 +477,32 @@ describe('software factory build', () => {
       .map(line => JSON.parse(line)) as Array<{ kind: string }>
     expect(auditEvents.at(-2)?.kind).toBe('change.proposed')
     expect(auditEvents.at(-1)?.kind).toBe('change.applied')
+  })
+
+  test('accepting change rejects unsafe generated file paths', async () => {
+    const configDir = makeTempDir('kairos-sf-config-')
+    const projectDir = makeTempDir('kairos-sf-project-')
+    process.env.CLAUDE_CONFIG_DIR = configDir
+
+    const result = await runSoftwareFactoryBuild({
+      projectDir,
+      brief: 'Build an invoice approval app with reviewer approval.',
+      now: () => new Date('2026-04-26T12:00:00.000Z'),
+      generateId: () => 'unsafe-change',
+    })
+    const proposed = await proposeSoftwareFactoryChange(
+      result.buildId,
+      'Add printable approval summary.',
+    )
+    const proposal = readJson(proposed.proposalPath) as {
+      generatedFile: { path: string }
+    }
+    proposal.generatedFile.path = '../escape.ts'
+    writeFileSync(proposed.proposalPath, `${JSON.stringify(proposal)}\n`)
+
+    await expect(acceptSoftwareFactoryChange(result.buildId)).rejects.toThrow(
+      'Unsafe Software Factory generated source path',
+    )
   })
 
   test('verification catches a tampered audit chain', async () => {

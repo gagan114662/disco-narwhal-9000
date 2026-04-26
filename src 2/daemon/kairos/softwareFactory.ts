@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'crypto'
 import { mkdir, readdir, readFile, writeFile } from 'fs/promises'
-import { dirname, join, relative } from 'path'
+import { dirname, isAbsolute, join, normalize, relative } from 'path'
 import { jsonStringify } from '../../utils/slowOperations.js'
 import {
   getKairosSoftwareFactoryBuildDir,
@@ -1063,6 +1063,33 @@ function humanizeSourceFile(file: string): string {
     .replace(/\b\w/g, match => match.toUpperCase())
 }
 
+function assertProposalBuildId(
+  proposal: { buildId: string },
+  buildId: string,
+  kind: string,
+): void {
+  if (proposal.buildId !== buildId) {
+    throw new Error(
+      `Cannot accept ${kind} proposal for ${proposal.buildId} in build ${buildId}`,
+    )
+  }
+}
+
+function assertSafeGeneratedSourcePath(path: string): string {
+  const normalized = normalize(path)
+  if (
+    path.includes('\0') ||
+    isAbsolute(path) ||
+    normalized === '..' ||
+    normalized.startsWith(`..${'/'}`) ||
+    normalized.startsWith(`..${'\\'}`) ||
+    !/^src[\\/].+\.(ts|tsx|js|jsx)$/.test(normalized)
+  ) {
+    throw new Error(`Unsafe Software Factory generated source path: ${path}`)
+  }
+  return normalized
+}
+
 export async function proposeSoftwareFactoryReconciliation(
   buildId: string,
   options: { now?: () => Date } = {},
@@ -1136,6 +1163,7 @@ export async function acceptSoftwareFactoryReconciliation(
       join(paths.buildDir, 'reconciliation-proposal.json'),
     ),
   ])
+  assertProposalBuildId(proposal, buildId, 'reconciliation')
 
   if (proposal.status !== 'proposed' || proposal.deltas.length === 0) {
     return {
@@ -1167,7 +1195,8 @@ export async function acceptSoftwareFactoryReconciliation(
   const revisedTraceability = [...manifest.traceability]
   for (const [index, delta] of proposal.deltas.entries()) {
     const clause = acceptedClauses[index] as SoftwareFactoryClause
-    const absoluteFile = join(manifest.appDir, delta.sourceFile)
+    const sourceFile = assertSafeGeneratedSourcePath(delta.sourceFile)
+    const absoluteFile = join(manifest.appDir, sourceFile)
     const source = await readFile(absoluteFile, 'utf8')
     if (!source.includes(`kairos:clause=${clause.id}`)) {
       await writeFile(
@@ -1178,7 +1207,7 @@ export async function acceptSoftwareFactoryReconciliation(
     }
     revisedTraceability.push({
       clauseId: clause.id,
-      file: delta.sourceFile,
+      file: sourceFile,
       marker: `kairos:clause=${clause.id}`,
     })
   }
@@ -1307,6 +1336,10 @@ export async function acceptSoftwareFactoryChange(
       join(paths.buildDir, 'change-proposal.json'),
     ),
   ])
+  assertProposalBuildId(proposal, buildId, 'change')
+  const generatedFilePath = assertSafeGeneratedSourcePath(
+    proposal.generatedFile.path,
+  )
 
   const alreadyAccepted = spec.clauses.some(
     clause => clause.id === proposal.proposedClause.id,
@@ -1337,18 +1370,18 @@ export async function acceptSoftwareFactoryChange(
   )
 
   await writeText(
-    join(manifest.appDir, proposal.generatedFile.path),
+    join(manifest.appDir, generatedFilePath),
     proposal.generatedFile.content,
   )
 
   const revisedManifest: SoftwareFactoryAppManifest = {
     ...manifest,
-    files: Array.from(new Set([...manifest.files, proposal.generatedFile.path])),
+    files: Array.from(new Set([...manifest.files, generatedFilePath])),
     traceability: [
       ...manifest.traceability,
       {
         clauseId: proposal.proposedClause.id,
-        file: proposal.generatedFile.path,
+        file: generatedFilePath,
         marker: `kairos:clause=${proposal.proposedClause.id}`,
       },
     ],
@@ -1362,7 +1395,7 @@ export async function acceptSoftwareFactoryChange(
       {
         clauseId: proposal.proposedClause.id,
         status: 'satisfied',
-        evidence: [join(manifest.appDir, proposal.generatedFile.path)],
+        evidence: [join(manifest.appDir, generatedFilePath)],
       },
     ],
     reviewedAt: generatedAt,
@@ -1382,7 +1415,7 @@ export async function acceptSoftwareFactoryChange(
     kind: 'change.applied',
     details: {
       acceptedClauseId: proposal.proposedClause.id,
-      generatedFilePath: proposal.generatedFile.path,
+      generatedFilePath,
       proposalPath: join(paths.buildDir, 'change-proposal.json'),
     },
   })
@@ -1391,7 +1424,7 @@ export async function acceptSoftwareFactoryChange(
     buildId,
     accepted: true,
     acceptedClauseId: proposal.proposedClause.id,
-    generatedFilePath: proposal.generatedFile.path,
+    generatedFilePath,
     specPath: paths.specPath,
     evalPackPath: paths.evalPackPath,
     projectEvalPackPath,
