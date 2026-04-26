@@ -1311,14 +1311,25 @@ function isRecordArray(value: unknown): value is Array<Record<string, unknown>> 
 function isTracerSliceArray(
   value: unknown,
 ): value is Array<Record<string, unknown>> {
+  if (!isRecordArray(value)) {
+    return false
+  }
+  const sliceIds = new Set<string>()
   return (
-    isRecordArray(value) &&
     value.every(
-      slice =>
-        isNonEmptyString(slice.id) &&
-        isNonEmptyString(slice.title) &&
-        isNonEmptyString(slice.testFirst) &&
-        isNonEmptyString(slice.implement),
+      slice => {
+        if (
+          !isNonEmptyString(slice.id) ||
+          !isNonEmptyString(slice.title) ||
+          !isNonEmptyString(slice.testFirst) ||
+          !isNonEmptyString(slice.implement) ||
+          sliceIds.has(slice.id)
+        ) {
+          return false
+        }
+        sliceIds.add(slice.id)
+        return true
+      },
     )
   )
 }
