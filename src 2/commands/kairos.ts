@@ -744,7 +744,10 @@ async function handleBuildAuditExport(rest: string[]): Promise<string> {
   const auditExport = {
     version: KAIROS_BUILD_STATE_VERSION,
     buildId: manifest.buildId,
-    projectDir: manifest.projectDir,
+    projectDirHash: calculateKairosAuditExportHash({
+      field: 'projectDir',
+      value: manifest.projectDir,
+    }),
     tenantId: manifest.tenantId,
     valid: verification.valid,
     eventCount: events.length,

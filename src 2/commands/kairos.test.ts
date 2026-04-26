@@ -566,7 +566,8 @@ describe('/kairos command', () => {
     const auditExport = JSON.parse(out) as {
       version: number
       buildId: string
-      projectDir: string
+      projectDir?: string
+      projectDirHash: string
       tenantId: string
       valid: boolean
       eventCount: number
@@ -584,11 +585,17 @@ describe('/kairos command', () => {
     expect(auditExport).toMatchObject({
       version: 1,
       buildId: 'audit-export-build',
-      projectDir,
       tenantId: 'local',
       valid: true,
       eventCount: 2,
     })
+    expect(auditExport.projectDir).toBeUndefined()
+    expect(auditExport.projectDirHash).toBe(
+      calculateKairosAuditExportHash({
+        field: 'projectDir',
+        value: projectDir,
+      }),
+    )
     expect(auditExport.lastHash).toMatch(/^[a-f0-9]{64}$/)
     expect(auditExport.exportHash).toBe(
       calculateKairosAuditExportHash({
