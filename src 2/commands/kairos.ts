@@ -1318,6 +1318,10 @@ function isOptionalStringOrNull(
   return value === undefined || value === null || typeof value === 'string'
 }
 
+function isOptionalString(value: unknown): value is string | undefined {
+  return value === undefined || typeof value === 'string'
+}
+
 function readStringField(
   value: Record<string, unknown>,
   key: string,
@@ -1664,6 +1668,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
       spec !== null &&
       spec.format === 'markdown' &&
       typeof spec.body === 'string'
+    const briefShapeValid = isOptionalString(metadata.brief)
     const usersShapeValid = isStringArray(metadata.users)
     const goalsShapeValid = isStringArray(metadata.goals)
     const nonGoalsShapeValid = isStringArray(metadata.nonGoals)
@@ -1745,6 +1750,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
       createdAtShapeValid &&
       updatedAtShapeValid &&
       specShapeValid &&
+      briefShapeValid &&
       usersShapeValid &&
       goalsShapeValid &&
       nonGoalsShapeValid &&
