@@ -731,6 +731,7 @@ async function appendAuditEvent(
   event: Omit<SoftwareFactoryAuditEvent, 'prevHash' | 'hash'>,
 ): Promise<SoftwareFactoryAuditEvent> {
   const details = {
+    ...event.details,
     prompt_sha: hashJson({
       buildId: event.buildId,
       kind: event.kind,
@@ -738,7 +739,6 @@ async function appendAuditEvent(
     }),
     model_id: 'kairos-deterministic-local-v1',
     cost_usd: 0,
-    ...event.details,
   }
   const eventWithProvenance = { ...event, details }
   const prevHash = events.at(-1)?.hash ?? null
@@ -863,6 +863,13 @@ export async function verifySoftwareFactoryBuild(
       projectSpec?.buildId === spec.buildId &&
         projectSpec.appId === spec.appId &&
         projectSpec.clauses.length === spec.clauses.length &&
+        spec.clauses.every((clause, index) => {
+          const projectClause = projectSpec?.clauses[index]
+          return (
+            projectClause?.id === clause.id &&
+            projectClause.text === clause.text
+          )
+        }) &&
         projectSpecMarkdown?.includes(spec.buildId) === true,
       projectSpec
         ? `repo-local spec at ${projectSpecPath}`

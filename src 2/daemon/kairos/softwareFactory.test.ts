@@ -101,6 +101,14 @@ describe('software factory build', () => {
       'kairos-deterministic-local-v1',
     )
     expect(auditEvents[0]?.details.cost_usd).toBe(0)
+    expect(
+      auditEvents.every(
+        event =>
+          typeof event.details.prompt_sha === 'string' &&
+          event.details.model_id === 'kairos-deterministic-local-v1' &&
+          event.details.cost_usd === 0,
+      ),
+    ).toBe(true)
     for (let index = 1; index < auditEvents.length; index++) {
       expect(auditEvents[index]?.prevHash).toBe(auditEvents[index - 1]?.hash)
     }
@@ -153,6 +161,32 @@ describe('software factory build', () => {
       'README.md',
     )
     expect(compliancePack.verification.ok).toBe(true)
+  })
+
+  test('verification catches stale repo-local project specs', async () => {
+    const configDir = makeTempDir('kairos-sf-config-')
+    const projectDir = makeTempDir('kairos-sf-project-')
+    process.env.CLAUDE_CONFIG_DIR = configDir
+
+    const result = await runSoftwareFactoryBuild({
+      projectDir,
+      brief: 'Build a purchase approval app with reviewer approval.',
+      now: () => new Date('2026-04-26T12:00:00.000Z'),
+      generateId: () => 'project-spec',
+    })
+    const projectSpec = readJson(result.projectSpecPath) as {
+      clauses: Array<{ id: string; text: string }>
+    }
+    if (projectSpec.clauses[0]) {
+      projectSpec.clauses[0].text = 'Stale repo-local clause'
+    }
+    writeFileSync(result.projectSpecPath, `${JSON.stringify(projectSpec)}\n`)
+
+    const verification = await verifySoftwareFactoryBuild(result.buildId)
+    expect(verification.ok).toBe(false)
+    expect(
+      verification.checks.find(check => check.id === 'project-spec')?.ok,
+    ).toBe(false)
   })
 
   test('traceability scan records untraceable code drift in the audit chain', async () => {
