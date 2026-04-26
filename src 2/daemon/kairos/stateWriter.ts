@@ -215,6 +215,11 @@ export type StateWriter = Awaited<ReturnType<typeof createStateWriter>>
 
 function redactBuildEventForStorage(event: KairosBuildEvent): KairosBuildEvent {
   switch (event.kind) {
+    case 'clarifying_question_answered':
+      return {
+        ...event,
+        answer: '[redacted]',
+      }
     case 'spec_written':
       return {
         ...event,

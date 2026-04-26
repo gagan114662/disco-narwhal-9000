@@ -196,6 +196,41 @@ describe('Kairos state writer build state', () => {
     )
   })
 
+  test('redacts clarifying answer text before storing build events', async () => {
+    const configDir = makeTempDir('kairos-build-event-redaction-config-')
+    const projectDir = makeTempDir('kairos-build-event-redaction-project-')
+    process.env.CLAUDE_CONFIG_DIR = configDir
+
+    const writer = await createStateWriter()
+    const buildId = 'redacted-answer-build'
+    const rawAnswer = 'employee jane@example.com needs admin approval'
+
+    await writer.appendBuildEvent(projectDir, buildId, {
+      version: 1,
+      kind: 'clarifying_question_answered',
+      buildId,
+      tenantId: 'tenant-local',
+      t: '2026-04-25T18:03:00.000Z',
+      questionNumber: 1,
+      question: 'Who are the exact user roles and approvers?',
+      answer: rawAnswer,
+    })
+
+    const events = await writer.readBuildEvents(projectDir, buildId)
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({
+      kind: 'clarifying_question_answered',
+      questionNumber: 1,
+      answer: '[redacted]',
+    })
+    expect(
+      readFileSync(
+        join(projectDir, '.claude/kairos/builds', buildId, 'events.jsonl'),
+        'utf8',
+      ),
+    ).not.toContain(rawAnswer)
+  })
+
   test('rejects invalid build state before writing it', async () => {
     const configDir = makeTempDir('kairos-build-state-invalid-config-')
     const projectDir = makeTempDir('kairos-build-state-invalid-project-')
