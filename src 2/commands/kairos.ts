@@ -1669,6 +1669,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
       spec.format === 'markdown' &&
       typeof spec.body === 'string'
     const briefShapeValid = isOptionalString(metadata.brief)
+    const problemShapeValid = isOptionalString(metadata.problem)
     const usersShapeValid = isStringArray(metadata.users)
     const goalsShapeValid = isStringArray(metadata.goals)
     const nonGoalsShapeValid = isStringArray(metadata.nonGoals)
@@ -1751,6 +1752,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
       updatedAtShapeValid &&
       specShapeValid &&
       briefShapeValid &&
+      problemShapeValid &&
       usersShapeValid &&
       goalsShapeValid &&
       nonGoalsShapeValid &&
