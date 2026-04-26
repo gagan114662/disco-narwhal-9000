@@ -111,6 +111,26 @@ export function calculateKairosAuditExportHash(value: unknown): string {
     .digest('hex')
 }
 
+export function calculateKairosBuildAuditMerkleRoot(
+  auditHashes: string[],
+): string | null {
+  if (auditHashes.length === 0) {
+    return null
+  }
+
+  let layer = auditHashes
+  while (layer.length > 1) {
+    const nextLayer: string[] = []
+    for (let index = 0; index < layer.length; index += 2) {
+      const left = layer[index] as string
+      const right = layer[index + 1] ?? left
+      nextLayer.push(calculateKairosAuditExportHash({ left, right }))
+    }
+    layer = nextLayer
+  }
+  return layer[0] ?? null
+}
+
 export function calculateKairosAuditExportEnvelopeHash(
   value: Record<string, unknown>,
 ): string {

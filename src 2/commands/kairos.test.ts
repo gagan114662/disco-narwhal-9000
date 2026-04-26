@@ -8,7 +8,10 @@ import {
   getProjectRoot,
   setProjectRoot,
 } from '../bootstrap/state.js'
-import { calculateKairosAuditExportHash } from '../daemon/kairos/buildAudit.js'
+import {
+  calculateKairosAuditExportHash,
+  calculateKairosBuildAuditMerkleRoot,
+} from '../daemon/kairos/buildAudit.js'
 import {
   getProjectKairosBuildEventsPath,
   getProjectKairosBuildManifestPath,
@@ -639,6 +642,7 @@ describe('/kairos command', () => {
       valid: boolean
       eventCount: number
       lastHash: string
+      merkleRoot: string
       exportHash: string
       redactionPolicy: {
         version: number
@@ -687,6 +691,11 @@ describe('/kairos command', () => {
       }),
     )
     expect(auditExport.lastHash).toMatch(/^[a-f0-9]{64}$/)
+    expect(auditExport.merkleRoot).toBe(
+      calculateKairosBuildAuditMerkleRoot(
+        auditExport.events.map(event => event.auditHash),
+      ),
+    )
     expect(auditExport.exportHash).toBe(
       calculateKairosAuditExportHash({
         ...auditExport,

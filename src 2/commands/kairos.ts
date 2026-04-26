@@ -19,6 +19,7 @@ import {
 import {
   calculateKairosAuditExportEnvelopeHash,
   calculateKairosAuditExportHash,
+  calculateKairosBuildAuditMerkleRoot,
   verifyKairosBuildEventAuditChain,
   verifyKairosAuditExportSignature,
   signKairosAuditExportHash,
@@ -799,6 +800,11 @@ async function handleBuildAuditExport(rest: string[]): Promise<string> {
     valid: verification.valid,
     eventCount: events.length,
     lastHash: verification.valid ? verification.lastHash : null,
+    merkleRoot: calculateKairosBuildAuditMerkleRoot(
+      events
+        .map(event => event.auditHash)
+        .filter((auditHash): auditHash is string => typeof auditHash === 'string'),
+    ),
     redactionPolicy: KAIROS_BUILD_AUDIT_REDACTION_POLICY,
     failure: verification.valid
       ? undefined
