@@ -10,6 +10,7 @@ import {
 import { CodePane } from './code-pane'
 import { SpecPane } from './spec-pane'
 import { CounterexamplePane } from './counterexample-pane'
+import { MergeGateLauncher } from './merge-gate-launcher'
 import { cn } from '@/lib/cn'
 import { PROJECT, type WorkOrder } from '@/lib/app-data'
 
@@ -25,16 +26,36 @@ const FILTER_OPTIONS: Array<{ id: 'all' | LineStatus; label: string }> = [
 type Props = {
   wo: WorkOrder
   diff: DiffSeed
+  /** Controlled active line. If omitted, DiffViewer manages its own state. */
+  activeLine?: number | null
+  /** Controlled highlight ranges. */
+  highlight?: CodeRange[]
+  /** Controlled active spec clause id. */
+  activeClauseId?: string | null
+  /** Called when the user jumps via spec/reviewer/next-issue. */
+  onJump?: (range: CodeRange, clauseId?: string) => void
 }
 
-export function DiffViewer({ wo, diff }: Props) {
+export function DiffViewer({
+  wo,
+  diff,
+  activeLine: activeLineProp,
+  highlight: highlightProp,
+  activeClauseId: activeClauseIdProp,
+  onJump,
+}: Props) {
   const [filter, setFilter] = useState<(typeof FILTER_OPTIONS)[number]['id']>('all')
-  const [activeLine, setActiveLine] = useState<number | null>(null)
-  const [highlight, setHighlight] = useState<CodeRange[]>([])
-  const [activeClauseId, setActiveClauseId] = useState<string | null>(null)
+  const [activeLineLocal, setActiveLineLocal] = useState<number | null>(null)
+  const [highlightLocal, setHighlightLocal] = useState<CodeRange[]>([])
+  const [activeClauseIdLocal, setActiveClauseIdLocal] = useState<string | null>(null)
   const [showSpec, setShowSpec] = useState(true)
   const [scrollLocked, setScrollLocked] = useState(true)
   const [issueCursor, setIssueCursor] = useState(0)
+
+  const activeLine = activeLineProp !== undefined ? activeLineProp : activeLineLocal
+  const highlight = highlightProp !== undefined ? highlightProp : highlightLocal
+  const activeClauseId =
+    activeClauseIdProp !== undefined ? activeClauseIdProp : activeClauseIdLocal
 
   const builderRef = useRef<HTMLDivElement | null>(null)
   const reviewerRef = useRef<HTMLDivElement | null>(null)
@@ -76,20 +97,32 @@ export function DiffViewer({ wo, diff }: Props) {
     return init
   }, [diff.builderLines])
 
-  const onJumpToRange = useCallback((range: CodeRange, clauseId?: string) => {
-    setActiveLine(range.start)
-    setHighlight([range])
-    if (clauseId) setActiveClauseId(clauseId)
-  }, [])
+  const onJumpToRange = useCallback(
+    (range: CodeRange, clauseId?: string) => {
+      if (onJump) {
+        onJump(range, clauseId)
+        return
+      }
+      setActiveLineLocal(range.start)
+      setHighlightLocal([range])
+      if (clauseId) setActiveClauseIdLocal(clauseId)
+    },
+    [onJump],
+  )
 
   const jumpToNextIssue = useCallback(() => {
     if (issueLines.length === 0) return
     const next = issueLines[issueCursor % issueLines.length] ?? issueLines[0]
     if (next === undefined) return
-    setActiveLine(next)
-    setHighlight([{ start: next, end: next }])
+    const range: CodeRange = { start: next, end: next }
+    if (onJump) {
+      onJump(range)
+    } else {
+      setActiveLineLocal(next)
+      setHighlightLocal([range])
+    }
     setIssueCursor((i) => i + 1)
-  }, [issueLines, issueCursor])
+  }, [issueLines, issueCursor, onJump])
 
   const onBuilderScroll = useCallback(
     (top: number) => {
@@ -138,6 +171,7 @@ export function DiffViewer({ wo, diff }: Props) {
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            <MergeGateLauncher wo={wo} />
             <button
               type="button"
               onClick={jumpToNextIssue}

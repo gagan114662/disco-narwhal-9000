@@ -4,12 +4,14 @@ import { notFound } from 'next/navigation'
 import { ThreePane } from '@/components/app/three-pane'
 import { AgentRail } from '@/components/app/agent-rail'
 import { ObligationCard } from '@/components/app/obligation-card'
+import { ProvenanceLauncher } from '@/components/app/provenance-launcher'
 import {
   OBLIGATIONS,
   PROJECT,
   findObligation,
   type ProofStatus,
 } from '@/lib/app-data'
+import { buildProvenanceForObligation } from '@/lib/provenance'
 import { StatusPill } from '@/components/ui/status-pill'
 
 export async function generateMetadata({
@@ -41,6 +43,7 @@ export default async function ObligationDetailPage({
   const idx = OBLIGATIONS.findIndex((o) => o.id === ob.id)
   const prev = idx > 0 ? OBLIGATIONS[idx - 1] : null
   const next = idx < OBLIGATIONS.length - 1 ? OBLIGATIONS[idx + 1] : null
+  const provenance = buildProvenanceForObligation(ob.id)
 
   return (
     <ThreePane
@@ -83,13 +86,14 @@ export default async function ObligationDetailPage({
       }
       center={
         <div className="px-5 md:px-8 py-6 md:py-8 max-w-4xl">
-          <div className="mb-4 flex items-center gap-3 text-[11px] font-mono text-subtle">
+          <div className="mb-4 flex items-center justify-between gap-3 text-[11px] font-mono text-subtle">
             <Link
               href={`/app/projects/${PROJECT.slug}/proofs`}
               className="hover:text-fg transition-colors"
             >
               ← All obligations
             </Link>
+            <ProvenanceLauncher provenance={provenance} />
           </div>
 
           <ObligationCard obligation={ob} />

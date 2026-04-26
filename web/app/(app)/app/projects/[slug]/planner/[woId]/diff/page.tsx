@@ -1,8 +1,6 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { DiffViewer } from '@/components/app/diff-viewer'
-import { DockedAgentRail } from '@/components/app/docked-agent-rail'
-import { CounterexampleExplorer } from '@/components/app/counterexample-explorer'
+import { DiffWorkspace } from '@/components/app/diff-workspace'
 import { PROJECT, findObligation, findWorkOrder } from '@/lib/app-data'
 import { findDiffSeed } from '@/lib/diff-data'
 
@@ -73,29 +71,21 @@ export default async function DiffPage({
         ? ['Wire route call', 'Replace stub', 'Generate first test', 'Explain blocker']
         : ['Add regression test', 'Lock the verdicts', 'Explain decision', 'Open WO']
 
-  const featured =
-    diff.reviewer.kind === 'flagged' ? (
-      <CounterexampleExplorer counterexample={diff.reviewer.counterexample} />
-    ) : null
-
   return (
-    <div className="flex-1 flex flex-col min-h-0 relative">
-      <DiffViewer wo={wo} diff={diff} />
-      <DockedAgentRail
-        title={`${wo.id} agent`}
-        banner={banner}
-        pinned={[
-          { id: wo.id, kind: 'work-order', label: wo.title },
-          { id: diff.builderFile, kind: 'file', label: diff.builderFile },
-          ...pinnedObligations.map((o) => ({
-            id: o.id,
-            kind: 'obligation' as const,
-            label: o.title,
-          })),
-        ]}
-        chips={chips}
-        featured={featured}
-      />
-    </div>
+    <DiffWorkspace
+      wo={wo}
+      diff={diff}
+      banner={banner}
+      pinned={[
+        { id: wo.id, kind: 'work-order', label: wo.title },
+        { id: diff.builderFile, kind: 'file', label: diff.builderFile },
+        ...pinnedObligations.map((o) => ({
+          id: o.id,
+          kind: 'obligation' as const,
+          label: o.title,
+        })),
+      ]}
+      chips={chips}
+    />
   )
 }

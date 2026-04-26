@@ -13,6 +13,7 @@ import {
 import { StatusPill } from '@/components/ui/status-pill'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ObligationCard } from './obligation-card'
+import { MergeGateLauncher } from './merge-gate-launcher'
 import { findDiffSeed } from '@/lib/diff-data'
 import { cn } from '@/lib/cn'
 import { formatDate, formatTimeOfDay } from '@/lib/format-time'
@@ -84,6 +85,7 @@ export function WorkOrderDetail({ wo, blueprint, requirements, obligations }: Pr
         <div className="flex flex-col items-end gap-2 flex-shrink-0">
           <StatusPill kind={wo.status} />
           <StatusPill kind={wo.proofStatus} />
+          <MergeGateLauncher wo={wo} />
           {hasDiff && (
             <Link
               href={`/app/projects/${PROJECT.slug}/planner/${wo.id}/diff`}
