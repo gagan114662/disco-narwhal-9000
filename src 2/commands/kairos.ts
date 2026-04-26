@@ -9,8 +9,9 @@
 // production `claude kairos ...` works even when upstream feature flags would
 // skip slash-command registration.
 
-import { readFile, writeFile } from 'fs/promises'
-import { resolve } from 'path'
+import { createHash } from 'crypto'
+import { readdir, readFile, writeFile } from 'fs/promises'
+import { isAbsolute, join, relative, resolve } from 'path'
 import { getProjectRoot } from '../bootstrap/state.js'
 import {
   createDraftBuild,
@@ -28,8 +29,10 @@ import {
 import {
   KAIROS_BUILD_STATE_VERSION,
   parseKairosBuildEvent,
+  parseKairosBuildResult,
   type KairosBuildEvent,
   type KairosBuildManifest,
+  type KairosBuildResult,
   type KairosBuildTraceabilitySeed,
   type KairosBuildTracerSlice,
 } from '../daemon/kairos/buildState.js'
@@ -54,6 +57,7 @@ import {
   getKairosStdoutLogPath,
   getProjectKairosBuildAuditAnchorPath,
   getProjectKairosBuildEventsPath,
+  getProjectKairosBuildResultPath,
   getProjectKairosBuildSpecPath,
   getProjectKairosLogPath,
 } from '../daemon/kairos/paths.js'
@@ -879,6 +883,107 @@ function buildKairosTenantRestoreEvent(event: KairosBuildEvent): KairosBuildEven
   }
 }
 
+type KairosTenantArchiveFile = {
+  relativePath: string
+  contentBase64: string
+  sha256: string
+  sizeBytes: number
+}
+
+function isPathInside(parentDir: string, childPath: string): boolean {
+  const relativePath = relative(parentDir, childPath)
+  return (
+    relativePath === '' ||
+    (relativePath.length > 0 &&
+      !relativePath.startsWith('..') &&
+      !isAbsolute(relativePath))
+  )
+}
+
+async function readKairosBuildResult(
+  projectDir: string,
+  buildId: string,
+): Promise<KairosBuildResult | null> {
+  try {
+    return parseKairosBuildResult(
+      safeParseJSON(
+        await readFile(
+          getProjectKairosBuildResultPath(projectDir, buildId),
+          'utf8',
+        ),
+        false,
+      ),
+    )
+  } catch {
+    return null
+  }
+}
+
+async function collectKairosArchiveFiles(
+  rootDir: string,
+  currentDir = rootDir,
+): Promise<KairosTenantArchiveFile[]> {
+  let entries: Awaited<ReturnType<typeof readdir>>
+  try {
+    entries = await readdir(currentDir, { withFileTypes: true })
+  } catch {
+    return []
+  }
+
+  const files: KairosTenantArchiveFile[] = []
+  for (const entry of entries.sort((left, right) =>
+    left.name.localeCompare(right.name),
+  )) {
+    const entryPath = join(currentDir, entry.name)
+    if (entry.isDirectory()) {
+      files.push(...(await collectKairosArchiveFiles(rootDir, entryPath)))
+      continue
+    }
+    if (!entry.isFile()) {
+      continue
+    }
+
+    const content = await readFile(entryPath)
+    files.push({
+      relativePath: relative(rootDir, entryPath).replaceAll('\\', '/'),
+      contentBase64: content.toString('base64'),
+      sha256: createHash('sha256').update(content).digest('hex'),
+      sizeBytes: content.byteLength,
+    })
+  }
+  return files
+}
+
+async function collectKairosGeneratedAppArchives(
+  projectDir: string,
+  buildId: string,
+): Promise<Record<string, unknown>[]> {
+  const result = await readKairosBuildResult(projectDir, buildId)
+  if (!result?.appDir) {
+    return []
+  }
+
+  const resolvedProjectDir = resolve(projectDir)
+  const resolvedAppDir = resolve(result.appDir)
+  if (!isPathInside(resolvedProjectDir, resolvedAppDir)) {
+    return []
+  }
+
+  return [
+    {
+      buildId,
+      status: result.status,
+      completedAt: result.completedAt,
+      summary: result.summary,
+      appDirHash: calculateKairosAuditExportHash({
+        field: 'appDir',
+        value: resolvedAppDir,
+      }),
+      files: await collectKairosArchiveFiles(resolvedAppDir),
+    },
+  ]
+}
+
 async function handleBuildAuditExport(rest: string[]): Promise<string> {
   const parsed = parseBuildShowArgs(rest)
   if (parsed === null) {
@@ -1035,6 +1140,16 @@ async function handleExport(rest: string[]): Promise<string> {
         restore: {
           events: events.map(buildKairosTenantRestoreEvent),
         },
+        generatedApps: await collectKairosGeneratedAppArchives(
+          projectDir,
+          manifest.buildId,
+        ),
+        knowledgeGraph: {
+          format: 'kairos_knowledge_graph_v0',
+          nodes: [],
+          edges: [],
+        },
+        evalCases: [],
       }
     }),
   )

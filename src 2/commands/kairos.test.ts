@@ -1075,6 +1075,63 @@ describe('/kairos command', () => {
     ])
   })
 
+  test('export tenant includes generated app files when a build result points at an app dir', async () => {
+    const projectDir = makeProjectDir()
+    const appDir = join(projectDir, 'generated-app')
+    const exportPath = join(makeTempConfigDir(), 'tenant-app-export.json')
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'tenant-app-export-build',
+      now: () => new Date('2026-04-25T20:12:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} tenant generated app`)
+    mkdirSync(join(appDir, 'src'), { recursive: true })
+    writeFileSync(join(appDir, 'src', 'index.ts'), 'export const app = true\n')
+    const writer = await createStateWriter()
+    await writer.writeBuildResult(projectDir, 'tenant-app-export-build', {
+      version: 1,
+      buildId: 'tenant-app-export-build',
+      tenantId: 'local',
+      status: 'succeeded',
+      completedAt: '2026-04-25T20:13:00.000Z',
+      summary: 'Generated app artifact ready.',
+      appDir,
+    })
+    writeFileSync(
+      exportPath,
+      await runKairosCommand(`export tenant ${projectDir}`),
+    )
+
+    const tenantExport = JSON.parse(readFileSync(exportPath, 'utf8')) as {
+      builds: Array<{
+        generatedApps: Array<{
+          appDirHash: string
+          files: Array<{
+            relativePath: string
+            contentBase64: string
+            sha256: string
+            sizeBytes: number
+          }>
+        }>
+      }>
+    }
+
+    expect(tenantExport.builds[0]?.generatedApps).toHaveLength(1)
+    expect(tenantExport.builds[0]?.generatedApps[0]).toMatchObject({
+      appDirHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+    })
+    expect(tenantExport.builds[0]?.generatedApps[0]?.files).toEqual([
+      {
+        relativePath: 'src/index.ts',
+        contentBase64: Buffer.from('export const app = true\n').toString(
+          'base64',
+        ),
+        sha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+        sizeBytes: 24,
+      },
+    ])
+    expect(readFileSync(exportPath, 'utf8')).not.toContain(appDir)
+  })
+
   test('import tenant restores a portable archive into a fresh project', async () => {
     const sourceProjectDir = makeProjectDir()
     const targetProjectDir = makeProjectDir()
