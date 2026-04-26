@@ -1361,6 +1361,12 @@ export async function acceptSoftwareFactoryChange(
   const generatedFilePath = assertSafeGeneratedSourcePath(
     proposal.generatedFile.path,
   )
+  const expectedMarker = `kairos:clause=${proposal.proposedClause.id}`
+  if (!proposal.generatedFile.content.includes(expectedMarker)) {
+    throw new Error(
+      `Cannot accept change because generated file is missing ${expectedMarker}`,
+    )
+  }
 
   const alreadyAccepted = spec.clauses.some(
     clause => clause.id === proposal.proposedClause.id,

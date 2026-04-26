@@ -533,6 +533,33 @@ describe('software factory build', () => {
     )
   })
 
+  test('accepting change rejects generated files without clause markers', async () => {
+    const configDir = makeTempDir('kairos-sf-config-')
+    const projectDir = makeTempDir('kairos-sf-project-')
+    process.env.CLAUDE_CONFIG_DIR = configDir
+
+    const result = await runSoftwareFactoryBuild({
+      projectDir,
+      brief: 'Build a staffing approval app with reviewer approval.',
+      now: () => new Date('2026-04-26T12:00:00.000Z'),
+      generateId: () => 'marker-change',
+    })
+    const proposed = await proposeSoftwareFactoryChange(
+      result.buildId,
+      'Add printable approval summary.',
+    )
+    const proposal = readJson(proposed.proposalPath) as {
+      generatedFile: { content: string }
+    }
+    proposal.generatedFile.content =
+      'export function untraceableChange(): boolean { return true }\n'
+    writeFileSync(proposed.proposalPath, `${JSON.stringify(proposal)}\n`)
+
+    await expect(acceptSoftwareFactoryChange(result.buildId)).rejects.toThrow(
+      'generated file is missing kairos:clause=',
+    )
+  })
+
   test('accepting change rejects builds with unresolved traceability drift', async () => {
     const configDir = makeTempDir('kairos-sf-config-')
     const projectDir = makeTempDir('kairos-sf-project-')
