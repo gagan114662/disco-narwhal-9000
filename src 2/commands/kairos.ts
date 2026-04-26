@@ -1419,6 +1419,7 @@ function verifyKairosGeneratedAppArchives(
 
       const content = Buffer.from(contentBase64, 'base64')
       return (
+        content.toString('base64') === contentBase64 &&
         content.byteLength === expectedSizeBytes &&
         createHash('sha256').update(content).digest('hex') === expectedSha256
       )

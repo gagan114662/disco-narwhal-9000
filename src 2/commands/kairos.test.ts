@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { createHmac } from 'crypto'
+import { createHash, createHmac } from 'crypto'
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { mkdirSync } from 'fs'
 import { tmpdir } from 'os'
@@ -1448,6 +1448,79 @@ describe('/kairos command', () => {
         getProjectKairosBuildResultPath(
           targetProjectDir,
           'tenant-import-app-size-tampered-build',
+        ),
+      ),
+    ).toBe(false)
+  })
+
+  test('import tenant rejects malformed generated app base64 payloads', async () => {
+    const sourceProjectDir = makeProjectDir()
+    const targetProjectDir = makeProjectDir()
+    const appDir = join(sourceProjectDir, 'generated-app')
+    const exportPath = join(makeTempConfigDir(), 'tenant-import-app-base64-tampered.json')
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'tenant-import-app-base64-tampered-build',
+      now: () => new Date('2026-04-25T20:12:00.000Z'),
+    })
+    await runKairosCommand(`build ${sourceProjectDir} tenant app base64 tamper`)
+    mkdirSync(join(appDir, 'src'), { recursive: true })
+    writeFileSync(join(appDir, 'src', 'index.ts'), 'export const app = true\n')
+    const writer = await createStateWriter()
+    await writer.writeBuildResult(
+      sourceProjectDir,
+      'tenant-import-app-base64-tampered-build',
+      {
+        version: 1,
+        buildId: 'tenant-import-app-base64-tampered-build',
+        tenantId: 'local',
+        status: 'succeeded',
+        completedAt: '2026-04-25T20:13:00.000Z',
+        summary: 'Generated app artifact ready.',
+        appDir,
+      },
+    )
+    const tenantExport = JSON.parse(
+      await runKairosCommand(`export tenant ${sourceProjectDir}`),
+    ) as {
+      archiveHash: string
+      builds: Array<{
+        generatedApps: Array<{
+          files: Array<{
+            contentBase64: string
+            sha256: string
+            sizeBytes: number
+          }>
+        }>
+      }>
+    }
+    const decodedLenientPayload = Buffer.from('not valid base64', 'base64')
+    const archivedFile = tenantExport.builds[0]!.generatedApps[0]!.files[0]!
+    archivedFile.contentBase64 = 'not valid base64'
+    archivedFile.sha256 = createHash('sha256')
+      .update(decodedLenientPayload)
+      .digest('hex')
+    archivedFile.sizeBytes = decodedLenientPayload.byteLength
+    const { archiveHash: _archiveHash, ...archiveHashMaterial } = tenantExport
+    tenantExport.archiveHash = calculateKairosAuditExportHash(
+      archiveHashMaterial,
+    )
+    writeFileSync(exportPath, JSON.stringify(tenantExport, null, 2))
+
+    const importOut = await runKairosCommand(
+      `import tenant ${exportPath} ${targetProjectDir}`,
+    )
+
+    expect(importOut.split('\n')).toEqual([
+      'Tenant archive invalid.',
+      'archive hash: valid',
+      'builds: 1',
+      '- tenant-import-app-base64-tampered-build: audit=valid signature=unsigned merkle=valid apps=invalid',
+    ])
+    expect(
+      existsSync(
+        getProjectKairosBuildResultPath(
+          targetProjectDir,
+          'tenant-import-app-base64-tampered-build',
         ),
       ),
     ).toBe(false)
