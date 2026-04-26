@@ -749,6 +749,32 @@ describe('/kairos command', () => {
     })
   })
 
+  test('build-audit-export-verify validates a signed audit export file', async () => {
+    const projectDir = makeProjectDir()
+    const exportPath = join(makeTempConfigDir(), 'audit-export.json')
+    process.env.KAIROS_AUDIT_SIGNING_KEY = 'verify-signing-key'
+    process.env.KAIROS_AUDIT_SIGNING_KEY_ID = 'verify-key-1'
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'verify-signed-audit-export-build',
+      now: () => new Date('2026-04-25T20:12:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} verify signed export`)
+    writeFileSync(
+      exportPath,
+      await runKairosCommand(
+        `build-audit-export ${projectDir} verify-signed-audit-export-build`,
+      ),
+    )
+
+    const out = await runKairosCommand(`build-audit-export-verify ${exportPath}`)
+
+    expect(out.split('\n')).toEqual([
+      'Audit export valid for verify-signed-audit-export-build.',
+      'export hash: valid',
+      'audit signature: valid key=verify-key-1 algorithm=hmac-sha256',
+    ])
+  })
+
   test('build-slices prints selectable tracer bullets', async () => {
     const projectDir = makeProjectDir()
     __setKairosBuildDepsForTesting({

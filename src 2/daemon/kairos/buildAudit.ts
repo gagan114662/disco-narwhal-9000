@@ -30,6 +30,29 @@ export type KairosAuditExportSignature =
       signature: string
     }
 
+export type KairosAuditExportSignatureVerification =
+  | {
+      valid: true
+      status: 'unsigned'
+      reason: string
+    }
+  | {
+      valid: true
+      status: 'signed'
+      algorithm: 'hmac-sha256'
+      keyId: string
+    }
+  | {
+      valid: false
+      reason:
+        | 'missing signature'
+        | 'unsupported signature status'
+        | 'unsupported signature algorithm'
+        | 'malformed signature'
+        | 'signing key not configured'
+        | 'signature mismatch'
+    }
+
 function sortForAuditHash(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map(sortForAuditHash)
@@ -88,6 +111,17 @@ export function calculateKairosAuditExportHash(value: unknown): string {
     .digest('hex')
 }
 
+export function calculateKairosAuditExportEnvelopeHash(
+  value: Record<string, unknown>,
+): string {
+  const {
+    exportHash: _exportHash,
+    auditSignature: _auditSignature,
+    ...hashMaterial
+  } = value
+  return calculateKairosAuditExportHash(hashMaterial)
+}
+
 export function signKairosAuditExportHash(
   exportHash: string,
 ): KairosAuditExportSignature {
@@ -106,6 +140,58 @@ export function signKairosAuditExportHash(
     algorithm: 'hmac-sha256',
     keyId: process.env.KAIROS_AUDIT_SIGNING_KEY_ID?.trim() || 'local-env',
     signature: createHmac('sha256', signingKey).update(exportHash).digest('hex'),
+  }
+}
+
+export function verifyKairosAuditExportSignature(
+  exportHash: string,
+  signature: unknown,
+): KairosAuditExportSignatureVerification {
+  if (signature === null || typeof signature !== 'object') {
+    return { valid: false, reason: 'missing signature' }
+  }
+
+  const signatureRecord = signature as Record<string, unknown>
+  if (signatureRecord.status === 'unsigned') {
+    return {
+      valid: true,
+      status: 'unsigned',
+      reason:
+        typeof signatureRecord.reason === 'string'
+          ? signatureRecord.reason
+          : 'unsigned',
+    }
+  }
+  if (signatureRecord.status !== 'signed') {
+    return { valid: false, reason: 'unsupported signature status' }
+  }
+  if (signatureRecord.algorithm !== 'hmac-sha256') {
+    return { valid: false, reason: 'unsupported signature algorithm' }
+  }
+  if (
+    typeof signatureRecord.keyId !== 'string' ||
+    typeof signatureRecord.signature !== 'string'
+  ) {
+    return { valid: false, reason: 'malformed signature' }
+  }
+
+  const signingKey = process.env.KAIROS_AUDIT_SIGNING_KEY?.trim()
+  if (!signingKey) {
+    return { valid: false, reason: 'signing key not configured' }
+  }
+
+  const expectedSignature = createHmac('sha256', signingKey)
+    .update(exportHash)
+    .digest('hex')
+  if (signatureRecord.signature !== expectedSignature) {
+    return { valid: false, reason: 'signature mismatch' }
+  }
+
+  return {
+    valid: true,
+    status: 'signed',
+    algorithm: 'hmac-sha256',
+    keyId: signatureRecord.keyId,
   }
 }
 
