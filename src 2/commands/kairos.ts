@@ -1672,7 +1672,9 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
     )
     const tracerSlicesShapeValid = isRecordArray(metadata.tracerSlices)
     const traceabilitySeedsShapeValid = isRecordArray(metadata.traceabilitySeeds)
-    const completedSliceIdsShapeValid = isStringArray(build.completedSliceIds)
+    const completedSliceIdsShapeValid = isNonEmptyStringArray(
+      build.completedSliceIds,
+    )
     const selectedSliceIdShapeValid = isOptionalStringOrNull(
       build.selectedSliceId,
     )
