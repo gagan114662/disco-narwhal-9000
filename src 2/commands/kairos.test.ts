@@ -2518,6 +2518,52 @@ describe('/kairos command', () => {
     ).toBe(false)
   })
 
+  test('import tenant rejects non-object restore event entries', async () => {
+    const sourceProjectDir = makeProjectDir()
+    const targetProjectDir = makeProjectDir()
+    const exportPath = join(makeTempConfigDir(), 'tenant-import-restore-event-shape-tampered.json')
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'tenant-import-restore-event-shape-tampered-build',
+      now: () => new Date('2026-04-25T20:12:00.000Z'),
+    })
+    await runKairosCommand(`build ${sourceProjectDir} tenant restore event shape tamper`)
+    const tenantExport = JSON.parse(
+      await runKairosCommand(`export tenant ${sourceProjectDir}`),
+    ) as {
+      archiveHash: string
+      builds: Array<{
+        restore: {
+          events: unknown[]
+        }
+      }>
+    }
+    tenantExport.builds[0]!.restore.events.push('not-a-restore-event-object')
+    const { archiveHash: _archiveHash, ...archiveHashMaterial } = tenantExport
+    tenantExport.archiveHash = calculateKairosAuditExportHash(
+      archiveHashMaterial,
+    )
+    writeFileSync(exportPath, JSON.stringify(tenantExport, null, 2))
+
+    const importOut = await runKairosCommand(
+      `import tenant ${exportPath} ${targetProjectDir}`,
+    )
+
+    expect(importOut.split('\n')).toEqual([
+      'Tenant archive invalid.',
+      'archive hash: valid',
+      'builds: 1',
+      '- tenant-import-restore-event-shape-tampered-build: audit=valid signature=unsigned merkle=valid restore=invalid',
+    ])
+    expect(
+      existsSync(
+        getProjectKairosBuildManifestPath(
+          targetProjectDir,
+          'tenant-import-restore-event-shape-tampered-build',
+        ),
+      ),
+    ).toBe(false)
+  })
+
   test('build-audit-export-verify validates a signed audit export file', async () => {
     const projectDir = makeProjectDir()
     const exportPath = join(makeTempConfigDir(), 'audit-export.json')
