@@ -14,6 +14,20 @@ import { resolve } from 'path'
 import { getProjectRoot } from '../bootstrap/state.js'
 import type { Command } from '../types/command.js'
 import {
+  acceptSoftwareFactoryChange,
+  acceptSoftwareFactoryReconciliation,
+  exportSoftwareFactoryCompliancePack,
+  listSoftwareFactoryBuilds,
+  listSoftwareFactorySpecTemplates,
+  proposeSoftwareFactoryChange,
+  proposeSoftwareFactoryReconciliation,
+  readSoftwareFactoryBuild,
+  runSoftwareFactoryBuild,
+  scanSoftwareFactoryTraceability,
+  verifySoftwareFactoryAudit,
+  verifySoftwareFactoryBuild,
+} from '../daemon/kairos/softwareFactory.js'
+import {
   runKairosMemoryCommand,
   runKairosMemoryProposalsCommand,
 } from './kairos-memory-proposals.js'
@@ -58,6 +72,18 @@ const HELP_TEXT = `Usage:
 /kairos opt-in [projectDir]
 /kairos opt-out [projectDir]
 /kairos demo [projectDir]
+/kairos build templates
+/kairos build run --accept-ip-terms [--template <id>] [projectDir] <brief>
+/kairos build list
+/kairos build show <buildId>
+/kairos build verify <buildId>
+/kairos build change <buildId> <change>
+/kairos build accept-change <buildId>
+/kairos build scan <buildId>
+/kairos build reconcile <buildId>
+/kairos build accept-reconciliation <buildId>
+/kairos build export <buildId>
+/kairos audit verify <buildId> [--anchor]
 /kairos pause
 /kairos resume
 /kairos dashboard
@@ -83,6 +109,8 @@ type Subcommand =
   | 'opt-in'
   | 'opt-out'
   | 'demo'
+  | 'build'
+  | 'audit'
   | 'pause'
   | 'resume'
   | 'dashboard'
@@ -101,6 +129,8 @@ const SUBCOMMANDS = new Set<Subcommand>([
   'opt-in',
   'opt-out',
   'demo',
+  'build',
+  'audit',
   'pause',
   'resume',
   'dashboard',
@@ -233,6 +263,321 @@ async function handleOptOut(projectDir: string): Promise<string> {
 async function handleDemo(projectDir: string): Promise<string> {
   const taskId = await enqueueDemoTask(projectDir)
   return `Demo task ${taskId} scheduled in ${projectDir}/.claude/scheduled_tasks.json`
+}
+
+function isPathLike(token: string): boolean {
+  return (
+    token.startsWith('/') ||
+    token.startsWith('.') ||
+    token.startsWith('~') ||
+    token.includes('\\')
+  )
+}
+
+function parseBuildRunArgs(
+  rest: string[],
+): {
+  projectDir: string
+  brief: string
+  ipTermsAccepted: boolean
+  templateId?: string
+} | null {
+  const ipTermsAccepted = rest.includes('--accept-ip-terms')
+  const buildArgs: string[] = []
+  let templateId: string | undefined
+  let invalidTemplateFlag = false
+  for (let index = 0; index < rest.length; index++) {
+    const token = rest[index]
+    if (token === '--accept-ip-terms') continue
+    if (token === '--template') {
+      const value = rest[index + 1]
+      if (!value || value.startsWith('--')) {
+        invalidTemplateFlag = true
+        continue
+      }
+      templateId = value
+      index++
+      continue
+    }
+    buildArgs.push(token as string)
+  }
+  if (invalidTemplateFlag) {
+    return null
+  }
+  const [first, ...remaining] = buildArgs
+  if (!first) {
+    return null
+  }
+  if (templateId !== undefined && !templateId.trim()) {
+    return null
+  }
+  if (isPathLike(first)) {
+    const brief = remaining.join(' ').trim()
+    if (!brief) return null
+    return {
+      projectDir: resolveProjectDir(first),
+      brief,
+      ipTermsAccepted,
+      templateId,
+    }
+  }
+  return {
+    projectDir: getProjectRoot(),
+    brief: [first, ...remaining].join(' ').trim(),
+    ipTermsAccepted,
+    templateId,
+  }
+}
+
+function requireBuildId(action: string, buildId: string | undefined): string | null {
+  if (!buildId?.trim()) {
+    return `Usage: /kairos build ${action} <buildId>`
+  }
+  return null
+}
+
+async function handleBuild(rest: string[]): Promise<string> {
+  const [action, ...args] = rest
+  try {
+    switch (action) {
+      case 'templates': {
+        const templates = listSoftwareFactorySpecTemplates()
+        return templates
+          .map(
+            template =>
+              `${template.id}: ${template.name} - ${template.description}`,
+          )
+          .join('\n')
+      }
+      case 'run': {
+        const parsed = parseBuildRunArgs(args)
+        if (!parsed) {
+          return 'Usage: /kairos build run --accept-ip-terms [--template <id>] [projectDir] <brief>'
+        }
+        if (!parsed.ipTermsAccepted) {
+          return [
+            'Software Factory IP terms must be accepted before build proceeds.',
+            'Terms:',
+            '- You confirm you have rights to provide the source brief and supporting materials.',
+            '- Generated application code is assigned to the project owner for use under the project terms.',
+            '- You remain responsible for reviewing generated code, dependencies, and compliance posture before production use.',
+            'Re-run with: /kairos build run --accept-ip-terms [--template <id>] [projectDir] <brief>',
+          ].join('\n')
+        }
+        const result = await runSoftwareFactoryBuild(parsed)
+        return [
+          `Software Factory build ${result.buildId}: ${result.status}`,
+          `app: ${result.appId}`,
+          `title: ${result.title}`,
+          `template: ${parsed.templateId ?? 'none'}`,
+          `clauses: ${result.clauseCount}`,
+          `spec: ${result.specPath}`,
+          `project spec: ${result.projectSpecPath}`,
+          `ip terms: ${result.ipTermsPath}`,
+          `project ip terms: ${result.projectIpTermsPath}`,
+          `eval pack: ${result.evalPackPath}`,
+          `project eval pack: ${result.projectEvalPackPath}`,
+          `app dir: ${result.appDir}`,
+          `review: ${result.reviewPath}`,
+          `smoke: ${result.smokePath}`,
+          `audit: ${result.auditPath}`,
+        ].join('\n')
+      }
+      case 'list': {
+        const builds = await listSoftwareFactoryBuilds()
+        if (builds.length === 0) {
+          return 'No Software Factory builds found.'
+        }
+        return builds
+          .map(
+            build =>
+              `${build.buildId} ${build.status} ${build.title} (${build.clauseCount} clause(s))`,
+          )
+          .join('\n')
+      }
+      case 'show': {
+        const usage = requireBuildId('show', args[0])
+        if (usage) return usage
+        const build = await readSoftwareFactoryBuild(args[0] as string)
+        return [
+          `Software Factory build ${build.buildId}: ${build.status}`,
+          `created: ${build.createdAt}`,
+          `tenant: ${build.tenantId}`,
+          `app: ${build.appId}`,
+          `title: ${build.title}`,
+          `template: ${build.templateId ?? 'none'}`,
+          `clauses: ${build.clauseCount}`,
+          `spec: ${build.specPath}`,
+          `project spec: ${build.projectSpecPath}`,
+          `ip terms: ${build.ipTermsPath}`,
+          `project ip terms: ${build.projectIpTermsPath}`,
+          `eval pack: ${build.evalPackPath}`,
+          `project eval pack: ${build.projectEvalPackPath}`,
+          `app dir: ${build.appDir}`,
+          `review: ${build.reviewPath}`,
+          `smoke: ${build.smokePath}`,
+          `audit: ${build.auditPath}`,
+        ].join('\n')
+      }
+      case 'verify': {
+        const usage = requireBuildId('verify', args[0])
+        if (usage) return usage
+        const verification = await verifySoftwareFactoryBuild(args[0] as string)
+        return [
+          `Software Factory build ${verification.buildId}: ${verification.ok ? 'verified' : 'failed'}`,
+          ...verification.checks.map(
+            check => `${check.ok ? 'PASS' : 'FAIL'} ${check.id}: ${check.detail}`,
+          ),
+        ].join('\n')
+      }
+      case 'change': {
+        const usage = requireBuildId('change', args[0])
+        if (usage) return usage
+        const changeText = args.slice(1).join(' ').trim()
+        if (!changeText) {
+          return 'Usage: /kairos build change <buildId> <change>'
+        }
+        const proposal = await proposeSoftwareFactoryChange(
+          args[0] as string,
+          changeText,
+        )
+        return [
+          `Software Factory build ${proposal.buildId}: change proposed`,
+          `proposed clause: ${proposal.proposedClauseId}`,
+          `generated file: ${proposal.generatedFilePath}`,
+          `audit event appended: ${proposal.auditEventAppended ? 'yes' : 'no'}`,
+          `proposal: ${proposal.proposalPath}`,
+        ].join('\n')
+      }
+      case 'accept-change': {
+        const usage = requireBuildId('accept-change', args[0])
+        if (usage) return usage
+        const accepted = await acceptSoftwareFactoryChange(args[0] as string)
+        return [
+          `Software Factory build ${accepted.buildId}: change ${accepted.accepted ? 'accepted' : 'not needed'}`,
+          `accepted clause: ${accepted.acceptedClauseId ?? 'none'}`,
+          `generated file: ${accepted.generatedFilePath ?? 'none'}`,
+          `spec: ${accepted.specPath}`,
+          `eval pack: ${accepted.evalPackPath}`,
+          `project eval pack: ${accepted.projectEvalPackPath}`,
+          `audit event appended: ${accepted.auditEventAppended ? 'yes' : 'no'}`,
+        ].join('\n')
+      }
+      case 'scan': {
+        const usage = requireBuildId('scan', args[0])
+        if (usage) return usage
+        const scan = await scanSoftwareFactoryTraceability(args[0] as string)
+        return [
+          `Software Factory build ${scan.buildId}: ${scan.ok ? 'traceable' : 'drift detected'}`,
+          `scanned files: ${scan.scannedFiles.length}`,
+          `untraceable files: ${scan.untraceableFiles.length}`,
+          ...scan.untraceableFiles.map(file => `- ${file}`),
+          `audit event appended: ${scan.auditEventAppended ? 'yes' : 'no'}`,
+          `audit: ${scan.auditPath}`,
+        ].join('\n')
+      }
+      case 'reconcile': {
+        const usage = requireBuildId('reconcile', args[0])
+        if (usage) return usage
+        const reconciliation = await proposeSoftwareFactoryReconciliation(
+          args[0] as string,
+        )
+        return [
+          `Software Factory build ${reconciliation.buildId}: reconciliation ${reconciliation.status}`,
+          `deltas: ${reconciliation.deltaCount}`,
+          `audit event appended: ${reconciliation.auditEventAppended ? 'yes' : 'no'}`,
+          `proposal: ${reconciliation.proposalPath}`,
+        ].join('\n')
+      }
+      case 'accept-reconciliation': {
+        const usage = requireBuildId('accept-reconciliation', args[0])
+        if (usage) return usage
+        const accepted = await acceptSoftwareFactoryReconciliation(
+          args[0] as string,
+        )
+        return [
+          `Software Factory build ${accepted.buildId}: reconciliation ${accepted.accepted ? 'accepted' : 'not needed'}`,
+          `accepted clauses: ${accepted.acceptedClauseIds.join(', ') || 'none'}`,
+          `spec: ${accepted.specPath}`,
+          `eval pack: ${accepted.evalPackPath}`,
+          `project eval pack: ${accepted.projectEvalPackPath}`,
+          `audit event appended: ${accepted.auditEventAppended ? 'yes' : 'no'}`,
+        ].join('\n')
+      }
+      case 'export': {
+        const usage = requireBuildId('export', args[0])
+        if (usage) return usage
+        const exported = await exportSoftwareFactoryCompliancePack(
+          args[0] as string,
+        )
+        return [
+          `Software Factory build ${exported.buildId}: compliance pack exported`,
+          `verified: ${exported.verified ? 'yes' : 'no'}`,
+          `generated files: ${exported.fileCount}`,
+          `audit events: ${exported.auditEventCount}`,
+          `export hash: ${exported.exportHash}`,
+          `export: ${exported.exportPath}`,
+        ].join('\n')
+      }
+      default:
+        return [
+          'Usage:',
+          '/kairos build templates',
+          '/kairos build run --accept-ip-terms [--template <id>] [projectDir] <brief>',
+          '/kairos build list',
+          '/kairos build show <buildId>',
+          '/kairos build verify <buildId>',
+          '/kairos build change <buildId> <change>',
+          '/kairos build accept-change <buildId>',
+          '/kairos build scan <buildId>',
+          '/kairos build reconcile <buildId>',
+          '/kairos build accept-reconciliation <buildId>',
+          '/kairos build export <buildId>',
+        ].join('\n')
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    return `Software Factory build command failed: ${message}`
+  }
+}
+
+async function handleAudit(rest: string[]): Promise<string> {
+  const [action, ...args] = rest
+  try {
+    switch (action) {
+      case 'verify': {
+        const usage = requireBuildId('audit verify', args[0])
+        if (usage) return 'Usage: /kairos audit verify <buildId> [--anchor]'
+        const buildId = args[0] as string
+        const writeAnchor = args.includes('--anchor')
+        const verification = await verifySoftwareFactoryAudit(buildId, {
+          writeAnchor,
+        })
+        return [
+          `Software Factory audit ${verification.buildId}: ${verification.ok ? 'verified' : 'failed'}`,
+          `tenant: ${verification.tenantId}`,
+          `events: ${verification.eventCount}`,
+          `head hash: ${verification.headHash ?? 'none'}`,
+          `merkle root: ${verification.merkleRoot ?? 'none'}`,
+          `audit: ${verification.auditPath}`,
+          ...(verification.anchorPath
+            ? [`anchor: ${verification.anchorPath}`]
+            : []),
+          ...(verification.projectAnchorPath
+            ? [`project anchor: ${verification.projectAnchorPath}`]
+            : []),
+          ...verification.checks.map(
+            check => `${check.ok ? 'PASS' : 'FAIL'} ${check.id}: ${check.detail}`,
+          ),
+        ].join('\n')
+      }
+      default:
+        return 'Usage: /kairos audit verify <buildId> [--anchor]'
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    return `Software Factory audit command failed: ${message}`
+  }
 }
 
 async function handlePause(): Promise<string> {
@@ -416,6 +761,10 @@ export async function runKairosCommand(args: string): Promise<string> {
       return handleOptOut(resolveProjectDir(rest[0]))
     case 'demo':
       return handleDemo(resolveProjectDir(rest[0]))
+    case 'build':
+      return handleBuild(rest)
+    case 'audit':
+      return handleAudit(rest)
     case 'pause':
       return handlePause()
     case 'resume':
@@ -457,7 +806,7 @@ const kairos = {
   name: 'kairos',
   description: 'Inspect and control the KAIROS background daemon',
   argumentHint:
-    'status|list|opt-in|opt-out|demo|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
+    'status|list|opt-in|opt-out|demo|build|audit|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
   load: () => import('./kairos-ui.js'),
 } satisfies Command
 

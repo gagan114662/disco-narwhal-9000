@@ -33,6 +33,25 @@ export function getKairosCloudDeployStatePath(): string {
   return join(getKairosStateDir(), 'cloud-deploy.json')
 }
 
+export function getKairosSoftwareFactoryDir(): string {
+  return join(getKairosStateDir(), 'software-factory')
+}
+
+export function getKairosSoftwareFactoryBuildDir(buildId: string): string {
+  return join(getKairosSoftwareFactoryDir(), 'builds', buildId)
+}
+
+export function getKairosSoftwareFactoryTenantDir(tenantId: string): string {
+  return join(getKairosSoftwareFactoryDir(), 'tenants', tenantId)
+}
+
+export function getKairosSoftwareFactoryTenantAppDir(
+  tenantId: string,
+  appId: string,
+): string {
+  return join(getKairosSoftwareFactoryTenantDir(tenantId), 'apps', appId)
+}
+
 export function getProjectKairosDir(projectDir: string): string {
   return join(projectDir, '.claude', 'kairos')
 }
