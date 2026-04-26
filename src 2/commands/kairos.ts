@@ -1658,6 +1658,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
     const statusShapeValid = isKairosBuildStatus(build.status)
     const titleShapeValid = typeof build.title === 'string'
     const createdAtShapeValid = typeof build.createdAt === 'string'
+    const updatedAtShapeValid = typeof build.updatedAt === 'string'
     const usersShapeValid = isStringArray(metadata.users)
     const goalsShapeValid = isStringArray(metadata.goals)
     const nonGoalsShapeValid = isStringArray(metadata.nonGoals)
@@ -1737,6 +1738,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
       statusShapeValid &&
       titleShapeValid &&
       createdAtShapeValid &&
+      updatedAtShapeValid &&
       usersShapeValid &&
       goalsShapeValid &&
       nonGoalsShapeValid &&
