@@ -1635,6 +1635,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
     const metadata = readRecordField(build, 'metadata') ?? {}
     const evalCasesShapeValid = isRecordArray(build.evalCases)
     const evalCases = readArrayField(build, 'evalCases')
+    const tracerSlicesShapeValid = isRecordArray(metadata.tracerSlices)
     const knowledgeGraph = readRecordField(build, 'knowledgeGraph')
     const auditHashMaterial = {
       version,
@@ -1690,11 +1691,13 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
         metadata,
         evalCases,
       )
-    const graphValid = verifyKairosKnowledgeGraphArchive(
-      buildId,
-      metadata,
-      knowledgeGraph,
-    )
+    const graphValid =
+      tracerSlicesShapeValid &&
+      verifyKairosKnowledgeGraphArchive(
+        buildId,
+        metadata,
+        knowledgeGraph,
+      )
     const restoreStatus = restoreValid ? '' : ' restore=invalid'
     const eventsStatus = eventSummaryValid ? '' : ' events=invalid'
     const appsStatus = appsValid ? '' : ' apps=invalid'
