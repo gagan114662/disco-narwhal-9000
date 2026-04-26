@@ -1503,6 +1503,26 @@ function isKairosAuditErasureSummary(
   )
 }
 
+function isKairosAuditSignatureMetadata(value: unknown): boolean {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return false
+  }
+  const signature = value as Record<string, unknown>
+  if (signature.status === 'unsigned') {
+    return (
+      signature.version === 1 &&
+      signature.reason === 'KAIROS_AUDIT_SIGNING_KEY not configured'
+    )
+  }
+  return (
+    signature.version === 1 &&
+    signature.status === 'signed' &&
+    signature.algorithm === 'hmac-sha256' &&
+    isNonEmptyString(signature.keyId) &&
+    isNonEmptyString(signature.signature)
+  )
+}
+
 function isOptionalString(value: unknown): value is string | undefined {
   return value === undefined || typeof value === 'string'
 }
@@ -1926,7 +1946,10 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
             audit.auditSignature,
           )
         : ({ valid: false, reason: 'missing signature' } as const)
-    const signatureStatus = signatureVerification.valid
+    const signatureMetadataValid = isKairosAuditSignatureMetadata(
+      audit.auditSignature,
+    )
+    const signatureStatus = signatureVerification.valid && signatureMetadataValid
       ? signatureVerification.status
       : 'invalid'
     const eventHashes = events
@@ -1993,6 +2016,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
       valid:
         auditValid &&
         signatureVerification.valid &&
+        signatureMetadataValid &&
         merkleValid &&
         eventSummaryValid &&
         restoreValid &&
