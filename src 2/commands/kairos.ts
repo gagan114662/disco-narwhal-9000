@@ -894,6 +894,43 @@ function buildKairosEvalCaseArchives(
   }))
 }
 
+function buildKairosKnowledgeGraphArchive(
+  manifest: KairosBuildManifest,
+): Record<string, unknown> {
+  const requirementNodes = (manifest.functionalRequirements ?? []).map(
+    (label, index) => ({
+      id: `${manifest.buildId}-FR-${index + 1}`,
+      kind: 'functional_requirement',
+      label,
+    }),
+  )
+  const seedNodes = (manifest.traceabilitySeeds ?? []).map(seed => ({
+    id: seed.id,
+    kind: 'traceability_seed',
+    label: seed.text,
+    source: seed.source,
+  }))
+  const sliceNodes = (manifest.tracerSlices ?? []).map(slice => ({
+    id: slice.id,
+    kind: 'tracer_slice',
+    label: slice.title,
+  }))
+  const sourceSeedId = manifest.traceabilitySeeds?.[0]?.id
+  const requirementEdges = sourceSeedId
+    ? requirementNodes.map(node => ({
+        from: sourceSeedId,
+        to: node.id,
+        kind: 'supports',
+      }))
+    : []
+
+  return {
+    format: 'kairos_knowledge_graph_v0',
+    nodes: [...seedNodes, ...requirementNodes, ...sliceNodes],
+    edges: requirementEdges,
+  }
+}
+
 type KairosTenantArchiveFile = {
   relativePath: string
   contentBase64: string
@@ -1212,11 +1249,7 @@ async function handleExport(rest: string[]): Promise<string> {
           projectDir,
           manifest.buildId,
         ),
-        knowledgeGraph: {
-          format: 'kairos_knowledge_graph_v0',
-          nodes: [],
-          edges: [],
-        },
+        knowledgeGraph: buildKairosKnowledgeGraphArchive(manifest),
         evalCases: buildKairosEvalCaseArchives(manifest),
       }
     }),

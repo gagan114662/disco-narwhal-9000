@@ -1160,6 +1160,45 @@ describe('/kairos command', () => {
     })
   })
 
+  test('export tenant derives a portable knowledge graph from PRD metadata', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'tenant-graph-export-build',
+      now: () => new Date('2026-04-25T20:12:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} tenant graph export`)
+
+    const tenantExport = JSON.parse(
+      await runKairosCommand(`export tenant ${projectDir}`),
+    ) as {
+      builds: Array<{
+        knowledgeGraph: {
+          nodes: Array<{
+            id: string
+            kind: string
+            label: string
+          }>
+          edges: Array<{
+            from: string
+            to: string
+            kind: string
+          }>
+        }
+      }>
+    }
+
+    expect(tenantExport.builds[0]?.knowledgeGraph.nodes).toContainEqual({
+      id: 'tenant-graph-export-build-FR-1',
+      kind: 'functional_requirement',
+      label: 'Intake form or record creation flow.',
+    })
+    expect(tenantExport.builds[0]?.knowledgeGraph.edges).toContainEqual({
+      from: 'BRIEF-1',
+      to: 'tenant-graph-export-build-FR-1',
+      kind: 'supports',
+    })
+  })
+
   test('import tenant restores a portable archive into a fresh project', async () => {
     const sourceProjectDir = makeProjectDir()
     const targetProjectDir = makeProjectDir()
