@@ -1854,7 +1854,8 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
     }
     const expectedAuditHash =
       calculateKairosAuditExportHash(auditHashMaterial)
-    const auditValid = audit.exportHash === expectedAuditHash
+    const auditValid =
+      audit.valid === true && audit.exportHash === expectedAuditHash
     const signatureVerification =
       typeof audit.exportHash === 'string'
         ? verifyKairosAuditExportSignature(
