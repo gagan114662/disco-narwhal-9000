@@ -1461,6 +1461,48 @@ function isKairosBuildAuditRedactionPolicy(value: unknown): boolean {
   )
 }
 
+function isKairosAuditErasureSummary(
+  value: unknown,
+  metadata: Record<string, unknown>,
+  auditEvents: Record<string, unknown>[],
+): boolean {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return false
+  }
+  const summary = value as Record<string, unknown>
+  const clarifyingAnswers = readRecordField(summary, 'clarifyingAnswers')
+  if (!clarifyingAnswers) {
+    return false
+  }
+  const isCount = (count: unknown): count is number =>
+    Number.isInteger(count) && count >= 0
+  if (
+    !isClarifyingQuestionAnswerRecord(
+      metadata.clarifyingQuestionAnswers,
+      metadata.clarifyingQuestions,
+    )
+  ) {
+    return true
+  }
+  const answers = metadata.clarifyingQuestionAnswers
+  const answerValues = Object.values(answers)
+  const answered = answerValues.length
+  const redacted = answerValues.filter(answer => answer === '[redacted]').length
+  const redactionEvents = auditEvents.filter(
+    event => event.kind === 'clarifying_question_answer_redacted',
+  ).length
+  return (
+    isCount(clarifyingAnswers.answered) &&
+    isCount(clarifyingAnswers.redacted) &&
+    isCount(clarifyingAnswers.erasable) &&
+    isCount(summary.redactionEvents) &&
+    clarifyingAnswers.answered === answered &&
+    clarifyingAnswers.redacted === redacted &&
+    clarifyingAnswers.erasable === answered - redacted &&
+    summary.redactionEvents === redactionEvents
+  )
+}
+
 function isOptionalString(value: unknown): value is string | undefined {
   return value === undefined || typeof value === 'string'
 }
@@ -1875,6 +1917,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
       audit.valid === true &&
       audit.failure === undefined &&
       isKairosBuildAuditRedactionPolicy(audit.redactionPolicy) &&
+      isKairosAuditErasureSummary(audit.erasureSummary, metadata, events) &&
       audit.exportHash === expectedAuditHash
     const signatureVerification =
       typeof audit.exportHash === 'string'
