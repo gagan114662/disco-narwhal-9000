@@ -1377,6 +1377,16 @@ export async function acceptSoftwareFactoryChange(
       auditEventAppended: false,
     }
   }
+  const verification = await verifySoftwareFactoryBuild(buildId)
+  if (!verification.ok) {
+    const failedChecks = verification.checks
+      .filter(check => !check.ok)
+      .map(check => check.id)
+      .join(', ')
+    throw new Error(
+      `Cannot accept change while build verification is failing: ${failedChecks}`,
+    )
+  }
 
   const revisedSpec: SoftwareFactorySpec = {
     ...spec,

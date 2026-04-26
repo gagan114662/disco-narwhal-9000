@@ -533,6 +533,31 @@ describe('software factory build', () => {
     )
   })
 
+  test('accepting change rejects builds with unresolved traceability drift', async () => {
+    const configDir = makeTempDir('kairos-sf-config-')
+    const projectDir = makeTempDir('kairos-sf-project-')
+    process.env.CLAUDE_CONFIG_DIR = configDir
+
+    const result = await runSoftwareFactoryBuild({
+      projectDir,
+      brief: 'Build a travel approval app with reviewer approval.',
+      now: () => new Date('2026-04-26T12:00:00.000Z'),
+      generateId: () => 'drift-change',
+    })
+    await proposeSoftwareFactoryChange(
+      result.buildId,
+      'Add printable approval summary.',
+    )
+    writeFileSync(
+      join(result.appDir, 'src', 'unreviewed.ts'),
+      'export function unreviewed(): boolean { return true }\n',
+    )
+
+    await expect(acceptSoftwareFactoryChange(result.buildId)).rejects.toThrow(
+      'Cannot accept change while build verification is failing',
+    )
+  })
+
   test('verification catches a tampered audit chain', async () => {
     const configDir = makeTempDir('kairos-sf-config-')
     const projectDir = makeTempDir('kairos-sf-project-')
