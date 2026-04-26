@@ -143,6 +143,7 @@ const HELP_TEXT = `Usage:
 /kairos build-prd-outline [projectDir] <buildId>
 /kairos build-audit-verify [projectDir] <buildId>
 /kairos build-audit-export [projectDir] <buildId>
+/kairos build-audit-siem-export [projectDir] <buildId>
 /kairos build-audit-export-verify <exportJsonPath>
 /kairos build-audit-anchor [projectDir] <buildId>
 /kairos build-audit-anchor-verify [projectDir] <buildId>
@@ -201,6 +202,7 @@ type Subcommand =
   | 'build-prd-outline'
   | 'build-audit-verify'
   | 'build-audit-export'
+  | 'build-audit-siem-export'
   | 'build-audit-export-verify'
   | 'build-audit-anchor'
   | 'build-audit-anchor-verify'
@@ -252,6 +254,7 @@ const SUBCOMMANDS = new Set<Subcommand>([
   'build-prd-outline',
   'build-audit-verify',
   'build-audit-export',
+  'build-audit-siem-export',
   'build-audit-export-verify',
   'build-audit-anchor',
   'build-audit-anchor-verify',
@@ -820,6 +823,24 @@ function buildKairosAuditExportEnvelope(
   }
 }
 
+function buildSignedKairosAuditExport(
+  manifest: KairosBuildManifest,
+  events: KairosBuildEvent[],
+  verification: ReturnType<typeof verifyKairosBuildEventAuditChain>,
+): Record<string, unknown> {
+  const auditExport = buildKairosAuditExportEnvelope(
+    manifest,
+    events,
+    verification,
+  )
+  const exportHash = calculateKairosAuditExportHash(auditExport)
+  return {
+    ...auditExport,
+    exportHash,
+    auditSignature: signKairosAuditExportHash(exportHash),
+  }
+}
+
 async function handleBuildAuditExport(rest: string[]): Promise<string> {
   const parsed = parseBuildShowArgs(rest)
   if (parsed === null) {
@@ -840,21 +861,71 @@ async function handleBuildAuditExport(rest: string[]): Promise<string> {
 
   const events = await writer.readBuildEvents(parsed.projectDir, parsed.buildId)
   const verification = verifyKairosBuildEventAuditChain(events)
-  const auditExport = buildKairosAuditExportEnvelope(
+  return jsonStringify(
+    buildSignedKairosAuditExport(manifest, events, verification),
+    null,
+    2,
+  )
+}
+
+async function handleBuildAuditSiemExport(rest: string[]): Promise<string> {
+  const parsed = parseBuildShowArgs(rest)
+  if (parsed === null) {
+    return 'Usage: /kairos build-audit-siem-export [projectDir] <buildId>'
+  }
+
+  const writer = await createStateWriter()
+  const manifest = await writer.readBuildManifest(
+    parsed.projectDir,
+    parsed.buildId,
+  )
+  if (!manifest) {
+    return [
+      `No build ${parsed.buildId} found for ${parsed.projectDir}.`,
+      `builds command: /kairos builds ${parsed.projectDir}`,
+    ].join('\n')
+  }
+
+  const events = await writer.readBuildEvents(parsed.projectDir, parsed.buildId)
+  const verification = verifyKairosBuildEventAuditChain(events)
+  const auditExport = buildSignedKairosAuditExport(
     manifest,
     events,
     verification,
   )
-  const exportHash = calculateKairosAuditExportHash(auditExport)
-  return jsonStringify(
-    {
-      ...auditExport,
-      exportHash,
-      auditSignature: signKairosAuditExportHash(exportHash),
-    },
-    null,
-    2,
-  )
+  const auditEvents = Array.isArray(auditExport.events)
+    ? (auditExport.events as Array<Record<string, unknown>>)
+    : []
+  const summaryRecord = {
+    recordType: 'kairos_build_audit_summary',
+    version: auditExport.version,
+    buildId: auditExport.buildId,
+    projectDirHash: auditExport.projectDirHash,
+    tenantId: auditExport.tenantId,
+    valid: auditExport.valid,
+    eventCount: auditExport.eventCount,
+    lastHash: auditExport.lastHash,
+    merkleRoot: auditExport.merkleRoot,
+    exportHash: auditExport.exportHash,
+    auditSignature: auditExport.auditSignature,
+    erasureSummary: auditExport.erasureSummary,
+    redactionPolicy: auditExport.redactionPolicy,
+    failure: auditExport.failure,
+  }
+  const eventRecords = auditEvents.map(event => ({
+    recordType: 'kairos_build_audit_event',
+    buildId: auditExport.buildId,
+    tenantId: auditExport.tenantId,
+    eventNumber: event.eventNumber,
+    kind: event.kind,
+    t: event.t,
+    auditPrevHash: event.auditPrevHash,
+    auditHash: event.auditHash,
+  }))
+
+  return [summaryRecord, ...eventRecords]
+    .map(record => jsonStringify(record))
+    .join('\n')
 }
 
 async function handleBuildAuditExportVerify(rest: string[]): Promise<string> {
@@ -2717,6 +2788,8 @@ export async function runKairosCommand(args: string): Promise<string> {
       return handleBuildAuditVerify(rest)
     case 'build-audit-export':
       return handleBuildAuditExport(rest)
+    case 'build-audit-siem-export':
+      return handleBuildAuditSiemExport(rest)
     case 'build-audit-export-verify':
       return handleBuildAuditExportVerify(rest)
     case 'build-audit-anchor':
@@ -2764,7 +2837,7 @@ const kairos = {
   name: 'kairos',
   description: 'Inspect and control the KAIROS background daemon',
   argumentHint:
-    'status|list|opt-in|opt-out|demo|build|builds|build-show|build-events|build-slices|build-select|build-select-next|build-select-next-prompt|build-next|build-complete-slice|build-acceptance|build-questions|build-answer|build-redact-answer|build-erasure-report|build-unanswered|build-requirements|build-summary|build-progress|build-readiness|build-assumptions|build-risks|build-goals|build-non-goals|build-users|build-problem|build-traceability|build-prd-outline|build-audit-verify|build-audit-export|build-audit-export-verify|build-audit-anchor|build-audit-anchor-verify|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
+    'status|list|opt-in|opt-out|demo|build|builds|build-show|build-events|build-slices|build-select|build-select-next|build-select-next-prompt|build-next|build-complete-slice|build-acceptance|build-questions|build-answer|build-redact-answer|build-erasure-report|build-unanswered|build-requirements|build-summary|build-progress|build-readiness|build-assumptions|build-risks|build-goals|build-non-goals|build-users|build-problem|build-traceability|build-prd-outline|build-audit-verify|build-audit-export|build-audit-siem-export|build-audit-export-verify|build-audit-anchor|build-audit-anchor-verify|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
   load: () => import('./kairos-ui.js'),
 } satisfies Command
 

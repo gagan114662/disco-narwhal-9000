@@ -150,6 +150,7 @@ describe('/kairos command', () => {
     expect(out).toContain('/kairos build-prd-outline')
     expect(out).toContain('/kairos build-audit-verify')
     expect(out).toContain('/kairos build-audit-export')
+    expect(out).toContain('/kairos build-audit-siem-export')
     expect(out).toContain('/kairos cloud deploy')
     expect(out).toContain('/kairos cloud-sync')
   })
@@ -798,6 +799,125 @@ describe('/kairos command', () => {
       },
       redactionEvents: 1,
     })
+  })
+
+  test('build-audit-siem-export emits payload-free JSONL records for SIEM ingestion', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'siem-export-build',
+      now: () => new Date('2026-04-25T20:12:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} siem export`)
+
+    const out = await runKairosCommand(
+      `build-audit-siem-export ${projectDir} siem-export-build`,
+    )
+    const records = out.split('\n').map(line => JSON.parse(line)) as Array<{
+      recordType: string
+      version?: number
+      buildId?: string
+      projectDir?: string
+      projectDirHash?: string
+      tenantId?: string
+      valid?: boolean
+      eventCount?: number
+      lastHash?: string
+      merkleRoot?: string
+      exportHash?: string
+      redactionPolicy?: {
+        version: number
+        eventFields: string[]
+      }
+      auditSignature?: {
+        version: number
+        status: string
+        reason?: string
+      }
+      erasureSummary?: {
+        clarifyingAnswers: {
+          answered: number
+          redacted: number
+          erasable: number
+        }
+        redactionEvents: number
+      }
+      eventNumber?: number
+      kind?: string
+      t?: string
+      auditPrevHash?: string | null
+      auditHash?: string
+    }>
+
+    expect(records).toHaveLength(3)
+    expect(records[0]).toMatchObject({
+      recordType: 'kairos_build_audit_summary',
+      version: 1,
+      buildId: 'siem-export-build',
+      tenantId: 'local',
+      valid: true,
+      eventCount: 2,
+      auditSignature: {
+        version: 1,
+        status: 'unsigned',
+        reason: 'KAIROS_AUDIT_SIGNING_KEY not configured',
+      },
+      erasureSummary: {
+        clarifyingAnswers: {
+          answered: 0,
+          redacted: 0,
+          erasable: 0,
+        },
+        redactionEvents: 0,
+      },
+      redactionPolicy: {
+        version: 1,
+        eventFields: [
+          'clarifying_question_answered.answer',
+          'spec_written.specPath',
+          'build_result_written.resultPath',
+          'build_failed.errorMessage',
+        ],
+      },
+    })
+    expect(records[0]?.projectDir).toBeUndefined()
+    expect(records[0]?.projectDirHash).toBe(
+      calculateKairosAuditExportHash({
+        field: 'projectDir',
+        value: projectDir,
+      }),
+    )
+    expect(records[0]?.lastHash).toMatch(/^[a-f0-9]{64}$/)
+    expect(records[0]?.merkleRoot).toBe(
+      calculateKairosBuildAuditMerkleRoot(
+        records.slice(1).map(record => record.auditHash as string),
+      ),
+    )
+    expect(records[0]?.exportHash).toMatch(/^[a-f0-9]{64}$/)
+    expect(records[1]).toMatchObject({
+      recordType: 'kairos_build_audit_event',
+      buildId: 'siem-export-build',
+      tenantId: 'local',
+      eventNumber: 1,
+      kind: 'build_created',
+      t: '2026-04-25T20:12:00.000Z',
+      auditPrevHash: null,
+    })
+    expect(records[1]?.auditHash).toMatch(/^[a-f0-9]{64}$/)
+    expect(records[2]).toMatchObject({
+      recordType: 'kairos_build_audit_event',
+      buildId: 'siem-export-build',
+      tenantId: 'local',
+      eventNumber: 2,
+      kind: 'spec_written',
+      t: '2026-04-25T20:12:00.000Z',
+      auditPrevHash: records[1]?.auditHash,
+      auditHash: records[0]?.lastHash,
+    })
+    expect(out).not.toContain(projectDir)
+    expect(out).not.toContain(
+      getProjectKairosBuildSpecPath(projectDir, 'siem-export-build'),
+    )
+    expect(out).not.toContain('siem export')
   })
 
   test('build-audit-export-verify validates a signed audit export file', async () => {
