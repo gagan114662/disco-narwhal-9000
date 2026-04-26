@@ -1413,6 +1413,9 @@ function verifyKairosGeneratedAppArchives(
     if (!readStringField(generatedApp, 'summary')) {
       return false
     }
+    if (!readStringField(generatedApp, 'completedAt')) {
+      return false
+    }
     const seenRelativePaths = new Set<string>()
     return readArrayField(generatedApp, 'files').every(file => {
       const relativePath = readStringField(file, 'relativePath')
