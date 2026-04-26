@@ -1620,7 +1620,9 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
       .filter((hash): hash is string => typeof hash === 'string')
     const merkleValid =
       audit.merkleRoot === calculateKairosBuildAuditMerkleRoot(eventHashes)
-    const eventCountValid = audit.eventCount === events.length
+    const lastEventHash = readStringField(events[events.length - 1] ?? {}, 'auditHash')
+    const eventSummaryValid =
+      audit.eventCount === events.length && audit.lastHash === lastEventHash
     const restoreValid = verifyKairosTenantRestoreEvents(
       buildId,
       tenantId,
@@ -1639,7 +1641,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
       knowledgeGraph,
     )
     const restoreStatus = restoreValid ? '' : ' restore=invalid'
-    const eventsStatus = eventCountValid ? '' : ' events=invalid'
+    const eventsStatus = eventSummaryValid ? '' : ' events=invalid'
     const appsStatus = appsValid ? '' : ' apps=invalid'
     const evalsStatus = evalsValid ? '' : ' evals=invalid'
     const graphStatus = graphValid ? '' : ' graph=invalid'
@@ -1648,7 +1650,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
         auditValid &&
         signatureVerification.valid &&
         merkleValid &&
-        eventCountValid &&
+        eventSummaryValid &&
         restoreValid &&
         appsValid &&
         evalsValid &&
