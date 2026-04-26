@@ -1093,6 +1093,81 @@ async function handleBuildAuditAnchorVerify(rest: string[]): Promise<string> {
   ].join('\n')
 }
 
+type BuildAuditAnchorReadinessStatus = {
+  line: string
+  blocker?: string
+}
+
+async function readBuildAuditAnchorReadinessStatus(
+  manifest: KairosBuildManifest,
+  events: KairosBuildEvent[],
+  verification: ReturnType<typeof verifyKairosBuildEventAuditChain>,
+): Promise<BuildAuditAnchorReadinessStatus | null> {
+  const invalid = (reason: string): BuildAuditAnchorReadinessStatus => ({
+    line: `anchor: invalid reason=${reason}`,
+    blocker: `Build audit anchor is invalid: ${reason}.`,
+  })
+  const anchorPath = getProjectKairosBuildAuditAnchorPath(
+    manifest.projectDir,
+    manifest.buildId,
+  )
+
+  let parsedAnchor: unknown
+  try {
+    parsedAnchor = safeParseJSON(await readFile(anchorPath, 'utf8'), false)
+  } catch {
+    return null
+  }
+  if (
+    parsedAnchor === null ||
+    typeof parsedAnchor !== 'object' ||
+    Array.isArray(parsedAnchor)
+  ) {
+    return invalid('file is not a JSON object')
+  }
+
+  const anchor = parsedAnchor as Record<string, unknown>
+  if (typeof anchor.anchorHash !== 'string') {
+    return invalid('missing anchorHash')
+  }
+  const expectedAnchorHash = calculateKairosAuditExportHash({
+    ...anchor,
+    anchorHash: undefined,
+  })
+  if (anchor.anchorHash !== expectedAnchorHash) {
+    return invalid('anchor hash mismatch')
+  }
+  if (!verification.valid) {
+    return invalid('audit chain invalid')
+  }
+
+  const auditExport = buildKairosAuditExportEnvelope(
+    manifest,
+    events,
+    verification,
+  )
+  const expectedExportHash = calculateKairosAuditExportHash(auditExport)
+  if (anchor.exportHash !== expectedExportHash) {
+    return invalid('export hash mismatch')
+  }
+
+  const signatureVerification = verifyKairosAuditExportSignature(
+    expectedExportHash,
+    anchor.auditSignature,
+  )
+  if (!signatureVerification.valid) {
+    return invalid(`signature ${signatureVerification.reason}`)
+  }
+  if (signatureVerification.status === 'unsigned') {
+    return {
+      line: `anchor: valid signature=unsigned reason=${signatureVerification.reason}`,
+    }
+  }
+  return {
+    line: `anchor: valid signature=signed key=${signatureVerification.keyId} algorithm=${signatureVerification.algorithm}`,
+  }
+}
+
 async function handleBuildSlices(rest: string[]): Promise<string> {
   const parsed = parseBuildShowArgs(rest)
   if (parsed === null) {
@@ -1563,6 +1638,11 @@ async function handleBuildReadiness(rest: string[]): Promise<string> {
 
   const events = await writer.readBuildEvents(parsed.projectDir, parsed.buildId)
   const auditVerification = verifyKairosBuildEventAuditChain(events)
+  const anchorStatus = await readBuildAuditAnchorReadinessStatus(
+    manifest,
+    events,
+    auditVerification,
+  )
   const latestEvent = events.at(-1)
   const latestEventLabel = latestEvent
     ? `${latestEvent.kind} at ${latestEvent.t}`
@@ -1596,12 +1676,14 @@ async function handleBuildReadiness(rest: string[]): Promise<string> {
     : [
         `Build audit chain is invalid at event ${auditVerification.eventNumber}: ${auditVerification.reason}.`,
       ]
+  const anchorBlockers = anchorStatus?.blocker ? [anchorStatus.blocker] : []
   const blockers = [
     ...(hasIncompleteSlice && !selectedSliceIsIncomplete
       ? ['Select an incomplete tracer slice before running build-next.']
       : []),
     ...unansweredQuestions,
     ...auditBlockers,
+    ...anchorBlockers,
   ]
   const blockerLines =
     blockers.length > 0
@@ -1624,6 +1706,7 @@ async function handleBuildReadiness(rest: string[]): Promise<string> {
     `unanswered clarifying questions: ${unansweredQuestions.length}`,
     `last event: ${latestEventLabel}`,
     formatBuildAuditSummary(events),
+    ...(anchorStatus ? [anchorStatus.line] : []),
     `next command: ${nextCommand}`,
     ...questionCommandLines,
     ...blockerLines,

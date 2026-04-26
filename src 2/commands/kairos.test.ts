@@ -1744,6 +1744,36 @@ describe('/kairos command', () => {
     ])
   })
 
+  test('build-readiness blocks when a filesystem audit anchor is invalid', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'readiness-anchor-build',
+      now: () => new Date('2026-04-25T20:48:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} anchor readiness`)
+    await runKairosCommand(
+      `build-audit-anchor ${projectDir} readiness-anchor-build`,
+    )
+    const anchorPath = getProjectKairosBuildAuditAnchorPath(
+      projectDir,
+      'readiness-anchor-build',
+    )
+    const anchor = readJson(anchorPath)
+    writeFileSync(
+      anchorPath,
+      JSON.stringify({ ...anchor, anchorHash: '0'.repeat(64) }),
+    )
+
+    const out = await runKairosCommand(
+      `build-readiness ${projectDir} readiness-anchor-build`,
+    )
+
+    expect(out).toContain('anchor: invalid reason=anchor hash mismatch')
+    expect(out).toContain(
+      '- Build audit anchor is invalid: anchor hash mismatch.',
+    )
+  })
+
   test('build-readiness reports a missing build clearly', async () => {
     const projectDir = makeProjectDir()
     const out = await runKairosCommand(
