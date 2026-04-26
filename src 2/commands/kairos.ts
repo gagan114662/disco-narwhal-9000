@@ -1961,6 +1961,17 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
     'traceabilitySeeds',
   ]
   const expectedBuildSpecKeys = ['format', 'body']
+  const expectedAuditEnvelopeKeys = [
+    'valid',
+    'eventCount',
+    'lastHash',
+    'merkleRoot',
+    'exportHash',
+    'auditSignature',
+    'erasureSummary',
+    'redactionPolicy',
+    'events',
+  ]
   const expectedAuditEventKeys = [
     'eventNumber',
     'kind',
@@ -1979,6 +1990,10 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
         line: `- ${buildId}: audit=invalid signature=invalid merkle=invalid`,
       }
     }
+    const auditEnvelopeShapeValid = hasExactKeys(
+      audit,
+      expectedAuditEnvelopeKeys,
+    )
     const auditEventsShapeValid =
       isRecordArray(audit.events) &&
       readArrayField(audit, 'events').every(event =>
@@ -2058,6 +2073,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
     const expectedAuditHash =
       calculateKairosAuditExportHash(auditHashMaterial)
     const auditValid =
+      auditEnvelopeShapeValid &&
       audit.valid === true &&
       audit.failure === undefined &&
       isKairosBuildAuditRedactionPolicy(audit.redactionPolicy) &&
