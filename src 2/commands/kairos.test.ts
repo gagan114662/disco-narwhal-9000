@@ -4480,6 +4480,63 @@ describe('/kairos command', () => {
     ).toBe(false)
   })
 
+  test('import tenant rejects mismatched tenant ids across all builds', async () => {
+    const sourceProjectDir = makeProjectDir()
+    const targetProjectDir = makeProjectDir()
+    const exportPath = join(
+      makeTempConfigDir(),
+      'tenant-import-second-tenant-tampered.json',
+    )
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'tenant-import-first-tenant-build',
+      now: () => new Date('2026-04-25T20:17:00.000Z'),
+    })
+    await runKairosCommand(`build ${sourceProjectDir} first tenant build`)
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'tenant-import-second-tenant-build',
+      now: () => new Date('2026-04-25T20:18:00.000Z'),
+    })
+    await runKairosCommand(`build ${sourceProjectDir} second tenant build`)
+    const tenantExport = JSON.parse(
+      await runKairosCommand(`export tenant ${sourceProjectDir}`),
+    ) as {
+      archiveHash: string
+      builds: Array<{
+        tenantId: string
+      }>
+    }
+    tenantExport.builds[1]!.tenantId = 'other-tenant'
+    const { archiveHash: _archiveHash, ...archiveHashMaterial } = tenantExport
+    tenantExport.archiveHash = calculateKairosAuditExportHash(
+      archiveHashMaterial,
+    )
+    writeFileSync(exportPath, JSON.stringify(tenantExport, null, 2))
+
+    const importOut = await runKairosCommand(
+      `import tenant ${exportPath} ${targetProjectDir}`,
+    )
+
+    expect(importOut).toBe(
+      'Tenant archive invalid: tenantId mismatch local != other-tenant.',
+    )
+    expect(
+      existsSync(
+        getProjectKairosBuildManifestPath(
+          targetProjectDir,
+          'tenant-import-first-tenant-build',
+        ),
+      ),
+    ).toBe(false)
+    expect(
+      existsSync(
+        getProjectKairosBuildManifestPath(
+          targetProjectDir,
+          'tenant-import-second-tenant-build',
+        ),
+      ),
+    ).toBe(false)
+  })
+
   test('import tenant rejects empty build tenant ids', async () => {
     const sourceProjectDir = makeProjectDir()
     const targetProjectDir = makeProjectDir()

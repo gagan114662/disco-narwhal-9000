@@ -1842,11 +1842,14 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
   if (archive.buildCount !== builds.length) {
     return `Tenant archive invalid: buildCount mismatch ${String(archive.buildCount ?? 'missing')} != ${builds.length}.`
   }
-  const buildTenantId = builds
+  const mismatchedBuildTenantId = builds
     .map(build => build.tenantId)
-    .find((tenantId): tenantId is string => typeof tenantId === 'string')
-  if (buildTenantId && archive.tenantId !== buildTenantId) {
-    return `Tenant archive invalid: tenantId mismatch ${String(archive.tenantId ?? 'missing')} != ${buildTenantId}.`
+    .find(
+      (tenantId): tenantId is string =>
+        typeof tenantId === 'string' && tenantId !== archive.tenantId,
+    )
+  if (mismatchedBuildTenantId) {
+    return `Tenant archive invalid: tenantId mismatch ${String(archive.tenantId ?? 'missing')} != ${mismatchedBuildTenantId}.`
   }
   const seenBuildIds = new Set<string>()
   for (const build of builds) {
