@@ -18,6 +18,7 @@ import {
   acceptSoftwareFactoryReconciliation,
   exportSoftwareFactoryCompliancePack,
   listSoftwareFactoryBuilds,
+  listSoftwareFactorySpecTemplates,
   proposeSoftwareFactoryChange,
   proposeSoftwareFactoryReconciliation,
   readSoftwareFactoryBuild,
@@ -70,7 +71,8 @@ const HELP_TEXT = `Usage:
 /kairos opt-in [projectDir]
 /kairos opt-out [projectDir]
 /kairos demo [projectDir]
-/kairos build run --accept-ip-terms [projectDir] <brief>
+/kairos build templates
+/kairos build run --accept-ip-terms [--template <id>] [projectDir] <brief>
 /kairos build list
 /kairos build show <buildId>
 /kairos build verify <buildId>
@@ -270,22 +272,56 @@ function isPathLike(token: string): boolean {
 
 function parseBuildRunArgs(
   rest: string[],
-): { projectDir: string; brief: string; ipTermsAccepted: boolean } | null {
+): {
+  projectDir: string
+  brief: string
+  ipTermsAccepted: boolean
+  templateId?: string
+} | null {
   const ipTermsAccepted = rest.includes('--accept-ip-terms')
-  const buildArgs = rest.filter(token => token !== '--accept-ip-terms')
+  const buildArgs: string[] = []
+  let templateId: string | undefined
+  let invalidTemplateFlag = false
+  for (let index = 0; index < rest.length; index++) {
+    const token = rest[index]
+    if (token === '--accept-ip-terms') continue
+    if (token === '--template') {
+      const value = rest[index + 1]
+      if (!value || value.startsWith('--')) {
+        invalidTemplateFlag = true
+        continue
+      }
+      templateId = value
+      index++
+      continue
+    }
+    buildArgs.push(token as string)
+  }
+  if (invalidTemplateFlag) {
+    return null
+  }
   const [first, ...remaining] = buildArgs
   if (!first) {
+    return null
+  }
+  if (templateId !== undefined && !templateId.trim()) {
     return null
   }
   if (isPathLike(first)) {
     const brief = remaining.join(' ').trim()
     if (!brief) return null
-    return { projectDir: resolveProjectDir(first), brief, ipTermsAccepted }
+    return {
+      projectDir: resolveProjectDir(first),
+      brief,
+      ipTermsAccepted,
+      templateId,
+    }
   }
   return {
     projectDir: getProjectRoot(),
     brief: [first, ...remaining].join(' ').trim(),
     ipTermsAccepted,
+    templateId,
   }
 }
 
@@ -300,10 +336,19 @@ async function handleBuild(rest: string[]): Promise<string> {
   const [action, ...args] = rest
   try {
     switch (action) {
+      case 'templates': {
+        const templates = listSoftwareFactorySpecTemplates()
+        return templates
+          .map(
+            template =>
+              `${template.id}: ${template.name} - ${template.description}`,
+          )
+          .join('\n')
+      }
       case 'run': {
         const parsed = parseBuildRunArgs(args)
         if (!parsed) {
-          return 'Usage: /kairos build run --accept-ip-terms [projectDir] <brief>'
+          return 'Usage: /kairos build run --accept-ip-terms [--template <id>] [projectDir] <brief>'
         }
         if (!parsed.ipTermsAccepted) {
           return [
@@ -312,7 +357,7 @@ async function handleBuild(rest: string[]): Promise<string> {
             '- You confirm you have rights to provide the source brief and supporting materials.',
             '- Generated application code is assigned to the project owner for use under the project terms.',
             '- You remain responsible for reviewing generated code, dependencies, and compliance posture before production use.',
-            'Re-run with: /kairos build run --accept-ip-terms [projectDir] <brief>',
+            'Re-run with: /kairos build run --accept-ip-terms [--template <id>] [projectDir] <brief>',
           ].join('\n')
         }
         const result = await runSoftwareFactoryBuild(parsed)
@@ -320,6 +365,7 @@ async function handleBuild(rest: string[]): Promise<string> {
           `Software Factory build ${result.buildId}: ${result.status}`,
           `app: ${result.appId}`,
           `title: ${result.title}`,
+          `template: ${parsed.templateId ?? 'none'}`,
           `clauses: ${result.clauseCount}`,
           `spec: ${result.specPath}`,
           `project spec: ${result.projectSpecPath}`,
@@ -355,6 +401,7 @@ async function handleBuild(rest: string[]): Promise<string> {
           `tenant: ${build.tenantId}`,
           `app: ${build.appId}`,
           `title: ${build.title}`,
+          `template: ${build.templateId ?? 'none'}`,
           `clauses: ${build.clauseCount}`,
           `spec: ${build.specPath}`,
           `project spec: ${build.projectSpecPath}`,
@@ -471,7 +518,8 @@ async function handleBuild(rest: string[]): Promise<string> {
       default:
         return [
           'Usage:',
-          '/kairos build run --accept-ip-terms [projectDir] <brief>',
+          '/kairos build templates',
+          '/kairos build run --accept-ip-terms [--template <id>] [projectDir] <brief>',
           '/kairos build list',
           '/kairos build show <buildId>',
           '/kairos build verify <buildId>',

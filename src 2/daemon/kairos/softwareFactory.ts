@@ -10,6 +10,49 @@ import {
 
 export const KAIROS_SOFTWARE_FACTORY_VERSION = 1
 
+const SOFTWARE_FACTORY_SPEC_TEMPLATES: SoftwareFactorySpecTemplate[] = [
+  {
+    id: 'crud',
+    name: 'CRUD workflow',
+    description: 'Capture, persist, list, update, and audit records.',
+    clauses: [
+      'Capture structured records through a validated form',
+      'Persist submitted records and show them in a searchable list view',
+      'Allow authorized users to update record status with an audit entry',
+    ],
+  },
+  {
+    id: 'approval-workflow',
+    name: 'Approval workflow',
+    description: 'Route submitted records through reviewer approval gates.',
+    clauses: [
+      'Capture requests with submitter, reviewer, status, and notes fields',
+      'Require reviewer approval before a request can move to approved status',
+      'Record every approval or rejection decision in an audit trail',
+    ],
+  },
+  {
+    id: 'dashboard',
+    name: 'Operations dashboard',
+    description: 'Summarize operational records with status and owner views.',
+    clauses: [
+      'Show a dashboard summary grouped by status and owner',
+      'Persist records that feed the dashboard metrics',
+      'Record important dashboard-impacting status changes in an audit trail',
+    ],
+  },
+  {
+    id: 'vendor-onboarding',
+    name: 'Vendor onboarding',
+    description: 'Collect vendor intake details and reviewer decisions.',
+    clauses: [
+      'Capture vendor profile, documents, risk notes, and owner fields',
+      'Route vendor submissions through reviewer approval before activation',
+      'Record onboarding status changes and reviewer decisions in an audit trail',
+    ],
+  },
+]
+
 export type SoftwareFactoryClause = {
   id: string
   text: string
@@ -23,6 +66,7 @@ export type SoftwareFactorySpec = {
   projectDir: string
   title: string
   sourceBrief: string
+  templateId?: string
   clauses: SoftwareFactoryClause[]
   createdAt: string
 }
@@ -115,9 +159,17 @@ export type RunSoftwareFactoryBuildOptions = {
   projectDir: string
   brief: string
   ipTermsAccepted?: boolean
+  templateId?: string
   tenantId?: string
   now?: () => Date
   generateId?: () => string
+}
+
+export type SoftwareFactorySpecTemplate = {
+  id: string
+  name: string
+  description: string
+  clauses: string[]
 }
 
 export type SoftwareFactoryIpTermsAcceptance = {
@@ -135,6 +187,7 @@ export type SoftwareFactoryBuildResult = {
   appId: string
   tenantId: string
   title: string
+  templateId?: string
   status: 'succeeded' | 'blocked'
   buildDir: string
   appDir: string
@@ -429,6 +482,7 @@ function toBuildSummary(
     appId: spec.appId,
     tenantId: spec.tenantId,
     title: spec.title,
+    templateId: spec.templateId,
     status: smoke.status === 'passed' ? 'succeeded' : 'blocked',
     buildDir: paths.buildDir,
     appDir: getKairosSoftwareFactoryTenantAppDir(spec.tenantId, spec.appId),
@@ -481,6 +535,30 @@ function titleFromBrief(brief: string): string {
         `${word.slice(0, 1).toUpperCase()}${word.slice(1).toLowerCase()}`,
     )
     .join(' ')
+}
+
+export function listSoftwareFactorySpecTemplates(): SoftwareFactorySpecTemplate[] {
+  return SOFTWARE_FACTORY_SPEC_TEMPLATES.map(template => ({
+    ...template,
+    clauses: [...template.clauses],
+  }))
+}
+
+function getSoftwareFactorySpecTemplate(
+  templateId: string | undefined,
+): SoftwareFactorySpecTemplate | null {
+  if (!templateId) return null
+  const template = SOFTWARE_FACTORY_SPEC_TEMPLATES.find(
+    candidate => candidate.id === templateId,
+  )
+  if (!template) {
+    throw new Error(`Unknown Software Factory spec template: ${templateId}`)
+  }
+  return template
+}
+
+function templateBriefPrefix(template: SoftwareFactorySpecTemplate): string {
+  return template.clauses.map(clause => `${clause}.`).join(' ')
 }
 
 export function extractSoftwareFactoryClauses(
@@ -541,6 +619,7 @@ function renderSpecMarkdown(spec: SoftwareFactorySpec): string {
     `Build ID: ${spec.buildId}`,
     `App ID: ${spec.appId}`,
     `Tenant: ${spec.tenantId}`,
+    ...(spec.templateId ? [`Template: ${spec.templateId}`] : []),
     '',
     '## Source Brief',
     '',
@@ -1711,8 +1790,8 @@ function smokeGeneratedApp(
 export async function runSoftwareFactoryBuild(
   options: RunSoftwareFactoryBuildOptions,
 ): Promise<SoftwareFactoryBuildResult> {
-  const brief = options.brief.trim()
-  if (!brief) {
+  const userBrief = options.brief.trim()
+  if (!userBrief) {
     throw new Error('Software Factory build brief is required')
   }
   if (options.ipTermsAccepted !== true) {
@@ -1720,11 +1799,15 @@ export async function runSoftwareFactoryBuild(
       'Software Factory IP terms must be accepted before build proceeds',
     )
   }
+  const template = getSoftwareFactorySpecTemplate(options.templateId)
+  const brief = template
+    ? `${templateBriefPrefix(template)} ${userBrief}`.trim()
+    : userBrief
 
   const now = options.now ?? (() => new Date())
   const generateId = options.generateId ?? (() => randomUUID().slice(0, 8))
   const createdAt = now().toISOString()
-  const title = titleFromBrief(brief)
+  const title = titleFromBrief(userBrief)
   const buildId = `sf-${generateId()}`
   const appId = `${slugify(title)}-${generateId()}`
   const tenantId =
@@ -1755,6 +1838,7 @@ export async function runSoftwareFactoryBuild(
     projectDir: options.projectDir,
     title,
     sourceBrief: brief,
+    templateId: template?.id,
     clauses: extractSoftwareFactoryClauses(brief),
     createdAt,
   }
@@ -1847,6 +1931,7 @@ export async function runSoftwareFactoryBuild(
     appId,
     tenantId,
     title,
+    templateId: template?.id,
     status: smoke.status === 'passed' ? 'succeeded' : 'blocked',
     buildDir,
     appDir,

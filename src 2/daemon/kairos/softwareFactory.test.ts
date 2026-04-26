@@ -8,6 +8,7 @@ import {
   acceptSoftwareFactoryReconciliation,
   exportSoftwareFactoryCompliancePack,
   listSoftwareFactoryBuilds,
+  listSoftwareFactorySpecTemplates,
   proposeSoftwareFactoryReconciliation,
   proposeSoftwareFactoryChange,
   readSoftwareFactoryBuild,
@@ -54,6 +55,78 @@ describe('software factory build', () => {
         brief: 'Build a vendor onboarding app.',
       }),
     ).rejects.toThrow('IP terms must be accepted')
+  })
+
+  test('lists Software Factory spec templates as immutable copies', () => {
+    const templates = listSoftwareFactorySpecTemplates()
+    const approvalTemplate = templates.find(
+      template => template.id === 'approval-workflow',
+    )
+
+    expect(approvalTemplate?.name).toBe('Approval workflow')
+    expect(approvalTemplate?.clauses).toContain(
+      'Require reviewer approval before a request can move to approved status',
+    )
+
+    approvalTemplate?.clauses.push('Mutated by test')
+    const freshTemplates = listSoftwareFactorySpecTemplates()
+    expect(
+      freshTemplates.find(template => template.id === 'approval-workflow')
+        ?.clauses,
+    ).not.toContain('Mutated by test')
+  })
+
+  test('applies a Software Factory spec template to generated clauses', async () => {
+    const configDir = makeTempDir('kairos-sf-config-')
+    const projectDir = makeTempDir('kairos-sf-project-')
+    process.env.CLAUDE_CONFIG_DIR = configDir
+
+    let nextId = 0
+    const result = await runSoftwareFactoryBuild({
+      projectDir,
+      ipTermsAccepted: true,
+      templateId: 'approval-workflow',
+      brief: 'Build a travel request app.',
+      now: () => new Date('2026-04-26T12:00:00.000Z'),
+      generateId: () => `template${++nextId}`,
+    })
+
+    expect(result.title).toBe('Travel Request App')
+    expect(result.templateId).toBe('approval-workflow')
+    const spec = readJson(result.specPath) as {
+      templateId?: string
+      sourceBrief: string
+      clauses: Array<{ text: string }>
+    }
+    expect(spec.templateId).toBe('approval-workflow')
+    expect(spec.sourceBrief).toContain('Require reviewer approval')
+    expect(spec.sourceBrief).toContain('Build a travel request app.')
+    const clauseTexts = spec.clauses.map(clause => clause.text)
+    expect(clauseTexts).toContain(
+      'Capture requests with submitter, reviewer, status, and notes fields',
+    )
+    expect(clauseTexts).toContain(
+      'Require reviewer approval before a request can move to approved status',
+    )
+    expect(clauseTexts).toContain(
+      'Record every approval or rejection decision in an audit trail',
+    )
+    expect(clauseTexts).toContain('Build a travel request app')
+  })
+
+  test('rejects unknown Software Factory spec templates', async () => {
+    const configDir = makeTempDir('kairos-sf-config-')
+    const projectDir = makeTempDir('kairos-sf-project-')
+    process.env.CLAUDE_CONFIG_DIR = configDir
+
+    await expect(
+      runSoftwareFactoryBuild({
+        projectDir,
+        ipTermsAccepted: true,
+        templateId: 'missing',
+        brief: 'Build a travel request app.',
+      }),
+    ).rejects.toThrow('Unknown Software Factory spec template: missing')
   })
 
   test('writes a traceable generated app, eval pack, review, smoke result, and audit chain', async () => {

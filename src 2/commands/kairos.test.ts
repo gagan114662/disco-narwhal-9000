@@ -103,6 +103,7 @@ describe('/kairos command', () => {
     expect(out).toContain('/kairos status')
     expect(out).toContain('/kairos opt-in')
     expect(out).toContain('/kairos demo')
+    expect(out).toContain('/kairos build templates')
     expect(out).toContain('/kairos build run')
     expect(out).toContain('/kairos cloud deploy')
     expect(out).toContain('/kairos cloud-sync')
@@ -176,6 +177,14 @@ describe('/kairos command', () => {
     expect(out).toContain('--accept-ip-terms')
   })
 
+  test('build templates lists built-in Software Factory patterns', async () => {
+    const out = await runKairosCommand('build templates')
+
+    expect(out).toContain('crud: CRUD workflow')
+    expect(out).toContain('approval-workflow: Approval workflow')
+    expect(out).toContain('vendor-onboarding: Vendor onboarding')
+  })
+
   test('build run creates a Software Factory scaffold with audit and eval paths', async () => {
     const projectDir = makeProjectDir()
     setProjectRoot(projectDir)
@@ -195,6 +204,44 @@ describe('/kairos command', () => {
     expect(out).toContain(process.env.CLAUDE_CONFIG_DIR as string)
     expect(out).toContain(join(projectDir, '.kairos', 'specs'))
     expect(out).toContain(join(projectDir, 'evals', 'software-factory'))
+  })
+
+  test('build run applies a Software Factory spec template', async () => {
+    const projectDir = makeProjectDir()
+    setProjectRoot(projectDir)
+
+    const out = await runKairosCommand(
+      'build run --accept-ip-terms --template approval-workflow Build a travel request app',
+    )
+
+    expect(out).toContain('Software Factory build sf-')
+    expect(out).toContain('template: approval-workflow')
+    const specPath = out.match(/^spec: (.+)$/m)?.[1]
+    expect(specPath).toBeString()
+    const spec = readJson(specPath as string) as {
+      title: string
+      templateId?: string
+      sourceBrief: string
+      clauses: Array<{ text: string }>
+    }
+    expect(spec.title).toBe('Travel Request App')
+    expect(spec.templateId).toBe('approval-workflow')
+    expect(spec.sourceBrief).toContain('Require reviewer approval')
+    expect(spec.clauses.map(clause => clause.text)).toContain(
+      'Require reviewer approval before a request can move to approved status',
+    )
+  })
+
+  test('build run rejects unknown Software Factory spec templates', async () => {
+    const projectDir = makeProjectDir()
+    setProjectRoot(projectDir)
+
+    const out = await runKairosCommand(
+      'build run --accept-ip-terms --template missing Build a travel request app',
+    )
+
+    expect(out).toContain('Software Factory build command failed')
+    expect(out).toContain('Unknown Software Factory spec template: missing')
   })
 
   test('build list, show, and verify inspect persisted Software Factory builds', async () => {
