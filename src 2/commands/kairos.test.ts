@@ -5477,6 +5477,40 @@ describe('/kairos command', () => {
     ])
   })
 
+  test('build-audit-export-verify rejects signed key relabeling', async () => {
+    const projectDir = makeProjectDir()
+    const exportPath = join(
+      makeTempConfigDir(),
+      'audit-export-key-tampered.json',
+    )
+    process.env.KAIROS_AUDIT_SIGNING_KEY = 'verify-signing-key'
+    process.env.KAIROS_AUDIT_SIGNING_KEY_ID = 'verify-key-1'
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'verify-signed-key-tampered-build',
+      now: () => new Date('2026-04-25T20:20:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} verify key tamper`)
+    const auditExport = JSON.parse(
+      await runKairosCommand(
+        `build-audit-export ${projectDir} verify-signed-key-tampered-build`,
+      ),
+    ) as {
+      auditSignature: {
+        keyId: string
+      }
+    }
+    auditExport.auditSignature.keyId = 'other-key'
+    writeFileSync(exportPath, JSON.stringify(auditExport, null, 2))
+
+    const out = await runKairosCommand(`build-audit-export-verify ${exportPath}`)
+
+    expect(out.split('\n')).toEqual([
+      'Audit export invalid for verify-signed-key-tampered-build.',
+      'export hash: valid',
+      'audit signature: invalid reason=key id mismatch',
+    ])
+  })
+
   test('build-audit-anchor writes a filesystem anchor for the build audit root', async () => {
     const projectDir = makeProjectDir()
     __setKairosBuildDepsForTesting({
