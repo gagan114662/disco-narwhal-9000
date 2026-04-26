@@ -1326,6 +1326,12 @@ function isOptionalString(value: unknown): value is string | undefined {
   return value === undefined || typeof value === 'string'
 }
 
+function isOptionalNonEmptyString(
+  value: unknown,
+): value is string | undefined {
+  return value === undefined || isNonEmptyString(value)
+}
+
 function readStringField(
   value: Record<string, unknown>,
   key: string,
@@ -1672,7 +1678,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
       spec !== null &&
       spec.format === 'markdown' &&
       typeof spec.body === 'string'
-    const briefShapeValid = isOptionalString(metadata.brief)
+    const briefShapeValid = isOptionalNonEmptyString(metadata.brief)
     const problemShapeValid = isOptionalString(metadata.problem)
     const usersShapeValid = isStringArray(metadata.users)
     const goalsShapeValid = isStringArray(metadata.goals)
