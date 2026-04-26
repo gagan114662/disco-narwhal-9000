@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'crypto'
-import { mkdir, readdir, readFile, writeFile } from 'fs/promises'
+import { appendFile, mkdir, readdir, readFile, writeFile } from 'fs/promises'
 import { dirname, isAbsolute, join, normalize, relative } from 'path'
 import { jsonStringify } from '../../utils/slowOperations.js'
 import {
@@ -796,10 +796,8 @@ async function appendAuditEvent(
   const hash = hashJson({ ...eventWithProvenance, prevHash })
   const complete = { ...eventWithProvenance, prevHash, hash }
   events.push(complete)
-  await writeText(
-    auditPath,
-    `${events.map(entry => jsonStringify(entry)).join('\n')}\n`,
-  )
+  await mkdir(dirname(auditPath), { recursive: true })
+  await appendFile(auditPath, `${jsonStringify(complete)}\n`, 'utf8')
   return complete
 }
 
