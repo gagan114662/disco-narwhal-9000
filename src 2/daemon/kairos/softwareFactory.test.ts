@@ -43,6 +43,19 @@ describe('software factory build', () => {
     ).rejects.toThrow('Invalid Software Factory build ID')
   })
 
+  test('rejects builds without accepted IP terms', async () => {
+    const configDir = makeTempDir('kairos-sf-config-')
+    const projectDir = makeTempDir('kairos-sf-project-')
+    process.env.CLAUDE_CONFIG_DIR = configDir
+
+    await expect(
+      runSoftwareFactoryBuild({
+        projectDir,
+        brief: 'Build a vendor onboarding app.',
+      }),
+    ).rejects.toThrow('IP terms must be accepted')
+  })
+
   test('writes a traceable generated app, eval pack, review, smoke result, and audit chain', async () => {
     const configDir = makeTempDir('kairos-sf-config-')
     const projectDir = makeTempDir('kairos-sf-project-')
@@ -51,8 +64,8 @@ describe('software factory build', () => {
     let nextId = 0
     const result = await runSoftwareFactoryBuild({
       projectDir,
-      brief:
-        'Build a leave request app. Managers approve pending requests. Audit every approval.',
+      ipTermsAccepted: true,
+      brief: 'Build a leave request app. Managers approve pending requests. Audit every approval.',
       now: () => new Date('2026-04-26T12:00:00.000Z'),
       generateId: () => `id${++nextId}`,
     })
@@ -63,6 +76,8 @@ describe('software factory build', () => {
     expect(existsSync(result.specPath)).toBe(true)
     expect(existsSync(result.projectSpecPath)).toBe(true)
     expect(existsSync(result.projectSpecMarkdownPath)).toBe(true)
+    expect(existsSync(result.ipTermsPath)).toBe(true)
+    expect(existsSync(result.projectIpTermsPath)).toBe(true)
     expect(existsSync(result.evalPackPath)).toBe(true)
     expect(existsSync(result.projectEvalPackPath)).toBe(true)
     expect(existsSync(join(result.appDir, 'src', 'server.ts'))).toBe(true)
@@ -143,6 +158,7 @@ describe('software factory build', () => {
       'eval-pack',
       'manifest-files',
       'project-spec',
+      'ip-terms',
       'project-eval-pack',
       'manifest-traceability',
       'code-markers',
@@ -161,10 +177,13 @@ describe('software factory build', () => {
     expect(existsSync(exported.exportPath)).toBe(true)
     const compliancePack = readJson(exported.exportPath) as {
       exportHash: string
+      ipTerms: { accepted: boolean; buildId: string }
       generatedFiles: Array<{ path: string; sha256: string; content: string }>
       verification: { ok: boolean }
     }
     expect(compliancePack.exportHash).toBe(exported.exportHash)
+    expect(compliancePack.ipTerms.accepted).toBe(true)
+    expect(compliancePack.ipTerms.buildId).toBe(result.buildId)
     expect(compliancePack.generatedFiles.map(file => file.path)).toContain(
       'README.md',
     )
@@ -178,6 +197,7 @@ describe('software factory build', () => {
 
     const result = await runSoftwareFactoryBuild({
       projectDir,
+      ipTermsAccepted: true,
       brief: 'Build a purchase approval app with reviewer approval.',
       now: () => new Date('2026-04-26T12:00:00.000Z'),
       generateId: () => 'project-spec',
@@ -204,6 +224,7 @@ describe('software factory build', () => {
 
     const result = await runSoftwareFactoryBuild({
       projectDir,
+      ipTermsAccepted: true,
       brief: 'Build a vendor approval app with reviewer approval.',
       now: () => new Date('2026-04-26T12:00:00.000Z'),
       generateId: () => 'project-eval',
@@ -233,6 +254,7 @@ describe('software factory build', () => {
 
     const result = await runSoftwareFactoryBuild({
       projectDir,
+      ipTermsAccepted: true,
       brief: 'Build a vendor approval app with reviewer approval.',
       now: () => new Date('2026-04-26T12:00:00.000Z'),
       generateId: () => 'manifest-path',
@@ -262,8 +284,8 @@ describe('software factory build', () => {
 
     const result = await runSoftwareFactoryBuild({
       projectDir,
-      brief:
-        `Build ${scriptPayload} app. Show vendor notes ${imagePayload}.`,
+      ipTermsAccepted: true,
+      brief: `Build ${scriptPayload} app. Show vendor notes ${imagePayload}.`,
       now: () => new Date('2026-04-26T12:00:00.000Z'),
       generateId: () => 'html',
     })
@@ -297,6 +319,7 @@ describe('software factory build', () => {
 
     const result = await runSoftwareFactoryBuild({
       projectDir,
+      ipTermsAccepted: true,
       brief: 'Build a purchasing workflow app with reviewer approval.',
       now: () => new Date('2026-04-26T12:00:00.000Z'),
       generateId: () => 'drift',
@@ -335,6 +358,7 @@ describe('software factory build', () => {
 
     const result = await runSoftwareFactoryBuild({
       projectDir,
+      ipTermsAccepted: true,
       brief: 'Build a contract review app with reviewer approval.',
       now: () => new Date('2026-04-26T12:00:00.000Z'),
       generateId: () => 'reconcile',
@@ -376,6 +400,7 @@ describe('software factory build', () => {
 
     const result = await runSoftwareFactoryBuild({
       projectDir,
+      ipTermsAccepted: true,
       brief: 'Build a contract approval app with reviewer approval.',
       now: () => new Date('2026-04-26T12:00:00.000Z'),
       generateId: () => 'wrong-reconcile',
@@ -401,6 +426,7 @@ describe('software factory build', () => {
 
     const result = await runSoftwareFactoryBuild({
       projectDir,
+      ipTermsAccepted: true,
       brief: 'Build a supplier review app with reviewer approval.',
       now: () => new Date('2026-04-26T12:00:00.000Z'),
       generateId: () => 'accept',
@@ -456,6 +482,7 @@ describe('software factory build', () => {
 
     const result = await runSoftwareFactoryBuild({
       projectDir,
+      ipTermsAccepted: true,
       brief: 'Build an invoice review app with reviewer approval.',
       now: () => new Date('2026-04-26T12:00:00.000Z'),
       generateId: () => 'change',
@@ -514,6 +541,7 @@ describe('software factory build', () => {
 
     const result = await runSoftwareFactoryBuild({
       projectDir,
+      ipTermsAccepted: true,
       brief: 'Build an invoice approval app with reviewer approval.',
       now: () => new Date('2026-04-26T12:00:00.000Z'),
       generateId: () => 'unsafe-change',
@@ -540,6 +568,7 @@ describe('software factory build', () => {
 
     const result = await runSoftwareFactoryBuild({
       projectDir,
+      ipTermsAccepted: true,
       brief: 'Build a staffing approval app with reviewer approval.',
       now: () => new Date('2026-04-26T12:00:00.000Z'),
       generateId: () => 'marker-change',
@@ -567,6 +596,7 @@ describe('software factory build', () => {
 
     const result = await runSoftwareFactoryBuild({
       projectDir,
+      ipTermsAccepted: true,
       brief: 'Build a travel approval app with reviewer approval.',
       now: () => new Date('2026-04-26T12:00:00.000Z'),
       generateId: () => 'drift-change',
@@ -592,6 +622,7 @@ describe('software factory build', () => {
 
     const result = await runSoftwareFactoryBuild({
       projectDir,
+      ipTermsAccepted: true,
       brief: 'Build an expense approval app with manager review.',
       now: () => new Date('2026-04-26T12:00:00.000Z'),
       generateId: () => 'fixed',

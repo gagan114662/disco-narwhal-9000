@@ -70,7 +70,7 @@ const HELP_TEXT = `Usage:
 /kairos opt-in [projectDir]
 /kairos opt-out [projectDir]
 /kairos demo [projectDir]
-/kairos build run [projectDir] <brief>
+/kairos build run --accept-ip-terms [projectDir] <brief>
 /kairos build list
 /kairos build show <buildId>
 /kairos build verify <buildId>
@@ -270,19 +270,22 @@ function isPathLike(token: string): boolean {
 
 function parseBuildRunArgs(
   rest: string[],
-): { projectDir: string; brief: string } | null {
-  const [first, ...remaining] = rest
+): { projectDir: string; brief: string; ipTermsAccepted: boolean } | null {
+  const ipTermsAccepted = rest.includes('--accept-ip-terms')
+  const buildArgs = rest.filter(token => token !== '--accept-ip-terms')
+  const [first, ...remaining] = buildArgs
   if (!first) {
     return null
   }
   if (isPathLike(first)) {
     const brief = remaining.join(' ').trim()
     if (!brief) return null
-    return { projectDir: resolveProjectDir(first), brief }
+    return { projectDir: resolveProjectDir(first), brief, ipTermsAccepted }
   }
   return {
     projectDir: getProjectRoot(),
     brief: [first, ...remaining].join(' ').trim(),
+    ipTermsAccepted,
   }
 }
 
@@ -300,7 +303,17 @@ async function handleBuild(rest: string[]): Promise<string> {
       case 'run': {
         const parsed = parseBuildRunArgs(args)
         if (!parsed) {
-          return 'Usage: /kairos build run [projectDir] <brief>'
+          return 'Usage: /kairos build run --accept-ip-terms [projectDir] <brief>'
+        }
+        if (!parsed.ipTermsAccepted) {
+          return [
+            'Software Factory IP terms must be accepted before build proceeds.',
+            'Terms:',
+            '- You confirm you have rights to provide the source brief and supporting materials.',
+            '- Generated application code is assigned to the project owner for use under the project terms.',
+            '- You remain responsible for reviewing generated code, dependencies, and compliance posture before production use.',
+            'Re-run with: /kairos build run --accept-ip-terms [projectDir] <brief>',
+          ].join('\n')
         }
         const result = await runSoftwareFactoryBuild(parsed)
         return [
@@ -310,6 +323,8 @@ async function handleBuild(rest: string[]): Promise<string> {
           `clauses: ${result.clauseCount}`,
           `spec: ${result.specPath}`,
           `project spec: ${result.projectSpecPath}`,
+          `ip terms: ${result.ipTermsPath}`,
+          `project ip terms: ${result.projectIpTermsPath}`,
           `eval pack: ${result.evalPackPath}`,
           `project eval pack: ${result.projectEvalPackPath}`,
           `app dir: ${result.appDir}`,
@@ -343,6 +358,8 @@ async function handleBuild(rest: string[]): Promise<string> {
           `clauses: ${build.clauseCount}`,
           `spec: ${build.specPath}`,
           `project spec: ${build.projectSpecPath}`,
+          `ip terms: ${build.ipTermsPath}`,
+          `project ip terms: ${build.projectIpTermsPath}`,
           `eval pack: ${build.evalPackPath}`,
           `project eval pack: ${build.projectEvalPackPath}`,
           `app dir: ${build.appDir}`,
@@ -454,7 +471,7 @@ async function handleBuild(rest: string[]): Promise<string> {
       default:
         return [
           'Usage:',
-          '/kairos build run [projectDir] <brief>',
+          '/kairos build run --accept-ip-terms [projectDir] <brief>',
           '/kairos build list',
           '/kairos build show <buildId>',
           '/kairos build verify <buildId>',

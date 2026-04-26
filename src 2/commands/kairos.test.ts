@@ -164,17 +164,31 @@ describe('/kairos command', () => {
     expect(task.cron.split(/\s+/)).toHaveLength(5)
   })
 
+  test('build run requires explicit IP terms acceptance', async () => {
+    const projectDir = makeProjectDir()
+    setProjectRoot(projectDir)
+
+    const out = await runKairosCommand(
+      'build run Build a vendor onboarding form with reviewer approval',
+    )
+
+    expect(out).toContain('IP terms must be accepted')
+    expect(out).toContain('--accept-ip-terms')
+  })
+
   test('build run creates a Software Factory scaffold with audit and eval paths', async () => {
     const projectDir = makeProjectDir()
     setProjectRoot(projectDir)
 
     const out = await runKairosCommand(
-      'build run Build a vendor onboarding form with reviewer approval and audit trail',
+      'build run --accept-ip-terms Build a vendor onboarding form with reviewer approval and audit trail',
     )
 
     expect(out).toContain('Software Factory build sf-')
     expect(out).toContain('succeeded')
     expect(out).toContain('project spec:')
+    expect(out).toContain('ip terms:')
+    expect(out).toContain('project ip terms:')
     expect(out).toContain('eval pack:')
     expect(out).toContain('project eval pack:')
     expect(out).toContain('app dir:')
@@ -188,7 +202,7 @@ describe('/kairos command', () => {
     setProjectRoot(projectDir)
 
     const created = await runKairosCommand(
-      'build run Build an invoice approval app with reviewer audit trail',
+      'build run --accept-ip-terms Build an invoice approval app with reviewer audit trail',
     )
     const buildId = created.match(/Software Factory build (sf-[^:]+):/)?.[1]
     expect(buildId).toBeString()
@@ -201,6 +215,8 @@ describe('/kairos command', () => {
     const show = await runKairosCommand(`build show ${buildId}`)
     expect(show).toContain(`Software Factory build ${buildId}: succeeded`)
     expect(show).toContain('project spec:')
+    expect(show).toContain('ip terms:')
+    expect(show).toContain('project ip terms:')
     expect(show).toContain('eval pack:')
     expect(show).toContain('project eval pack:')
     expect(show).toContain('audit:')
@@ -242,7 +258,7 @@ describe('/kairos command', () => {
     setProjectRoot(projectDir)
 
     const created = await runKairosCommand(
-      'build run Build an expense approval app with reviewer audit trail',
+      'build run --accept-ip-terms Build an expense approval app with reviewer audit trail',
     )
     const buildId = created.match(/Software Factory build (sf-[^:]+):/)?.[1]
     const appDir = created.match(/^app dir: (.+)$/m)?.[1]
@@ -265,7 +281,7 @@ describe('/kairos command', () => {
     setProjectRoot(projectDir)
 
     const created = await runKairosCommand(
-      'build run Build a vendor risk app with reviewer audit trail',
+      'build run --accept-ip-terms Build a vendor risk app with reviewer audit trail',
     )
     const buildId = created.match(/Software Factory build (sf-[^:]+):/)?.[1]
     const appDir = created.match(/^app dir: (.+)$/m)?.[1]
@@ -295,7 +311,7 @@ describe('/kairos command', () => {
     setProjectRoot(projectDir)
 
     const created = await runKairosCommand(
-      'build run Build a supplier review app with reviewer audit trail',
+      'build run --accept-ip-terms Build a supplier review app with reviewer audit trail',
     )
     const buildId = created.match(/Software Factory build (sf-[^:]+):/)?.[1]
     const appDir = created.match(/^app dir: (.+)$/m)?.[1]
@@ -326,7 +342,7 @@ describe('/kairos command', () => {
     setProjectRoot(projectDir)
 
     const created = await runKairosCommand(
-      'build run Build an invoice review app with reviewer audit trail',
+      'build run --accept-ip-terms Build an invoice review app with reviewer audit trail',
     )
     const buildId = created.match(/Software Factory build (sf-[^:]+):/)?.[1]
     expect(buildId).toBeString()

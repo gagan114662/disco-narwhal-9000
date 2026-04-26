@@ -114,9 +114,20 @@ export type SoftwareFactoryAuditEvent = {
 export type RunSoftwareFactoryBuildOptions = {
   projectDir: string
   brief: string
+  ipTermsAccepted?: boolean
   tenantId?: string
   now?: () => Date
   generateId?: () => string
+}
+
+export type SoftwareFactoryIpTermsAcceptance = {
+  version: 1
+  buildId: string
+  appId: string
+  tenantId: string
+  accepted: true
+  acceptedAt: string
+  terms: string[]
 }
 
 export type SoftwareFactoryBuildResult = {
@@ -130,6 +141,8 @@ export type SoftwareFactoryBuildResult = {
   specPath: string
   projectSpecPath: string
   projectSpecMarkdownPath: string
+  ipTermsPath: string
+  projectIpTermsPath: string
   evalPackPath: string
   projectEvalPackPath: string
   appManifestPath: string
@@ -167,6 +180,7 @@ export type SoftwareFactoryCompliancePack = {
   buildId: string
   exportedAt: string
   spec: SoftwareFactorySpec
+  ipTerms: SoftwareFactoryIpTermsAcceptance
   evalPack: SoftwareFactoryEvalPack
   appManifest: SoftwareFactoryAppManifest
   review: SoftwareFactoryReview
@@ -283,6 +297,7 @@ function assertValidSoftwareFactoryBuildId(buildId: string): void {
 function getBuildPaths(buildId: string): {
   buildDir: string
   specPath: string
+  ipTermsPath: string
   evalPackPath: string
   appManifestPath: string
   reviewPath: string
@@ -294,6 +309,7 @@ function getBuildPaths(buildId: string): {
   return {
     buildDir,
     specPath: join(buildDir, 'spec.json'),
+    ipTermsPath: join(buildDir, 'ip-terms.json'),
     evalPackPath: join(buildDir, 'eval-pack.json'),
     appManifestPath: join(buildDir, 'app-manifest.json'),
     reviewPath: join(buildDir, 'review.json'),
@@ -312,6 +328,10 @@ function getProjectSpecPath(projectDir: string, buildId: string): string {
 
 function getProjectSpecMarkdownPath(projectDir: string, buildId: string): string {
   return join(projectDir, '.kairos', 'specs', buildId, 'spec.md')
+}
+
+function getProjectIpTermsPath(projectDir: string, buildId: string): string {
+  return join(projectDir, '.kairos', 'specs', buildId, 'ip-terms.json')
 }
 
 async function readJson<T>(path: string): Promise<T> {
@@ -418,6 +438,8 @@ function toBuildSummary(
       spec.projectDir,
       spec.buildId,
     ),
+    ipTermsPath: paths.ipTermsPath,
+    projectIpTermsPath: getProjectIpTermsPath(spec.projectDir, spec.buildId),
     evalPackPath: paths.evalPackPath,
     projectEvalPackPath: getProjectEvalPackPath(spec.projectDir, spec.buildId),
     appManifestPath: paths.appManifestPath,
@@ -529,6 +551,27 @@ function renderSpecMarkdown(spec: SoftwareFactorySpec): string {
     ...spec.clauses.map(clause => `- ${clause.id}: ${clause.text}`),
     '',
   ].join('\n')
+}
+
+function createIpTermsAcceptance(
+  spec: Pick<
+    SoftwareFactorySpec,
+    'buildId' | 'appId' | 'tenantId' | 'createdAt'
+  >,
+): SoftwareFactoryIpTermsAcceptance {
+  return {
+    version: KAIROS_SOFTWARE_FACTORY_VERSION,
+    buildId: spec.buildId,
+    appId: spec.appId,
+    tenantId: spec.tenantId,
+    accepted: true,
+    acceptedAt: spec.createdAt,
+    terms: [
+      'Requester confirms they have rights to provide the source brief and supporting materials.',
+      'Requester assigns generated application code to the project owner for use under the project terms.',
+      'Requester accepts responsibility for reviewing generated code, dependencies, and compliance posture before production use.',
+    ],
+  }
 }
 
 function nextClauseId(spec: SoftwareFactorySpec, offset: number): string {
@@ -860,6 +903,8 @@ export async function verifySoftwareFactoryBuild(
         readJson<SoftwareFactorySmokeResult>(paths.smokePath),
         readAuditEvents(paths.auditPath),
       ])
+    let ipTerms: SoftwareFactoryIpTermsAcceptance | null = null
+    let projectIpTerms: SoftwareFactoryIpTermsAcceptance | null = null
     let projectSpec: SoftwareFactorySpec | null = null
     let projectSpecMarkdown: string | null = null
     let projectEvalPack: SoftwareFactoryEvalPack | null = null
@@ -868,6 +913,20 @@ export async function verifySoftwareFactoryBuild(
       spec.projectDir,
       spec.buildId,
     )
+    const projectIpTermsPath = getProjectIpTermsPath(
+      spec.projectDir,
+      spec.buildId,
+    )
+    try {
+      ipTerms = await readJson<SoftwareFactoryIpTermsAcceptance>(
+        paths.ipTermsPath,
+      )
+      projectIpTerms =
+        await readJson<SoftwareFactoryIpTermsAcceptance>(projectIpTermsPath)
+    } catch {
+      ipTerms = null
+      projectIpTerms = null
+    }
     try {
       projectSpec = await readJson<SoftwareFactorySpec>(projectSpecPath)
       projectSpecMarkdown = await readFile(projectSpecMarkdownPath, 'utf8')
@@ -940,6 +999,20 @@ export async function verifySoftwareFactoryBuild(
       projectSpec
         ? `repo-local spec at ${projectSpecPath}`
         : 'repo-local spec missing',
+    )
+    addCheck(
+      'ip-terms',
+      ipTerms?.accepted === true &&
+        ipTerms.buildId === spec.buildId &&
+        ipTerms.appId === spec.appId &&
+        ipTerms.tenantId === spec.tenantId &&
+        projectIpTerms?.accepted === true &&
+        projectIpTerms.buildId === spec.buildId &&
+        projectIpTerms.appId === spec.appId &&
+        projectIpTerms.tenantId === spec.tenantId,
+      ipTerms && projectIpTerms
+        ? `accepted IP terms at ${paths.ipTermsPath}`
+        : 'accepted IP terms missing',
     )
     addCheck(
       'project-eval-pack',
@@ -1474,9 +1547,10 @@ export async function exportSoftwareFactoryCompliancePack(
   options: { now?: () => Date } = {},
 ): Promise<SoftwareFactoryComplianceExport> {
   const paths = getBuildPaths(buildId)
-  const [spec, evalPack, appManifest, review, smoke, auditEvents] =
+  const [spec, ipTerms, evalPack, appManifest, review, smoke, auditEvents] =
     await Promise.all([
       readJson<SoftwareFactorySpec>(paths.specPath),
+      readJson<SoftwareFactoryIpTermsAcceptance>(paths.ipTermsPath),
       readJson<SoftwareFactoryEvalPack>(paths.evalPackPath),
       readJson<SoftwareFactoryAppManifest>(paths.appManifestPath),
       readJson<SoftwareFactoryReview>(paths.reviewPath),
@@ -1500,6 +1574,7 @@ export async function exportSoftwareFactoryCompliancePack(
     buildId,
     exportedAt: (options.now ?? (() => new Date()))().toISOString(),
     spec,
+    ipTerms,
     evalPack,
     appManifest,
     review,
@@ -1640,6 +1715,11 @@ export async function runSoftwareFactoryBuild(
   if (!brief) {
     throw new Error('Software Factory build brief is required')
   }
+  if (options.ipTermsAccepted !== true) {
+    throw new Error(
+      'Software Factory IP terms must be accepted before build proceeds',
+    )
+  }
 
   const now = options.now ?? (() => new Date())
   const generateId = options.generateId ?? (() => randomUUID().slice(0, 8))
@@ -1680,23 +1760,28 @@ export async function runSoftwareFactoryBuild(
   }
   const specPath = join(buildDir, 'spec.json')
   const specMarkdownPath = join(buildDir, 'spec.md')
+  const ipTermsPath = join(buildDir, 'ip-terms.json')
   const projectSpecPath = getProjectSpecPath(options.projectDir, buildId)
   const projectSpecMarkdownPath = getProjectSpecMarkdownPath(
     options.projectDir,
     buildId,
   )
+  const projectIpTermsPath = getProjectIpTermsPath(options.projectDir, buildId)
   const specMarkdown = renderSpecMarkdown(spec)
+  const ipTerms = createIpTermsAcceptance(spec)
   await writeJson(specPath, spec)
   await writeText(specMarkdownPath, specMarkdown)
+  await writeJson(ipTermsPath, ipTerms)
   await writeJson(projectSpecPath, spec)
   await writeText(projectSpecMarkdownPath, specMarkdown)
+  await writeJson(projectIpTermsPath, ipTerms)
   await appendAuditEvent(auditPath, auditEvents, {
     version: KAIROS_SOFTWARE_FACTORY_VERSION,
     buildId,
     tenantId,
     t: now().toISOString(),
     kind: 'spec.confirmed',
-    details: { clauseCount: spec.clauses.length, specPath },
+    details: { clauseCount: spec.clauses.length, specPath, ipTermsPath },
   })
 
   const evalPack = createEvalPack(spec, now().toISOString())
@@ -1768,6 +1853,8 @@ export async function runSoftwareFactoryBuild(
     specPath,
     projectSpecPath,
     projectSpecMarkdownPath,
+    ipTermsPath,
+    projectIpTermsPath,
     evalPackPath,
     projectEvalPackPath,
     appManifestPath,
