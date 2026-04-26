@@ -1667,7 +1667,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
     const statusShapeValid = isKairosBuildStatus(build.status)
     const titleShapeValid = isNonEmptyString(build.title)
     const createdAtShapeValid = isNonEmptyString(build.createdAt)
-    const updatedAtShapeValid = typeof build.updatedAt === 'string'
+    const updatedAtShapeValid = isNonEmptyString(build.updatedAt)
     const specShapeValid =
       spec !== null &&
       spec.format === 'markdown' &&
