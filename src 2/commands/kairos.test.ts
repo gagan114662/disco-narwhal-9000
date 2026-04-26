@@ -154,6 +154,7 @@ describe('/kairos command', () => {
     expect(out).toContain('/kairos build-audit-siem-export')
     expect(out).toContain('/kairos export tenant')
     expect(out).toContain('/kairos export tenant-verify')
+    expect(out).toContain('/kairos import tenant')
     expect(out).toContain('/kairos cloud deploy')
     expect(out).toContain('/kairos cloud-sync')
   })
@@ -163,9 +164,10 @@ describe('/kairos command', () => {
     expect(out).toContain('Usage:')
   })
 
-  test('command metadata advertises tenant export commands', () => {
+  test('command metadata advertises tenant portability commands', () => {
     expect(kairosCommand.argumentHint).toContain('export tenant')
     expect(kairosCommand.argumentHint).toContain('export tenant-verify')
+    expect(kairosCommand.argumentHint).toContain('import tenant')
   })
 
   test('opt-in and opt-out modify projects.json', async () => {
@@ -1070,6 +1072,50 @@ describe('/kairos command', () => {
       'archive hash: valid',
       'builds: 1',
       '- tenant-export-verify-build: audit=valid signature=unsigned merkle=valid',
+    ])
+  })
+
+  test('import tenant restores a portable archive into a fresh project', async () => {
+    const sourceProjectDir = makeProjectDir()
+    const targetProjectDir = makeProjectDir()
+    const exportPath = join(makeTempConfigDir(), 'tenant-import.json')
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'tenant-import-build',
+      now: () => new Date('2026-04-25T20:12:00.000Z'),
+    })
+    await runKairosCommand(`build ${sourceProjectDir} tenant import`)
+    writeFileSync(
+      exportPath,
+      await runKairosCommand(`export tenant ${sourceProjectDir}`),
+    )
+
+    const importOut = await runKairosCommand(
+      `import tenant ${exportPath} ${targetProjectDir}`,
+    )
+    const showOut = await runKairosCommand(
+      `build-show ${targetProjectDir} tenant-import-build`,
+    )
+    const verifyOut = await runKairosCommand(
+      `build-audit-verify ${targetProjectDir} tenant-import-build`,
+    )
+
+    expect(importOut.split('\n')).toEqual([
+      'Tenant archive imported.',
+      `project: ${targetProjectDir}`,
+      'builds: 1',
+      '- tenant-import-build [draft] Tenant Import',
+      `verify command: /kairos build-audit-verify ${targetProjectDir} tenant-import-build`,
+    ])
+    expect(showOut).toContain('Build: tenant-import-build')
+    expect(showOut).toContain(`project: ${targetProjectDir}`)
+    expect(showOut).toContain('title: Tenant Import')
+    expect(showOut).toContain('# Tenant Import')
+    expect(showOut).not.toContain(sourceProjectDir)
+    expect(verifyOut.split('\n')).toEqual([
+      'Build audit chain valid for tenant-import-build.',
+      'events: 2',
+      expect.stringMatching(/^last audit hash: [a-f0-9]{64}$/),
+      `events command: /kairos build-events ${targetProjectDir} tenant-import-build`,
     ])
   })
 
