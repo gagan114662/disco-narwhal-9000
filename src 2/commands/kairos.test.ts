@@ -844,6 +844,40 @@ describe('/kairos command', () => {
     ).toContain('clarifying_question_answer_redacted question=2')
   })
 
+  test('build-redact-answer is idempotent for an already redacted answer', async () => {
+    const projectDir = makeProjectDir()
+    const buildId = 'idempotent-redact-build'
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => buildId,
+      now: () => new Date('2026-04-25T19:13:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+    await runKairosCommand(
+      `build-answer ${projectDir} ${buildId} 2 ssn 123-45-6789`,
+    )
+    await runKairosCommand(`build-redact-answer ${projectDir} ${buildId} 2`)
+    const eventsPath = getProjectKairosBuildEventsPath(projectDir, buildId)
+    const eventCountAfterFirstRedaction = readFileSync(eventsPath, 'utf8')
+      .split(/\r?\n/)
+      .filter(Boolean).length
+
+    const out = await runKairosCommand(
+      `build-redact-answer ${projectDir} ${buildId} 2`,
+    )
+
+    expect(out.split('\n')).toEqual([
+      'Answer for question 2 in idempotent-redact-build is already redacted.',
+      `audit command: /kairos build-audit-verify ${projectDir} ${buildId}`,
+      `events command: /kairos build-events ${projectDir} ${buildId} --kind clarifying_question_answer_redacted`,
+    ])
+    expect(
+      readFileSync(eventsPath, 'utf8').split(/\r?\n/).filter(Boolean),
+    ).toHaveLength(eventCountAfterFirstRedaction)
+    expect(
+      await runKairosCommand(`build-audit-verify ${projectDir} ${buildId}`),
+    ).toContain('Build audit chain valid for idempotent-redact-build.')
+  })
+
   test('build-answer reports a missing build clearly', async () => {
     const projectDir = makeProjectDir()
     const out = await runKairosCommand(

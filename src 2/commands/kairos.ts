@@ -997,6 +997,13 @@ async function handleBuildRedactAnswer(rest: string[]): Promise<string> {
       `questions command: /kairos build-questions ${parsed.projectDir} ${parsed.buildId}`,
     ].join('\n')
   }
+  if (existingAnswer === '[redacted]') {
+    return [
+      `Answer for question ${parsed.questionNumber} in ${parsed.buildId} is already redacted.`,
+      `audit command: /kairos build-audit-verify ${parsed.projectDir} ${parsed.buildId}`,
+      `events command: /kairos build-events ${parsed.projectDir} ${parsed.buildId} --kind clarifying_question_answer_redacted`,
+    ].join('\n')
+  }
 
   const updatedManifest = {
     ...manifest,
