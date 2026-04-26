@@ -800,6 +800,7 @@ function buildKairosAuditExportEnvelope(
         .map(event => event.auditHash)
         .filter((auditHash): auditHash is string => typeof auditHash === 'string'),
     ),
+    erasureSummary: summarizeKairosAnswerErasure(manifest, events),
     redactionPolicy: KAIROS_BUILD_AUDIT_REDACTION_POLICY,
     failure: verification.valid
       ? undefined
@@ -1099,6 +1100,44 @@ async function handleBuildAuditAnchorVerify(rest: string[]): Promise<string> {
 type BuildAuditAnchorReadinessStatus = {
   line: string
   blocker?: string
+}
+
+function summarizeKairosAnswerErasure(
+  manifest: KairosBuildManifest,
+  events: KairosBuildEvent[],
+): {
+  clarifyingAnswers: {
+    answered: number
+    redacted: number
+    erasable: number
+  }
+  redactionEvents: number
+} {
+  const redactedQuestionNumbers = new Set(
+    events
+      .filter(event => event.kind === 'clarifying_question_answer_redacted')
+      .map(event => event.questionNumber),
+  )
+  const answers = manifest.clarifyingQuestionAnswers ?? {}
+  let answered = 0
+  let redacted = 0
+  for (const questionNumber of Object.keys(answers)) {
+    const answer = answers[questionNumber]
+    if (!answer) continue
+    answered += 1
+    if (answer === '[redacted]') {
+      redacted += 1
+    }
+  }
+
+  return {
+    clarifyingAnswers: {
+      answered,
+      redacted,
+      erasable: answered - redacted,
+    },
+    redactionEvents: redactedQuestionNumbers.size,
+  }
 }
 
 async function readBuildAuditAnchorReadinessStatus(
@@ -1429,6 +1468,7 @@ async function handleBuildErasureReport(rest: string[]): Promise<string> {
   }
 
   const events = await writer.readBuildEvents(parsed.projectDir, parsed.buildId)
+  const erasureSummary = summarizeKairosAnswerErasure(manifest, events)
   const redactedQuestionNumbers = new Set(
     events
       .filter(event => event.kind === 'clarifying_question_answer_redacted')
@@ -1459,7 +1499,7 @@ async function handleBuildErasureReport(rest: string[]): Promise<string> {
   return [
     `Erasure report for ${manifest.buildId}:`,
     `clarifying answers: ${answeredCount} answered, ${redactedCount} redacted, ${erasableCount} erasable`,
-    `redaction events: ${redactedQuestionNumbers.size}`,
+    `redaction events: ${erasureSummary.redactionEvents}`,
     ...questionLines,
     `redact command: /kairos build-redact-answer ${manifest.projectDir} ${manifest.buildId} <questionNumber>`,
     `audit command: /kairos build-audit-verify ${manifest.projectDir} ${manifest.buildId}`,

@@ -759,6 +759,47 @@ describe('/kairos command', () => {
     })
   })
 
+  test('build-audit-export includes erasure summary without raw answers', async () => {
+    const projectDir = makeProjectDir()
+    const buildId = 'audit-export-erasure-build'
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => buildId,
+      now: () => new Date('2026-04-25T20:12:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} export erasure`)
+    await runKairosCommand(
+      `build-answer ${projectDir} ${buildId} 1 employee manager and HR approver`,
+    )
+    await runKairosCommand(
+      `build-answer ${projectDir} ${buildId} 2 dates reason and sensitive notes`,
+    )
+    await runKairosCommand(`build-redact-answer ${projectDir} ${buildId} 2`)
+
+    const out = await runKairosCommand(
+      `build-audit-export ${projectDir} ${buildId}`,
+    )
+    const auditExport = JSON.parse(out) as {
+      erasureSummary: {
+        clarifyingAnswers: {
+          answered: number
+          redacted: number
+          erasable: number
+        }
+        redactionEvents: number
+      }
+    }
+
+    expect(out).not.toContain('dates reason and sensitive notes')
+    expect(auditExport.erasureSummary).toEqual({
+      clarifyingAnswers: {
+        answered: 2,
+        redacted: 1,
+        erasable: 1,
+      },
+      redactionEvents: 1,
+    })
+  })
+
   test('build-audit-export-verify validates a signed audit export file', async () => {
     const projectDir = makeProjectDir()
     const exportPath = join(makeTempConfigDir(), 'audit-export.json')
