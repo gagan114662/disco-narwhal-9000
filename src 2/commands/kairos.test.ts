@@ -151,6 +151,7 @@ describe('/kairos command', () => {
     expect(out).toContain('/kairos build-audit-verify')
     expect(out).toContain('/kairos build-audit-export')
     expect(out).toContain('/kairos build-audit-siem-export')
+    expect(out).toContain('/kairos export tenant')
     expect(out).toContain('/kairos cloud deploy')
     expect(out).toContain('/kairos cloud-sync')
   })
@@ -918,6 +919,128 @@ describe('/kairos command', () => {
       getProjectKairosBuildSpecPath(projectDir, 'siem-export-build'),
     )
     expect(out).not.toContain('siem export')
+  })
+
+  test('export tenant emits a portable spec and audit proof envelope without local paths', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'tenant-export-build',
+      now: () => new Date('2026-04-25T20:12:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} tenant export`)
+
+    const out = await runKairosCommand(`export tenant ${projectDir}`)
+    const tenantExport = JSON.parse(out) as {
+      version: number
+      exportType: string
+      tenantId: string
+      projectDir?: string
+      projectDirHash: string
+      buildCount: number
+      archiveHash: string
+      builds: Array<{
+        buildId: string
+        tenantId: string
+        title: string
+        status: string
+        createdAt: string
+        updatedAt: string
+        selectedSliceId: string | null
+        completedSliceIds: string[]
+        spec: {
+          format: string
+          body: string
+        }
+        audit: {
+          valid: boolean
+          eventCount: number
+          lastHash: string
+          merkleRoot: string
+          exportHash: string
+          auditSignature: {
+            version: number
+            status: string
+            reason?: string
+          }
+          events: Array<{
+            eventNumber: number
+            kind: string
+            t: string
+            auditPrevHash: string | null
+            auditHash: string
+          }>
+        }
+      }>
+    }
+
+    expect(tenantExport).toMatchObject({
+      version: 1,
+      exportType: 'kairos_tenant_portable_archive',
+      tenantId: 'local',
+      buildCount: 1,
+    })
+    expect(tenantExport.projectDir).toBeUndefined()
+    expect(tenantExport.projectDirHash).toBe(
+      calculateKairosAuditExportHash({
+        field: 'projectDir',
+        value: projectDir,
+      }),
+    )
+    expect(tenantExport.archiveHash).toBe(
+      calculateKairosAuditExportHash({
+        ...tenantExport,
+        archiveHash: undefined,
+      }),
+    )
+    expect(tenantExport.builds).toHaveLength(1)
+    expect(tenantExport.builds[0]).toMatchObject({
+      buildId: 'tenant-export-build',
+      tenantId: 'local',
+      title: 'Tenant Export',
+      status: 'draft',
+      createdAt: '2026-04-25T20:12:00.000Z',
+      updatedAt: '2026-04-25T20:12:00.000Z',
+      selectedSliceId: null,
+      completedSliceIds: [],
+      spec: {
+        format: 'markdown',
+      },
+      audit: {
+        valid: true,
+        eventCount: 2,
+        auditSignature: {
+          version: 1,
+          status: 'unsigned',
+          reason: 'KAIROS_AUDIT_SIGNING_KEY not configured',
+        },
+      },
+    })
+    expect(tenantExport.builds[0]?.spec.body).toContain('# Tenant Export')
+    expect(tenantExport.builds[0]?.audit.lastHash).toMatch(/^[a-f0-9]{64}$/)
+    expect(tenantExport.builds[0]?.audit.merkleRoot).toBe(
+      calculateKairosBuildAuditMerkleRoot(
+        tenantExport.builds[0].audit.events.map(event => event.auditHash),
+      ),
+    )
+    expect(tenantExport.builds[0]?.audit.exportHash).toMatch(/^[a-f0-9]{64}$/)
+    expect(tenantExport.builds[0]?.audit.events).toHaveLength(2)
+    expect(tenantExport.builds[0]?.audit.events[0]).toMatchObject({
+      eventNumber: 1,
+      kind: 'build_created',
+      t: '2026-04-25T20:12:00.000Z',
+      auditPrevHash: null,
+    })
+    expect(tenantExport.builds[0]?.audit.events[1]).toMatchObject({
+      eventNumber: 2,
+      kind: 'spec_written',
+      t: '2026-04-25T20:12:00.000Z',
+      auditPrevHash: tenantExport.builds[0]?.audit.events[0]?.auditHash,
+      auditHash: tenantExport.builds[0]?.audit.lastHash,
+    })
+    expect(out).not.toContain(projectDir)
+    expect(out).not.toContain(
+      getProjectKairosBuildSpecPath(projectDir, 'tenant-export-build'),
+    )
   })
 
   test('build-audit-export-verify validates a signed audit export file', async () => {
