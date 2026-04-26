@@ -31,10 +31,21 @@ function sortForAuditHash(value: unknown): unknown {
   return value
 }
 
+function redactBuildEventAuditPayload(
+  event: KairosBuildEvent,
+): KairosBuildEvent | (Omit<KairosBuildEvent, 'answer'> & { answer: string }) {
+  if (event.kind !== 'clarifying_question_answered') return event
+  return {
+    ...event,
+    answer: '[redacted]',
+  }
+}
+
 export function calculateKairosBuildEventAuditHash(
   event: KairosBuildEvent,
 ): string {
-  const { auditHash: _auditHash, ...eventWithoutHash } = event
+  const redactedEvent = redactBuildEventAuditPayload(event)
+  const { auditHash: _auditHash, ...eventWithoutHash } = redactedEvent
   return createHash('sha256')
     .update(jsonStringify(sortForAuditHash(eventWithoutHash)))
     .digest('hex')
