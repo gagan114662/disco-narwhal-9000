@@ -1696,6 +1696,9 @@ function verifyKairosGeneratedAppArchives(
     if (!readStringField(generatedApp, 'completedAt')) {
       return false
     }
+    if (!readStringField(generatedApp, 'appDirHash')) {
+      return false
+    }
     if (!isRecordArray(generatedApp.files)) {
       return false
     }

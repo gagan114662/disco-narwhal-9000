@@ -1614,6 +1614,70 @@ describe('/kairos command', () => {
     ).toBe(false)
   })
 
+  test('import tenant rejects malformed generated app directory hashes', async () => {
+    const sourceProjectDir = makeProjectDir()
+    const targetProjectDir = makeProjectDir()
+    const appDir = join(sourceProjectDir, 'generated-app')
+    const exportPath = join(
+      makeTempConfigDir(),
+      'tenant-import-app-dir-hash-tampered.json',
+    )
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'tenant-import-app-dir-hash-tampered-build',
+      now: () => new Date('2026-04-25T20:18:00.000Z'),
+    })
+    await runKairosCommand(`build ${sourceProjectDir} tenant app hash tamper`)
+    mkdirSync(join(appDir, 'src'), { recursive: true })
+    writeFileSync(join(appDir, 'src', 'index.ts'), 'export const app = true\n')
+    const writer = await createStateWriter()
+    await writer.writeBuildResult(
+      sourceProjectDir,
+      'tenant-import-app-dir-hash-tampered-build',
+      {
+        version: 1,
+        buildId: 'tenant-import-app-dir-hash-tampered-build',
+        tenantId: 'local',
+        status: 'succeeded',
+        completedAt: '2026-04-25T20:19:00.000Z',
+        summary: 'Generated app artifact ready.',
+        appDir,
+      },
+    )
+    const tenantExport = JSON.parse(
+      await runKairosCommand(`export tenant ${sourceProjectDir}`),
+    ) as {
+      archiveHash: string
+      builds: Array<{
+        generatedApps: Array<Record<string, unknown>>
+      }>
+    }
+    tenantExport.builds[0]!.generatedApps[0]!.appDirHash = 42
+    const { archiveHash: _archiveHash, ...archiveHashMaterial } = tenantExport
+    tenantExport.archiveHash = calculateKairosAuditExportHash(
+      archiveHashMaterial,
+    )
+    writeFileSync(exportPath, JSON.stringify(tenantExport, null, 2))
+
+    const importOut = await runKairosCommand(
+      `import tenant ${exportPath} ${targetProjectDir}`,
+    )
+
+    expect(importOut.split('\n')).toEqual([
+      'Tenant archive invalid.',
+      'archive hash: valid',
+      'builds: 1',
+      '- tenant-import-app-dir-hash-tampered-build: audit=valid signature=unsigned merkle=valid apps=invalid',
+    ])
+    expect(
+      existsSync(
+        getProjectKairosBuildResultPath(
+          targetProjectDir,
+          'tenant-import-app-dir-hash-tampered-build',
+        ),
+      ),
+    ).toBe(false)
+  })
+
   test('import tenant rejects tampered generated app files', async () => {
     const sourceProjectDir = makeProjectDir()
     const targetProjectDir = makeProjectDir()
