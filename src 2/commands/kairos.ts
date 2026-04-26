@@ -1916,6 +1916,21 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
   const projectDirHash =
     typeof archive.projectDirHash === 'string' ? archive.projectDirHash : null
   const version = archive.version
+  const expectedBuildMetadataKeys = [
+    'brief',
+    'problem',
+    'users',
+    'goals',
+    'nonGoals',
+    'functionalRequirements',
+    'acceptanceChecks',
+    'clarifyingQuestions',
+    'clarifyingQuestionAnswers',
+    'assumptions',
+    'risks',
+    'tracerSlices',
+    'traceabilitySeeds',
+  ]
   const buildLines = builds.map(build => {
     const buildId =
       typeof build.buildId === 'string' ? build.buildId : 'unknown-build'
@@ -1938,6 +1953,10 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
     const spec = readRecordField(build, 'spec')
     const evalCasesShapeValid = isRecordArray(build.evalCases)
     const evalCases = readArrayField(build, 'evalCases')
+    const metadataShapeValid = hasExactKeys(
+      metadata,
+      expectedBuildMetadataKeys,
+    )
     const acceptanceChecksShapeValid = isNonEmptyStringArray(
       metadata.acceptanceChecks,
     )
@@ -2053,6 +2072,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
         knowledgeGraph,
       )
     const manifestValid =
+      metadataShapeValid &&
       completedSliceIdsShapeValid &&
       selectedSliceIdShapeValid &&
       statusShapeValid &&

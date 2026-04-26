@@ -1363,6 +1363,54 @@ describe('/kairos command', () => {
     ).toBe(false)
   })
 
+  test('import tenant rejects unexpected metadata fields', async () => {
+    const sourceProjectDir = makeProjectDir()
+    const targetProjectDir = makeProjectDir()
+    const exportPath = join(
+      makeTempConfigDir(),
+      'tenant-import-extra-metadata-field-tampered.json',
+    )
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'tenant-import-extra-metadata-field-tampered-build',
+      now: () => new Date('2026-04-25T20:24:00.000Z'),
+    })
+    await runKairosCommand(`build ${sourceProjectDir} metadata field tamper`)
+    const tenantExport = JSON.parse(
+      await runKairosCommand(`export tenant ${sourceProjectDir}`),
+    ) as {
+      archiveHash: string
+      builds: Array<{
+        metadata: Record<string, unknown>
+      }>
+    }
+    tenantExport.builds[0]!.metadata.unexpectedField =
+      'not part of build metadata'
+    const { archiveHash: _archiveHash, ...archiveHashMaterial } = tenantExport
+    tenantExport.archiveHash = calculateKairosAuditExportHash(
+      archiveHashMaterial,
+    )
+    writeFileSync(exportPath, JSON.stringify(tenantExport, null, 2))
+
+    const importOut = await runKairosCommand(
+      `import tenant ${exportPath} ${targetProjectDir}`,
+    )
+
+    expect(importOut.split('\n')).toEqual([
+      'Tenant archive invalid.',
+      'archive hash: valid',
+      'builds: 1',
+      '- tenant-import-extra-metadata-field-tampered-build: audit=valid signature=unsigned merkle=valid manifest=invalid',
+    ])
+    expect(
+      existsSync(
+        getProjectKairosBuildManifestPath(
+          targetProjectDir,
+          'tenant-import-extra-metadata-field-tampered-build',
+        ),
+      ),
+    ).toBe(false)
+  })
+
   test('import tenant restores generated app files', async () => {
     const sourceProjectDir = makeProjectDir()
     const targetProjectDir = makeProjectDir()
