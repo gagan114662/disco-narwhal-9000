@@ -1,0 +1,116 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg: 48 18% 96%;
+    --surface: 48 14% 93%;
+    --fg: 60 8% 8%;
+    --muted: 60 6% 32%;
+    --subtle: 50 6% 50%;
+    --border: 48 10% 84%;
+    --accent: 96 16% 38%;
+    --accent-fg: 48 18% 96%;
+  }
+
+  .dark {
+    --bg: 60 6% 7%;
+    --surface: 60 5% 10%;
+    --fg: 48 18% 95%;
+    --muted: 48 8% 70%;
+    --subtle: 48 5% 50%;
+    --border: 60 4% 16%;
+    --accent: 96 18% 62%;
+    --accent-fg: 60 6% 7%;
+  }
+
+  html {
+    color-scheme: light dark;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+  }
+
+  body {
+    @apply bg-bg text-fg font-sans;
+    font-feature-settings: 'ss01', 'cv11';
+    overflow-x: hidden;
+    min-width: 0;
+  }
+
+  ::selection {
+    @apply bg-accent/20 text-fg;
+  }
+
+  :focus {
+    outline: none;
+  }
+
+  :focus-visible {
+    outline: 2px solid hsl(var(--accent));
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+@layer components {
+  .hairline {
+    @apply border-border;
+  }
+
+  .grid-rule {
+    background-image: linear-gradient(to right, hsl(var(--border)) 1px, transparent 1px);
+    background-size: 1px 100%;
+  }
+
+  .display-serif {
+    @apply font-serif font-light tracking-tightest;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .text-pretty {
+    text-wrap: pretty;
+  }
+
+  @keyframes kf-reveal {
+    from {
+      opacity: 0;
+      transform: translateY(2px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-reveal {
+    animation: kf-reveal 220ms ease-out both;
+  }
+
+  @keyframes kf-pulse-soft {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.45;
+    }
+  }
+
+  .animate-pulse-soft {
+    animation: kf-pulse-soft 1.4s ease-in-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-reveal,
+    .animate-pulse-soft {
+      animation: none;
+    }
+  }
+}
