@@ -1444,6 +1444,62 @@ function verifyKairosEvalCaseArchives(
   )
 }
 
+function buildKairosKnowledgeGraphArchiveFromMetadata(
+  buildId: string,
+  metadata: Record<string, unknown>,
+): Record<string, unknown> {
+  const requirementNodes = readStringArrayField(
+    metadata,
+    'functionalRequirements',
+  ).map((label, index) => ({
+    id: `${buildId}-FR-${index + 1}`,
+    kind: 'functional_requirement',
+    label,
+  }))
+  const seedNodes = readTraceabilitySeedsField(metadata).map(seed => ({
+    id: seed.id,
+    kind: 'traceability_seed',
+    label: seed.text,
+    source: seed.source,
+  }))
+  const sliceNodes = readTracerSlicesField(metadata).map(slice => ({
+    id: slice.id,
+    kind: 'tracer_slice',
+    label: slice.title,
+  }))
+  const sourceSeedId = readTraceabilitySeedsField(metadata)[0]?.id
+  const requirementEdges = sourceSeedId
+    ? requirementNodes.map(node => ({
+        from: sourceSeedId,
+        to: node.id,
+        kind: 'supports',
+      }))
+    : []
+
+  return {
+    format: 'kairos_knowledge_graph_v0',
+    nodes: [...seedNodes, ...requirementNodes, ...sliceNodes],
+    edges: requirementEdges,
+  }
+}
+
+function verifyKairosKnowledgeGraphArchive(
+  buildId: string,
+  metadata: Record<string, unknown>,
+  knowledgeGraph: Record<string, unknown> | null,
+): boolean {
+  if (!knowledgeGraph) {
+    return false
+  }
+
+  return (
+    calculateKairosAuditExportHash(knowledgeGraph) ===
+    calculateKairosAuditExportHash(
+      buildKairosKnowledgeGraphArchiveFromMetadata(buildId, metadata),
+    )
+  )
+}
+
 function readKairosBuildStatus(value: unknown): KairosBuildManifest['status'] {
   switch (value) {
     case 'draft':
@@ -1508,6 +1564,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
     const generatedApps = readArrayField(build, 'generatedApps')
     const metadata = readRecordField(build, 'metadata') ?? {}
     const evalCases = readArrayField(build, 'evalCases')
+    const knowledgeGraph = readRecordField(build, 'knowledgeGraph')
     const auditHashMaterial = {
       version,
       buildId,
@@ -1552,9 +1609,15 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
       metadata,
       evalCases,
     )
+    const graphValid = verifyKairosKnowledgeGraphArchive(
+      buildId,
+      metadata,
+      knowledgeGraph,
+    )
     const restoreStatus = restoreValid ? '' : ' restore=invalid'
     const appsStatus = appsValid ? '' : ' apps=invalid'
     const evalsStatus = evalsValid ? '' : ' evals=invalid'
+    const graphStatus = graphValid ? '' : ' graph=invalid'
     return {
       valid:
         auditValid &&
@@ -1562,8 +1625,9 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
         merkleValid &&
         restoreValid &&
         appsValid &&
-        evalsValid,
-      line: `- ${buildId}: audit=${auditValid ? 'valid' : 'invalid'} signature=${signatureStatus} merkle=${merkleValid ? 'valid' : 'invalid'}${restoreStatus}${appsStatus}${evalsStatus}`,
+        evalsValid &&
+        graphValid,
+      line: `- ${buildId}: audit=${auditValid ? 'valid' : 'invalid'} signature=${signatureStatus} merkle=${merkleValid ? 'valid' : 'invalid'}${restoreStatus}${appsStatus}${evalsStatus}${graphStatus}`,
     }
   })
   const valid = archiveHashValid && buildLines.every(build => build.valid)
