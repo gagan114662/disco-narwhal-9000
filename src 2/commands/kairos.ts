@@ -92,6 +92,15 @@ const KAIROS_BUILD_EVENT_KINDS = new Set<KairosBuildEventKind>(
 )
 const BUILD_EVENTS_USAGE =
   'Usage: /kairos build-events [projectDir] <buildId> [lines] [--kind <kind>]'
+const KAIROS_BUILD_AUDIT_REDACTION_POLICY = {
+  version: 1,
+  eventFields: [
+    'clarifying_question_answered.answer',
+    'spec_written.specPath',
+    'build_result_written.resultPath',
+    'build_failed.errorMessage',
+  ],
+} as const
 
 const HELP_TEXT = `Usage:
 /kairos status
@@ -784,6 +793,7 @@ async function handleBuildAuditExport(rest: string[]): Promise<string> {
     valid: verification.valid,
     eventCount: events.length,
     lastHash: verification.valid ? verification.lastHash : null,
+    redactionPolicy: KAIROS_BUILD_AUDIT_REDACTION_POLICY,
     failure: verification.valid
       ? undefined
       : {

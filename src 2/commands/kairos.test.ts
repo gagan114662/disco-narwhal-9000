@@ -637,6 +637,10 @@ describe('/kairos command', () => {
       eventCount: number
       lastHash: string
       exportHash: string
+      redactionPolicy: {
+        version: number
+        eventFields: string[]
+      }
       events: Array<{
         eventNumber: number
         kind: string
@@ -652,6 +656,15 @@ describe('/kairos command', () => {
       tenantId: 'local',
       valid: true,
       eventCount: 2,
+    })
+    expect(auditExport.redactionPolicy).toEqual({
+      version: 1,
+      eventFields: [
+        'clarifying_question_answered.answer',
+        'spec_written.specPath',
+        'build_result_written.resultPath',
+        'build_failed.errorMessage',
+      ],
     })
     expect(auditExport.projectDir).toBeUndefined()
     expect(auditExport.projectDirHash).toBe(
