@@ -71,7 +71,7 @@ declare module '@anthropic-ai/sandbox-runtime' {
   export type FsReadRestrictionConfig = Record<string, unknown>
   export type FsWriteRestrictionConfig = Record<string, unknown>
   export type IgnoreViolationsConfig = Record<string, unknown>
-  export type NetworkHostPattern = string
+  export type NetworkHostPattern = { host: string; port?: number | undefined }
   export type NetworkRestrictionConfig = Record<string, unknown>
   export type SandboxAskCallback = (...args: unknown[]) => unknown
   export type SandboxDependencyCheck = Record<string, unknown>

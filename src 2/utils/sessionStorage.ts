@@ -43,16 +43,25 @@ import {
 } from '../types/ids.js'
 import type { AttributionSnapshotMessage } from '../types/logs.js'
 import {
+  type AgentColorMessage,
+  type AgentNameMessage,
+  type AgentSettingMessage,
   type ContentReplacementEntry,
   type ContextCollapseCommitEntry,
   type ContextCollapseSnapshotEntry,
+  type CustomTitleMessage,
   type Entry,
   type FileHistorySnapshotMessage,
   type LogOption,
+  type ModeEntry,
   type PersistedWorktreeSession,
+  type PRLinkMessage,
   type SerializedMessage,
   sortLogs,
+  type SummaryMessage,
+  type TagMessage,
   type TranscriptMessage,
+  type WorktreeStateEntry,
 } from '../types/logs.js'
 import type {
   AssistantMessage,
@@ -1743,8 +1752,8 @@ function extractFirstPrompt(transcript: TranscriptMessage[]): string {
  * Gets the last user message that was processed (i.e., before any non-user message appears).
  * Used to determine if a session has valid user interaction.
  */
-export function getFirstMeaningfulUserMessageTextContent<T extends Message>(
-  transcript: T[],
+export function getFirstMeaningfulUserMessageTextContent(
+  transcript: Message[],
 ): string | undefined {
   for (const msg of transcript) {
     if (msg.type !== 'user' || msg.isMeta) continue
@@ -3655,46 +3664,67 @@ export async function loadTranscriptFile(
           contextCollapseCommits.length = 0
           contextCollapseSnapshot = undefined
         }
-      } else if (entry.type === 'summary' && entry.leafUuid) {
-        summaries.set(entry.leafUuid, entry.summary)
-      } else if (entry.type === 'custom-title' && entry.sessionId) {
-        customTitles.set(entry.sessionId, entry.customTitle)
-      } else if (entry.type === 'tag' && entry.sessionId) {
-        tags.set(entry.sessionId, entry.tag)
-      } else if (entry.type === 'agent-name' && entry.sessionId) {
-        agentNames.set(entry.sessionId, entry.agentName)
-      } else if (entry.type === 'agent-color' && entry.sessionId) {
-        agentColors.set(entry.sessionId, entry.agentColor)
-      } else if (entry.type === 'agent-setting' && entry.sessionId) {
-        agentSettings.set(entry.sessionId, entry.agentSetting)
-      } else if (entry.type === 'mode' && entry.sessionId) {
-        modes.set(entry.sessionId, entry.mode)
-      } else if (entry.type === 'worktree-state' && entry.sessionId) {
-        worktreeStates.set(entry.sessionId, entry.worktreeSession)
-      } else if (entry.type === 'pr-link' && entry.sessionId) {
-        prNumbers.set(entry.sessionId, entry.prNumber)
-        prUrls.set(entry.sessionId, entry.prUrl)
-        prRepositories.set(entry.sessionId, entry.prRepository)
-      } else if (entry.type === 'file-history-snapshot') {
-        fileHistorySnapshots.set(entry.messageId, entry)
-      } else if (entry.type === 'attribution-snapshot') {
-        attributionSnapshots.set(entry.messageId, entry)
-      } else if (entry.type === 'content-replacement') {
+        continue
+      }
+      // `isTranscriptMessage` narrows to `TranscriptMessage`, which resolves
+      // to `any` via the Message stub; the else branch collapses to `never`
+      // (Exclude<Entry, any> = never). Cast to the concrete non-transcript
+      // union so the discriminated `type` checks below narrow correctly.
+      const e = entry as
+        | SummaryMessage
+        | CustomTitleMessage
+        | TagMessage
+        | AgentNameMessage
+        | AgentColorMessage
+        | AgentSettingMessage
+        | ModeEntry
+        | WorktreeStateEntry
+        | PRLinkMessage
+        | FileHistorySnapshotMessage
+        | AttributionSnapshotMessage
+        | ContentReplacementEntry
+        | ContextCollapseCommitEntry
+        | ContextCollapseSnapshotEntry
+      if (e.type === 'summary' && e.leafUuid) {
+        summaries.set(e.leafUuid, e.summary)
+      } else if (e.type === 'custom-title' && e.sessionId) {
+        customTitles.set(e.sessionId, e.customTitle)
+      } else if (e.type === 'tag' && e.sessionId) {
+        tags.set(e.sessionId, e.tag)
+      } else if (e.type === 'agent-name' && e.sessionId) {
+        agentNames.set(e.sessionId, e.agentName)
+      } else if (e.type === 'agent-color' && e.sessionId) {
+        agentColors.set(e.sessionId, e.agentColor)
+      } else if (e.type === 'agent-setting' && e.sessionId) {
+        agentSettings.set(e.sessionId, e.agentSetting)
+      } else if (e.type === 'mode' && e.sessionId) {
+        modes.set(e.sessionId, e.mode)
+      } else if (e.type === 'worktree-state' && e.sessionId) {
+        worktreeStates.set(e.sessionId, e.worktreeSession)
+      } else if (e.type === 'pr-link' && e.sessionId) {
+        prNumbers.set(e.sessionId, e.prNumber)
+        prUrls.set(e.sessionId, e.prUrl)
+        prRepositories.set(e.sessionId, e.prRepository)
+      } else if (e.type === 'file-history-snapshot') {
+        fileHistorySnapshots.set(e.messageId, e)
+      } else if (e.type === 'attribution-snapshot') {
+        attributionSnapshots.set(e.messageId, e)
+      } else if (e.type === 'content-replacement') {
         // Subagent decisions key by agentId (sidechain resume); main-thread
         // decisions key by sessionId (/resume).
-        if (entry.agentId) {
-          const existing = agentContentReplacements.get(entry.agentId) ?? []
-          agentContentReplacements.set(entry.agentId, existing)
-          existing.push(...entry.replacements)
+        if (e.agentId) {
+          const existing = agentContentReplacements.get(e.agentId) ?? []
+          agentContentReplacements.set(e.agentId, existing)
+          existing.push(...e.replacements)
         } else {
-          const existing = contentReplacements.get(entry.sessionId) ?? []
-          contentReplacements.set(entry.sessionId, existing)
-          existing.push(...entry.replacements)
+          const existing = contentReplacements.get(e.sessionId) ?? []
+          contentReplacements.set(e.sessionId, existing)
+          existing.push(...e.replacements)
         }
-      } else if (entry.type === 'marble-origami-commit') {
-        contextCollapseCommits.push(entry)
-      } else if (entry.type === 'marble-origami-snapshot') {
-        contextCollapseSnapshot = entry
+      } else if (e.type === 'marble-origami-commit') {
+        contextCollapseCommits.push(e)
+      } else if (e.type === 'marble-origami-snapshot') {
+        contextCollapseSnapshot = e
       }
     }
   } catch {
