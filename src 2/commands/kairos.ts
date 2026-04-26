@@ -1630,6 +1630,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
     const generatedAppsShapeValid = isRecordArray(build.generatedApps)
     const generatedApps = readArrayField(build, 'generatedApps')
     const metadata = readRecordField(build, 'metadata') ?? {}
+    const evalCasesShapeValid = isRecordArray(build.evalCases)
     const evalCases = readArrayField(build, 'evalCases')
     const knowledgeGraph = readRecordField(build, 'knowledgeGraph')
     const auditHashMaterial = {
@@ -1679,11 +1680,13 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
     const appsValid =
       generatedAppsShapeValid &&
       verifyKairosGeneratedAppArchives(buildId, generatedApps)
-    const evalsValid = verifyKairosEvalCaseArchives(
-      buildId,
-      metadata,
-      evalCases,
-    )
+    const evalsValid =
+      evalCasesShapeValid &&
+      verifyKairosEvalCaseArchives(
+        buildId,
+        metadata,
+        evalCases,
+      )
     const graphValid = verifyKairosKnowledgeGraphArchive(
       buildId,
       metadata,
