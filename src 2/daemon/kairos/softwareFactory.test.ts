@@ -141,6 +141,7 @@ describe('software factory build', () => {
     expect(verification.checks.map(check => check.id)).toEqual([
       'artifact-build-ids',
       'eval-pack',
+      'manifest-files',
       'project-spec',
       'project-eval-pack',
       'manifest-traceability',
@@ -223,6 +224,33 @@ describe('software factory build', () => {
     expect(
       verification.checks.find(check => check.id === 'project-eval-pack')?.ok,
     ).toBe(false)
+  })
+
+  test('verification and export reject unsafe manifest file paths', async () => {
+    const configDir = makeTempDir('kairos-sf-config-')
+    const projectDir = makeTempDir('kairos-sf-project-')
+    process.env.CLAUDE_CONFIG_DIR = configDir
+
+    const result = await runSoftwareFactoryBuild({
+      projectDir,
+      brief: 'Build a vendor approval app with reviewer approval.',
+      now: () => new Date('2026-04-26T12:00:00.000Z'),
+      generateId: () => 'manifest-path',
+    })
+    const manifest = readJson(result.appManifestPath) as {
+      files: string[]
+    }
+    manifest.files.push('../secret.txt')
+    writeFileSync(result.appManifestPath, `${JSON.stringify(manifest)}\n`)
+
+    const verification = await verifySoftwareFactoryBuild(result.buildId)
+    expect(verification.ok).toBe(false)
+    expect(
+      verification.checks.find(check => check.id === 'manifest-files')?.ok,
+    ).toBe(false)
+    await expect(
+      exportSoftwareFactoryCompliancePack(result.buildId),
+    ).rejects.toThrow('Unsafe Software Factory app-relative path')
   })
 
   test('generated app shell escapes user-provided spec text', async () => {
@@ -501,7 +529,7 @@ describe('software factory build', () => {
     writeFileSync(proposed.proposalPath, `${JSON.stringify(proposal)}\n`)
 
     await expect(acceptSoftwareFactoryChange(result.buildId)).rejects.toThrow(
-      'Unsafe Software Factory generated source path',
+      'Unsafe Software Factory app-relative path',
     )
   })
 

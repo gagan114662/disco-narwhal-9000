@@ -909,6 +909,19 @@ export async function verifySoftwareFactoryBuild(
       allClausesHaveEval && allEvalCasesGateTraceability,
       `${evalPack.cases.length}/${spec.clauses.length} eval case(s) generated with traceability and smoke gates`,
     )
+    const safeManifestFiles = manifest.files.map(file => {
+      try {
+        assertSafeAppRelativePath(file)
+        return true
+      } catch {
+        return false
+      }
+    })
+    addCheck(
+      'manifest-files',
+      safeManifestFiles.every(Boolean),
+      `${safeManifestFiles.filter(Boolean).length}/${safeManifestFiles.length} manifest file path(s) safe`,
+    )
     addCheck(
       'project-spec',
       projectSpec?.buildId === spec.buildId &&
@@ -958,7 +971,8 @@ export async function verifySoftwareFactoryBuild(
     const markerChecks = await Promise.all(
       manifest.traceability.map(async trace => {
         try {
-          const source = await readFile(join(manifest.appDir, trace.file), 'utf8')
+          const sourceFile = assertSafeGeneratedSourcePath(trace.file)
+          const source = await readFile(join(manifest.appDir, sourceFile), 'utf8')
           return source.includes(trace.marker)
         } catch {
           return false
@@ -1075,16 +1089,23 @@ function assertProposalBuildId(
   }
 }
 
-function assertSafeGeneratedSourcePath(path: string): string {
+function assertSafeAppRelativePath(path: string): string {
   const normalized = normalize(path)
   if (
     path.includes('\0') ||
     isAbsolute(path) ||
-    normalized === '..' ||
-    normalized.startsWith(`..${'/'}`) ||
-    normalized.startsWith(`..${'\\'}`) ||
-    !/^src[\\/].+\.(ts|tsx|js|jsx)$/.test(normalized)
+    /^[A-Za-z]:/.test(path) ||
+    normalized === '.' ||
+    normalized.split(/[\\/]+/).includes('..')
   ) {
+    throw new Error(`Unsafe Software Factory app-relative path: ${path}`)
+  }
+  return normalized
+}
+
+function assertSafeGeneratedSourcePath(path: string): string {
+  const normalized = assertSafeAppRelativePath(path)
+  if (!/^src[\\/].+\.(ts|tsx|js|jsx)$/.test(normalized)) {
     throw new Error(`Unsafe Software Factory generated source path: ${path}`)
   }
   return normalized
@@ -1449,9 +1470,10 @@ export async function exportSoftwareFactoryCompliancePack(
   const verification = await verifySoftwareFactoryBuild(buildId)
   const generatedFiles = await Promise.all(
     appManifest.files.map(async file => {
-      const content = await readFile(join(appManifest.appDir, file), 'utf8')
+      const safeFile = assertSafeAppRelativePath(file)
+      const content = await readFile(join(appManifest.appDir, safeFile), 'utf8')
       return {
-        path: file,
+        path: safeFile,
         sha256: createHash('sha256').update(content).digest('hex'),
         content,
       }
