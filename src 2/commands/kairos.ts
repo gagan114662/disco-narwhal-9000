@@ -1655,6 +1655,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
     const selectedSliceIdShapeValid = isOptionalStringOrNull(
       build.selectedSliceId,
     )
+    const statusShapeValid = isKairosBuildStatus(build.status)
     const usersShapeValid = isStringArray(metadata.users)
     const goalsShapeValid = isStringArray(metadata.goals)
     const nonGoalsShapeValid = isStringArray(metadata.nonGoals)
@@ -1731,6 +1732,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
     const manifestValid =
       completedSliceIdsShapeValid &&
       selectedSliceIdShapeValid &&
+      statusShapeValid &&
       usersShapeValid &&
       goalsShapeValid &&
       nonGoalsShapeValid &&
