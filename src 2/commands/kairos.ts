@@ -1645,6 +1645,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
     )
     const tracerSlicesShapeValid = isRecordArray(metadata.tracerSlices)
     const traceabilitySeedsShapeValid = isRecordArray(metadata.traceabilitySeeds)
+    const completedSliceIdsShapeValid = isStringArray(build.completedSliceIds)
     const knowledgeGraph = readRecordField(build, 'knowledgeGraph')
     const auditHashMaterial = {
       version,
@@ -1710,11 +1711,13 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
         metadata,
         knowledgeGraph,
       )
+    const manifestValid = completedSliceIdsShapeValid
     const restoreStatus = restoreValid ? '' : ' restore=invalid'
     const eventsStatus = eventSummaryValid ? '' : ' events=invalid'
     const appsStatus = appsValid ? '' : ' apps=invalid'
     const evalsStatus = evalsValid ? '' : ' evals=invalid'
     const graphStatus = graphValid ? '' : ' graph=invalid'
+    const manifestStatus = manifestValid ? '' : ' manifest=invalid'
     return {
       valid:
         auditValid &&
@@ -1724,8 +1727,9 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
         restoreValid &&
         appsValid &&
         evalsValid &&
-        graphValid,
-      line: `- ${buildId}: audit=${auditValid ? 'valid' : 'invalid'} signature=${signatureStatus} merkle=${merkleValid ? 'valid' : 'invalid'}${restoreStatus}${eventsStatus}${appsStatus}${evalsStatus}${graphStatus}`,
+        graphValid &&
+        manifestValid,
+      line: `- ${buildId}: audit=${auditValid ? 'valid' : 'invalid'} signature=${signatureStatus} merkle=${merkleValid ? 'valid' : 'invalid'}${restoreStatus}${eventsStatus}${appsStatus}${evalsStatus}${graphStatus}${manifestStatus}`,
     }
   })
   const valid = archiveHashValid && buildLines.every(build => build.valid)
