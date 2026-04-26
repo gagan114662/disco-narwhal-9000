@@ -787,6 +787,12 @@ describe('/kairos command', () => {
     expect(eventsOut).toContain(
       'clarifying_question_answered question=1 answer=[redacted]',
     )
+    expect(
+      readFileSync(
+        getProjectKairosBuildEventsPath(projectDir, 'questions-build'),
+        'utf8',
+      ),
+    ).not.toContain('employee manager and HR approver')
 
     const summaryOut = await runKairosCommand(
       `build-summary ${projectDir} questions-build`,
@@ -814,7 +820,13 @@ describe('/kairos command', () => {
       `build-answer ${projectDir} ${buildId} 2 ssn 123-45-6789`,
     )
     const eventsPath = getProjectKairosBuildEventsPath(projectDir, buildId)
-    expect(readFileSync(eventsPath, 'utf8')).toContain('ssn 123-45-6789')
+    expect(
+      readFileSync(
+        getProjectKairosBuildManifestPath(projectDir, buildId),
+        'utf8',
+      ),
+    ).toContain('ssn 123-45-6789')
+    expect(readFileSync(eventsPath, 'utf8')).not.toContain('ssn 123-45-6789')
 
     const out = await runKairosCommand(
       `build-redact-answer ${projectDir} ${buildId} 2`,

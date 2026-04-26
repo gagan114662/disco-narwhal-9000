@@ -949,7 +949,7 @@ async function handleBuildAnswer(rest: string[]): Promise<string> {
     t: new Date().toISOString(),
     questionNumber: parsed.questionNumber,
     question: questions[parsed.questionNumber - 1],
-    answer: parsed.answer,
+    answer: '[redacted]',
   })
 
   const remainingQuestions =
