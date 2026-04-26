@@ -1444,6 +1444,23 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0
 }
 
+function isKairosBuildAuditRedactionPolicy(value: unknown): boolean {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return false
+  }
+  const policy = value as Record<string, unknown>
+  return (
+    policy.version === KAIROS_BUILD_AUDIT_REDACTION_POLICY.version &&
+    Array.isArray(policy.eventFields) &&
+    policy.eventFields.length ===
+      KAIROS_BUILD_AUDIT_REDACTION_POLICY.eventFields.length &&
+    policy.eventFields.every(
+      (field, index) =>
+        field === KAIROS_BUILD_AUDIT_REDACTION_POLICY.eventFields[index],
+    )
+  )
+}
+
 function isOptionalString(value: unknown): value is string | undefined {
   return value === undefined || typeof value === 'string'
 }
@@ -1857,6 +1874,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
     const auditValid =
       audit.valid === true &&
       audit.failure === undefined &&
+      isKairosBuildAuditRedactionPolicy(audit.redactionPolicy) &&
       audit.exportHash === expectedAuditHash
     const signatureVerification =
       typeof audit.exportHash === 'string'
