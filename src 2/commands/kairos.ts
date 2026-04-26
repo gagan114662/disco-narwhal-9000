@@ -1361,6 +1361,9 @@ function isCompletedSliceIdsValid(
   if (completedSliceIds.length === 0) {
     return true
   }
+  if (new Set(completedSliceIds).size !== completedSliceIds.length) {
+    return false
+  }
   if (!isTracerSliceArray(tracerSlices)) {
     return false
   }

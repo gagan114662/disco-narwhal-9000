@@ -2669,6 +2669,54 @@ describe('/kairos command', () => {
     ).toBe(false)
   })
 
+  test('import tenant rejects duplicate completed slice ids', async () => {
+    const sourceProjectDir = makeProjectDir()
+    const targetProjectDir = makeProjectDir()
+    const exportPath = join(makeTempConfigDir(), 'tenant-import-duplicate-completed-slice-tampered.json')
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'tenant-import-duplicate-completed-slice-tampered-build',
+      now: () => new Date('2026-04-25T20:44:00.000Z'),
+    })
+    await runKairosCommand(`build ${sourceProjectDir} tenant duplicate completed slice tamper`)
+    const tenantExport = JSON.parse(
+      await runKairosCommand(`export tenant ${sourceProjectDir}`),
+    ) as {
+      archiveHash: string
+      builds: Array<{
+        completedSliceIds: string[]
+        metadata: {
+          tracerSlices: Array<{ id: string }>
+        }
+      }>
+    }
+    const sliceId = tenantExport.builds[0]!.metadata.tracerSlices[0]!.id
+    tenantExport.builds[0]!.completedSliceIds = [sliceId, sliceId]
+    const { archiveHash: _archiveHash, ...archiveHashMaterial } = tenantExport
+    tenantExport.archiveHash = calculateKairosAuditExportHash(
+      archiveHashMaterial,
+    )
+    writeFileSync(exportPath, JSON.stringify(tenantExport, null, 2))
+
+    const importOut = await runKairosCommand(
+      `import tenant ${exportPath} ${targetProjectDir}`,
+    )
+
+    expect(importOut.split('\n')).toEqual([
+      'Tenant archive invalid.',
+      'archive hash: valid',
+      'builds: 1',
+      '- tenant-import-duplicate-completed-slice-tampered-build: audit=valid signature=unsigned merkle=valid manifest=invalid',
+    ])
+    expect(
+      existsSync(
+        getProjectKairosBuildManifestPath(
+          targetProjectDir,
+          'tenant-import-duplicate-completed-slice-tampered-build',
+        ),
+      ),
+    ).toBe(false)
+  })
+
   test('import tenant rejects non-string user metadata entries', async () => {
     const sourceProjectDir = makeProjectDir()
     const targetProjectDir = makeProjectDir()
