@@ -1533,6 +1533,9 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
   }
 
   const archive = parsed as Record<string, unknown>
+  if (archive.exportType !== 'kairos_tenant_portable_archive') {
+    return `Tenant archive invalid: unsupported exportType ${String(archive.exportType ?? 'missing')}.`
+  }
   if (typeof archive.archiveHash !== 'string') {
     return 'Tenant archive invalid: missing archiveHash.'
   }
