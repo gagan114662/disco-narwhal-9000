@@ -1643,6 +1643,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
     const generatedAppsShapeValid = isRecordArray(build.generatedApps)
     const generatedApps = readArrayField(build, 'generatedApps')
     const metadata = readRecordField(build, 'metadata') ?? {}
+    const spec = readRecordField(build, 'spec')
     const evalCasesShapeValid = isRecordArray(build.evalCases)
     const evalCases = readArrayField(build, 'evalCases')
     const acceptanceChecksShapeValid = isStringArray(metadata.acceptanceChecks)
@@ -1659,6 +1660,10 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
     const titleShapeValid = typeof build.title === 'string'
     const createdAtShapeValid = typeof build.createdAt === 'string'
     const updatedAtShapeValid = typeof build.updatedAt === 'string'
+    const specShapeValid =
+      spec !== null &&
+      spec.format === 'markdown' &&
+      typeof spec.body === 'string'
     const usersShapeValid = isStringArray(metadata.users)
     const goalsShapeValid = isStringArray(metadata.goals)
     const nonGoalsShapeValid = isStringArray(metadata.nonGoals)
@@ -1739,6 +1744,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
       titleShapeValid &&
       createdAtShapeValid &&
       updatedAtShapeValid &&
+      specShapeValid &&
       usersShapeValid &&
       goalsShapeValid &&
       nonGoalsShapeValid &&
