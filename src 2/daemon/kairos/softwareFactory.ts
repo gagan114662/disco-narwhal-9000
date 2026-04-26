@@ -359,11 +359,10 @@ async function findUntraceableSourceFiles(
   untraceableFiles: string[]
 }> {
   const sourceFiles = await listSourceFilesRecursive(appDir)
-  const sourceEntries = await Promise.all(
-    sourceFiles.map(
-      async file => [file, await readFile(file, 'utf8')] as const,
-    ),
-  )
+  const sourceEntries: Array<readonly [string, string]> = []
+  for (const file of sourceFiles) {
+    sourceEntries.push([file, await readFile(file, 'utf8')] as const)
+  }
   const sourceByFile = new Map(sourceEntries)
   const untraceableFiles = sourceEntries
     .filter(([, source]) => !source.includes('kairos:clause='))
