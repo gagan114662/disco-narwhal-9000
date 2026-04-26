@@ -1,0 +1,87 @@
+import { createHash } from 'crypto'
+import { jsonStringify } from '../../utils/slowOperations.js'
+import type { KairosBuildEvent } from './buildState.js'
+
+export type KairosBuildAuditVerification =
+  | {
+      valid: true
+      eventCount: number
+      lastHash: string | null
+    }
+  | {
+      valid: false
+      eventNumber: number
+      reason: 'missing hash' | 'prev hash mismatch' | 'hash mismatch'
+      expected?: string | null
+      actual?: string | null
+    }
+
+function sortForAuditHash(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(sortForAuditHash)
+  }
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([, entryValue]) => entryValue !== undefined)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, entryValue]) => [key, sortForAuditHash(entryValue)]),
+    )
+  }
+  return value
+}
+
+export function calculateKairosBuildEventAuditHash(
+  event: KairosBuildEvent,
+): string {
+  const { auditHash: _auditHash, ...eventWithoutHash } = event
+  return createHash('sha256')
+    .update(jsonStringify(sortForAuditHash(eventWithoutHash)))
+    .digest('hex')
+}
+
+export function verifyKairosBuildEventAuditChain(
+  events: KairosBuildEvent[],
+): KairosBuildAuditVerification {
+  let previousHash: string | null = null
+  for (const [index, event] of events.entries()) {
+    const eventNumber = index + 1
+    if (!event.auditHash) {
+      return {
+        valid: false,
+        eventNumber,
+        reason: 'missing hash',
+        expected: calculateKairosBuildEventAuditHash({
+          ...event,
+          auditPrevHash: previousHash,
+        }),
+        actual: null,
+      }
+    }
+    if ((event.auditPrevHash ?? null) !== previousHash) {
+      return {
+        valid: false,
+        eventNumber,
+        reason: 'prev hash mismatch',
+        expected: previousHash,
+        actual: event.auditPrevHash ?? null,
+      }
+    }
+    const expectedHash = calculateKairosBuildEventAuditHash(event)
+    if (event.auditHash !== expectedHash) {
+      return {
+        valid: false,
+        eventNumber,
+        reason: 'hash mismatch',
+        expected: expectedHash,
+        actual: event.auditHash,
+      }
+    }
+    previousHash = event.auditHash
+  }
+  return {
+    valid: true,
+    eventCount: events.length,
+    lastHash: previousHash,
+  }
+}

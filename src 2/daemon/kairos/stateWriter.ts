@@ -6,9 +6,9 @@ import {
   rename,
   writeFile,
 } from 'fs/promises'
-import { createHash } from 'crypto'
 import { dirname, join } from 'path'
 import { jsonStringify } from '../../utils/slowOperations.js'
+import { calculateKairosBuildEventAuditHash } from './buildAudit.js'
 import {
   parseKairosBuildEvent,
   parseKairosBuildManifest,
@@ -173,28 +173,6 @@ async function appendJsonLine(path: string, value: unknown): Promise<void> {
   })
 }
 
-function sortForAuditHash(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(sortForAuditHash)
-  }
-  if (value !== null && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value)
-        .filter(([, entryValue]) => entryValue !== undefined)
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([key, entryValue]) => [key, sortForAuditHash(entryValue)]),
-    )
-  }
-  return value
-}
-
-function calculateAuditHash(event: KairosBuildEvent): string {
-  const { auditHash: _auditHash, ...eventWithoutHash } = event
-  return createHash('sha256')
-    .update(jsonStringify(sortForAuditHash(eventWithoutHash)))
-    .digest('hex')
-}
-
 function readLastBuildEventHash(raw: string): string | null {
   const lastLine = raw
     .split(/\r?\n/)
@@ -350,7 +328,7 @@ export async function createStateWriter() {
         }
         const eventWithHash = {
           ...eventWithPrevHash,
-          auditHash: calculateAuditHash(eventWithPrevHash),
+          auditHash: calculateKairosBuildEventAuditHash(eventWithPrevHash),
         }
         await mkdir(dirname(path), { recursive: true })
         await appendFile(path, `${jsonStringify(eventWithHash)}\n`, 'utf8')

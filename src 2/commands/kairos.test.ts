@@ -138,6 +138,7 @@ describe('/kairos command', () => {
     expect(out).toContain('/kairos build-problem')
     expect(out).toContain('/kairos build-traceability')
     expect(out).toContain('/kairos build-prd-outline')
+    expect(out).toContain('/kairos build-audit-verify')
     expect(out).toContain('/kairos cloud deploy')
     expect(out).toContain('/kairos cloud-sync')
   })
@@ -491,6 +492,61 @@ describe('/kairos command', () => {
     expect(out.split('\n')).toEqual([
       `No build missing-build found for ${projectDir}.`,
       `builds command: /kairos builds ${projectDir}`,
+    ])
+  })
+
+  test('build-audit-verify validates persisted event hash chains', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'audit-build',
+      now: () => new Date('2026-04-25T20:10:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+
+    const out = await runKairosCommand(
+      `build-audit-verify ${projectDir} audit-build`,
+    )
+    const lines = out.split('\n')
+    expect(lines[0]).toBe('Build audit chain valid for audit-build.')
+    expect(lines[1]).toBe('events: 2')
+    expect(lines[2]).toMatch(/^last audit hash: [a-f0-9]{64}$/)
+    expect(lines[3]).toBe(
+      `events command: /kairos build-events ${projectDir} audit-build`,
+    )
+    expect(lines).toHaveLength(4)
+  })
+
+  test('build-audit-verify reports a tampered event hash', async () => {
+    const projectDir = makeProjectDir()
+    const zeroHash =
+      '0000000000000000000000000000000000000000000000000000000000000000'
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'tampered-audit-build',
+      now: () => new Date('2026-04-25T20:11:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+    const eventsPath = getProjectKairosBuildEventsPath(
+      projectDir,
+      'tampered-audit-build',
+    )
+    writeFileSync(
+      eventsPath,
+      readFileSync(eventsPath, 'utf8').replace(
+        /"auditHash":"[a-f0-9]{64}"/,
+        `"auditHash":"${zeroHash}"`,
+      ),
+      'utf8',
+    )
+
+    const out = await runKairosCommand(
+      `build-audit-verify ${projectDir} tampered-audit-build`,
+    )
+    expect(out.split('\n')).toEqual([
+      'Build audit chain invalid for tampered-audit-build.',
+      'event: 1',
+      'reason: hash mismatch',
+      `actual: ${zeroHash}`,
+      `events command: /kairos build-events ${projectDir} tampered-audit-build`,
     ])
   })
 
