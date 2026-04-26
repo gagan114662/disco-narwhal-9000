@@ -253,6 +253,8 @@ export type SoftwareFactoryChangeAcceptResult = {
   auditEventAppended: boolean
 }
 
+const SOFTWARE_FACTORY_BUILD_ID_PATTERN = /^sf-[A-Za-z0-9][A-Za-z0-9-]{0,80}$/
+
 function sortForHash(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sortForHash)
   if (value !== null && typeof value === 'object') {
@@ -272,6 +274,12 @@ function hashJson(value: unknown): string {
     .digest('hex')
 }
 
+function assertValidSoftwareFactoryBuildId(buildId: string): void {
+  if (!SOFTWARE_FACTORY_BUILD_ID_PATTERN.test(buildId)) {
+    throw new Error(`Invalid Software Factory build ID: ${buildId}`)
+  }
+}
+
 function getBuildPaths(buildId: string): {
   buildDir: string
   specPath: string
@@ -281,6 +289,7 @@ function getBuildPaths(buildId: string): {
   smokePath: string
   auditPath: string
 } {
+  assertValidSoftwareFactoryBuildId(buildId)
   const buildDir = getKairosSoftwareFactoryBuildDir(buildId)
   return {
     buildDir,
@@ -816,7 +825,7 @@ export async function listSoftwareFactoryBuilds(): Promise<
 
   const summaries = await Promise.all(
     entries
-      .filter(entry => entry.startsWith('sf-'))
+      .filter(entry => SOFTWARE_FACTORY_BUILD_ID_PATTERN.test(entry))
       .map(async entry => {
         try {
           return await readSoftwareFactoryBuild(entry)

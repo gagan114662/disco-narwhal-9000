@@ -230,6 +230,13 @@ describe('/kairos command', () => {
     expect(pack.generatedFiles).toHaveLength(5)
   })
 
+  test('build commands reject path-like build IDs', async () => {
+    const out = await runKairosCommand('build verify sf-../outside')
+
+    expect(out).toContain('Software Factory build command failed')
+    expect(out).toContain('Invalid Software Factory build ID')
+  })
+
   test('build scan reports untraceable generated app files', async () => {
     const projectDir = makeProjectDir()
     setProjectRoot(projectDir)

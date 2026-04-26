@@ -37,6 +37,12 @@ afterEach(() => {
 })
 
 describe('software factory build', () => {
+  test('rejects path-like build IDs before reading artifacts', async () => {
+    await expect(
+      verifySoftwareFactoryBuild('sf-../outside'),
+    ).rejects.toThrow('Invalid Software Factory build ID')
+  })
+
   test('writes a traceable generated app, eval pack, review, smoke result, and audit chain', async () => {
     const configDir = makeTempDir('kairos-sf-config-')
     const projectDir = makeTempDir('kairos-sf-project-')
