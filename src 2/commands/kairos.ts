@@ -1955,6 +1955,13 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
     'traceabilitySeeds',
   ]
   const expectedBuildSpecKeys = ['format', 'body']
+  const expectedAuditEventKeys = [
+    'eventNumber',
+    'kind',
+    't',
+    'auditPrevHash',
+    'auditHash',
+  ]
   const buildLines = builds.map(build => {
     const buildId =
       typeof build.buildId === 'string' ? build.buildId : 'unknown-build'
@@ -1966,7 +1973,11 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
         line: `- ${buildId}: audit=invalid signature=invalid merkle=invalid`,
       }
     }
-    const auditEventsShapeValid = isRecordArray(audit.events)
+    const auditEventsShapeValid =
+      isRecordArray(audit.events) &&
+      readArrayField(audit, 'events').every(event =>
+        hasExactKeys(event, expectedAuditEventKeys),
+      )
     const events = readArrayField(audit, 'events')
     const restore = readRecordField(build, 'restore')
     const restoreEventsShapeValid = restore ? isRecordArray(restore.events) : false
