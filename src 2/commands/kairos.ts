@@ -612,7 +612,7 @@ function formatBuildEvent(event: KairosBuildEvent): string {
     case 'build_status_changed':
       return `${event.t} build_status_changed ${event.from}->${event.to}${auditSuffix}`
     case 'spec_written':
-      return `${event.t} spec_written spec=${event.specPath}${auditSuffix}`
+      return `${event.t} spec_written spec=[redacted]${auditSuffix}`
     case 'slice_selected':
       return `${event.t} slice_selected slice=${event.sliceId} title=${event.title}${auditSuffix}`
     case 'next_slice_prompt_rendered':
@@ -620,11 +620,11 @@ function formatBuildEvent(event: KairosBuildEvent): string {
     case 'slice_completed':
       return `${event.t} slice_completed slice=${event.sliceId} title=${event.title}${auditSuffix}`
     case 'clarifying_question_answered':
-      return `${event.t} clarifying_question_answered question=${event.questionNumber} answer=${event.answer}${auditSuffix}`
+      return `${event.t} clarifying_question_answered question=${event.questionNumber} answer=[redacted]${auditSuffix}`
     case 'agent_event_recorded':
       return `${event.t} agent_event_recorded run=${event.runId} event=${event.eventKind}${auditSuffix}`
     case 'build_result_written':
-      return `${event.t} build_result_written status=${event.status} result=${event.resultPath}${auditSuffix}`
+      return `${event.t} build_result_written status=${event.status} result=[redacted]${auditSuffix}`
     case 'build_failed':
       return `${event.t} build_failed error=${event.errorMessage}${auditSuffix}`
   }

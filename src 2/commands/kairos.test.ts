@@ -11,6 +11,7 @@ import { calculateKairosAuditExportHash } from '../daemon/kairos/buildAudit.js'
 import {
   getProjectKairosBuildEventsPath,
   getProjectKairosBuildManifestPath,
+  getProjectKairosBuildResultPath,
   getProjectKairosBuildSpecPath,
 } from '../daemon/kairos/paths.js'
 import { createStateWriter } from '../daemon/kairos/stateWriter.js'
@@ -437,9 +438,7 @@ describe('/kairos command', () => {
     )
     expect(firstEvent).not.toBeNull()
     const secondEvent = lines[2]?.match(
-      new RegExp(
-        `^- 2026-04-25T18:45:00\\.000Z spec_written spec=${escapeRegExp(getProjectKairosBuildSpecPath(projectDir, 'events-build'))} audit=([a-f0-9]{64}) prev=([a-f0-9]{64})$`,
-      ),
+      /^- 2026-04-25T18:45:00\.000Z spec_written spec=\[redacted\] audit=([a-f0-9]{64}) prev=([a-f0-9]{64})$/,
     )
     expect(secondEvent).not.toBeNull()
     expect(secondEvent?.[2]).toBe(firstEvent?.[1])
@@ -450,6 +449,44 @@ describe('/kairos command', () => {
       `progress command: /kairos build-progress ${projectDir} events-build`,
     )
     expect(lines).toHaveLength(5)
+  })
+
+  test('build-events redacts sensitive persisted payload values', async () => {
+    const projectDir = makeProjectDir()
+    const buildId = 'redacted-events-build'
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => buildId,
+      now: () => new Date('2026-04-25T18:47:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+    await runKairosCommand(
+      `build-answer ${projectDir} ${buildId} 2 ssn 123-45-6789`,
+    )
+    const writer = await createStateWriter()
+    await writer.appendBuildEvent(projectDir, buildId, {
+      version: 1,
+      kind: 'build_result_written',
+      buildId,
+      tenantId: 'local',
+      t: '2026-04-25T18:48:00.000Z',
+      status: 'succeeded',
+      resultPath: getProjectKairosBuildResultPath(projectDir, buildId),
+    })
+
+    const out = await runKairosCommand(
+      `build-events ${projectDir} ${buildId} 10`,
+    )
+
+    expect(out).toContain('spec_written spec=[redacted]')
+    expect(out).toContain(
+      'clarifying_question_answered question=2 answer=[redacted]',
+    )
+    expect(out).toContain(
+      'build_result_written status=succeeded result=[redacted]',
+    )
+    expect(out).not.toContain(getProjectKairosBuildSpecPath(projectDir, buildId))
+    expect(out).not.toContain(getProjectKairosBuildResultPath(projectDir, buildId))
+    expect(out).not.toContain('ssn 123-45-6789')
   })
 
   test('build-events filters persisted events by kind', async () => {
@@ -747,7 +784,7 @@ describe('/kairos command', () => {
       `build-events ${projectDir} questions-build --kind clarifying_question_answered`,
     )
     expect(eventsOut).toContain(
-      'clarifying_question_answered question=1 answer=employee manager and HR approver',
+      'clarifying_question_answered question=1 answer=[redacted]',
     )
 
     const summaryOut = await runKairosCommand(
