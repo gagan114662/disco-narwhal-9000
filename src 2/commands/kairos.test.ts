@@ -152,6 +152,7 @@ describe('/kairos command', () => {
     expect(out).toContain('/kairos build-audit-export')
     expect(out).toContain('/kairos build-audit-siem-export')
     expect(out).toContain('/kairos export tenant')
+    expect(out).toContain('/kairos export tenant-verify')
     expect(out).toContain('/kairos cloud deploy')
     expect(out).toContain('/kairos cloud-sync')
   })
@@ -1041,6 +1042,29 @@ describe('/kairos command', () => {
     expect(out).not.toContain(
       getProjectKairosBuildSpecPath(projectDir, 'tenant-export-build'),
     )
+  })
+
+  test('export tenant-verify validates a portable tenant archive file', async () => {
+    const projectDir = makeProjectDir()
+    const exportPath = join(makeTempConfigDir(), 'tenant-export.json')
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'tenant-export-verify-build',
+      now: () => new Date('2026-04-25T20:12:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} tenant export verify`)
+    writeFileSync(
+      exportPath,
+      await runKairosCommand(`export tenant ${projectDir}`),
+    )
+
+    const out = await runKairosCommand(`export tenant-verify ${exportPath}`)
+
+    expect(out.split('\n')).toEqual([
+      'Tenant archive valid.',
+      'archive hash: valid',
+      'builds: 1',
+      '- tenant-export-verify-build: audit=valid signature=unsigned merkle=valid',
+    ])
   })
 
   test('build-audit-export-verify validates a signed audit export file', async () => {

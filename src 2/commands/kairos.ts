@@ -148,6 +148,7 @@ const HELP_TEXT = `Usage:
 /kairos build-audit-anchor [projectDir] <buildId>
 /kairos build-audit-anchor-verify [projectDir] <buildId>
 /kairos export tenant [projectDir]
+/kairos export tenant-verify <exportJsonPath>
 /kairos pause
 /kairos resume
 /kairos dashboard
@@ -933,8 +934,14 @@ async function handleBuildAuditSiemExport(rest: string[]): Promise<string> {
 
 async function handleExport(rest: string[]): Promise<string> {
   const [kind, projectDirArg] = rest
+  if (kind === 'tenant-verify') {
+    return handleTenantArchiveVerify(rest.slice(1))
+  }
   if (kind !== 'tenant') {
-    return 'Usage: /kairos export tenant [projectDir]'
+    return [
+      'Usage: /kairos export tenant [projectDir]',
+      'Usage: /kairos export tenant-verify <exportJsonPath>',
+    ].join('\n')
   }
 
   const projectDir = resolveProjectDir(projectDirArg)
@@ -1001,6 +1008,119 @@ async function handleExport(rest: string[]): Promise<string> {
     null,
     2,
   )
+}
+
+function readRecordField(
+  value: Record<string, unknown>,
+  key: string,
+): Record<string, unknown> | null {
+  const field = value[key]
+  return field !== null && typeof field === 'object' && !Array.isArray(field)
+    ? (field as Record<string, unknown>)
+    : null
+}
+
+function readArrayField(
+  value: Record<string, unknown>,
+  key: string,
+): Array<Record<string, unknown>> {
+  const field = value[key]
+  return Array.isArray(field)
+    ? (field.filter(
+        item => item !== null && typeof item === 'object' && !Array.isArray(item),
+      ) as Array<Record<string, unknown>>)
+    : []
+}
+
+async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
+  const exportPath = rest.join(' ').trim()
+  if (!exportPath) {
+    return 'Usage: /kairos export tenant-verify <exportJsonPath>'
+  }
+
+  let parsed: unknown
+  try {
+    parsed = safeParseJSON(await readFile(resolve(exportPath), 'utf8'), false)
+  } catch {
+    return `Tenant archive invalid: cannot read ${exportPath}.`
+  }
+
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return 'Tenant archive invalid: file does not contain a JSON object.'
+  }
+
+  const archive = parsed as Record<string, unknown>
+  if (typeof archive.archiveHash !== 'string') {
+    return 'Tenant archive invalid: missing archiveHash.'
+  }
+  const { archiveHash: _archiveHash, ...archiveHashMaterial } = archive
+  const expectedArchiveHash =
+    calculateKairosAuditExportHash(archiveHashMaterial)
+  const archiveHashValid = archive.archiveHash === expectedArchiveHash
+  const builds = readArrayField(archive, 'builds')
+  const projectDirHash =
+    typeof archive.projectDirHash === 'string' ? archive.projectDirHash : null
+  const version =
+    typeof archive.version === 'number'
+      ? archive.version
+      : KAIROS_BUILD_STATE_VERSION
+  const buildLines = builds.map(build => {
+    const buildId =
+      typeof build.buildId === 'string' ? build.buildId : 'unknown-build'
+    const tenantId = typeof build.tenantId === 'string' ? build.tenantId : null
+    const audit = readRecordField(build, 'audit')
+    if (!audit || projectDirHash === null || tenantId === null) {
+      return {
+        valid: false,
+        line: `- ${buildId}: audit=invalid signature=invalid merkle=invalid`,
+      }
+    }
+    const events = readArrayField(audit, 'events')
+    const auditHashMaterial = {
+      version,
+      buildId,
+      projectDirHash,
+      tenantId,
+      valid: audit.valid,
+      eventCount: audit.eventCount,
+      lastHash: audit.lastHash,
+      merkleRoot: audit.merkleRoot,
+      erasureSummary: audit.erasureSummary,
+      redactionPolicy: audit.redactionPolicy,
+      failure: audit.failure,
+      events,
+    }
+    const expectedAuditHash =
+      calculateKairosAuditExportHash(auditHashMaterial)
+    const auditValid = audit.exportHash === expectedAuditHash
+    const signatureVerification =
+      typeof audit.exportHash === 'string'
+        ? verifyKairosAuditExportSignature(
+            audit.exportHash,
+            audit.auditSignature,
+          )
+        : ({ valid: false, reason: 'missing signature' } as const)
+    const signatureStatus = signatureVerification.valid
+      ? signatureVerification.status
+      : 'invalid'
+    const eventHashes = events
+      .map(event => event.auditHash)
+      .filter((hash): hash is string => typeof hash === 'string')
+    const merkleValid =
+      audit.merkleRoot === calculateKairosBuildAuditMerkleRoot(eventHashes)
+    return {
+      valid: auditValid && signatureVerification.valid && merkleValid,
+      line: `- ${buildId}: audit=${auditValid ? 'valid' : 'invalid'} signature=${signatureStatus} merkle=${merkleValid ? 'valid' : 'invalid'}`,
+    }
+  })
+  const valid = archiveHashValid && buildLines.every(build => build.valid)
+
+  return [
+    `Tenant archive ${valid ? 'valid' : 'invalid'}.`,
+    `archive hash: ${archiveHashValid ? 'valid' : 'invalid'}`,
+    `builds: ${builds.length}`,
+    ...buildLines.map(build => build.line),
+  ].join('\n')
 }
 
 async function handleBuildAuditExportVerify(rest: string[]): Promise<string> {
