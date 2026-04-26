@@ -1690,7 +1690,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
     const clarifyingQuestionsShapeValid = isNonEmptyStringArray(
       metadata.clarifyingQuestions,
     )
-    const assumptionsShapeValid = isStringArray(metadata.assumptions)
+    const assumptionsShapeValid = isNonEmptyStringArray(metadata.assumptions)
     const risksShapeValid = isStringArray(metadata.risks)
     const knowledgeGraph = readRecordField(build, 'knowledgeGraph')
     const auditHashMaterial = {
