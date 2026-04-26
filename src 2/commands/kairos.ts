@@ -1312,6 +1312,10 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every(item => typeof item === 'string')
 }
 
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0
+}
+
 function isOptionalStringOrNull(
   value: unknown,
 ): value is string | null | undefined {
@@ -1661,7 +1665,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
       build.selectedSliceId,
     )
     const statusShapeValid = isKairosBuildStatus(build.status)
-    const titleShapeValid = typeof build.title === 'string'
+    const titleShapeValid = isNonEmptyString(build.title)
     const createdAtShapeValid = typeof build.createdAt === 'string'
     const updatedAtShapeValid = typeof build.updatedAt === 'string'
     const specShapeValid =

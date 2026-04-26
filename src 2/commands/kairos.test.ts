@@ -2784,6 +2784,50 @@ describe('/kairos command', () => {
     ).toBe(false)
   })
 
+  test('import tenant rejects empty build titles', async () => {
+    const sourceProjectDir = makeProjectDir()
+    const targetProjectDir = makeProjectDir()
+    const exportPath = join(makeTempConfigDir(), 'tenant-import-empty-title-tampered.json')
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'tenant-import-empty-title-tampered-build',
+      now: () => new Date('2026-04-25T20:24:00.000Z'),
+    })
+    await runKairosCommand(`build ${sourceProjectDir} tenant empty title tamper`)
+    const tenantExport = JSON.parse(
+      await runKairosCommand(`export tenant ${sourceProjectDir}`),
+    ) as {
+      archiveHash: string
+      builds: Array<{
+        title: string
+      }>
+    }
+    tenantExport.builds[0]!.title = ''
+    const { archiveHash: _archiveHash, ...archiveHashMaterial } = tenantExport
+    tenantExport.archiveHash = calculateKairosAuditExportHash(
+      archiveHashMaterial,
+    )
+    writeFileSync(exportPath, JSON.stringify(tenantExport, null, 2))
+
+    const importOut = await runKairosCommand(
+      `import tenant ${exportPath} ${targetProjectDir}`,
+    )
+
+    expect(importOut.split('\n')).toEqual([
+      'Tenant archive invalid.',
+      'archive hash: valid',
+      'builds: 1',
+      '- tenant-import-empty-title-tampered-build: audit=valid signature=unsigned merkle=valid manifest=invalid',
+    ])
+    expect(
+      existsSync(
+        getProjectKairosBuildManifestPath(
+          targetProjectDir,
+          'tenant-import-empty-title-tampered-build',
+        ),
+      ),
+    ).toBe(false)
+  })
+
   test('import tenant rejects malformed build creation times', async () => {
     const sourceProjectDir = makeProjectDir()
     const targetProjectDir = makeProjectDir()
