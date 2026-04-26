@@ -1578,6 +1578,14 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
   const expectedArchiveHash =
     calculateKairosAuditExportHash(archiveHashMaterial)
   const archiveHashValid = archive.archiveHash === expectedArchiveHash
+  if (
+    !Array.isArray(archive.builds) ||
+    archive.builds.some(
+      build => build === null || typeof build !== 'object' || Array.isArray(build),
+    )
+  ) {
+    return 'Tenant archive invalid: builds contains non-object entries.'
+  }
   const builds = readArrayField(archive, 'builds')
   if (archive.buildCount !== builds.length) {
     return `Tenant archive invalid: buildCount mismatch ${String(archive.buildCount ?? 'missing')} != ${builds.length}.`
