@@ -1740,6 +1740,9 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
   if (!isNonEmptyString(archive.tenantId)) {
     return 'Tenant archive invalid: tenantId must be a non-empty string.'
   }
+  if (!isNonEmptyString(archive.projectDirHash)) {
+    return 'Tenant archive invalid: projectDirHash must be a non-empty string.'
+  }
   if (typeof archive.archiveHash !== 'string') {
     return 'Tenant archive invalid: missing archiveHash.'
   }
