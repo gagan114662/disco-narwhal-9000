@@ -20,6 +20,7 @@ import {
   calculateKairosAuditExportEnvelopeHash,
   calculateKairosAuditExportHash,
   calculateKairosBuildAuditMerkleRoot,
+  calculateKairosBuildEventAuditHash,
   verifyKairosBuildEventAuditChain,
   verifyKairosAuditExportSignature,
   signKairosAuditExportHash,
@@ -1132,6 +1133,45 @@ function readTraceabilitySeedsField(
     )
 }
 
+function verifyKairosTenantRestoreEvents(
+  buildId: string,
+  tenantId: string,
+  auditEvents: Record<string, unknown>[],
+  restoreEvents: Record<string, unknown>[],
+): boolean {
+  if (auditEvents.length !== restoreEvents.length) {
+    return false
+  }
+
+  return restoreEvents.every((restoreEvent, index) => {
+    const auditEvent = auditEvents[index]
+    if (!auditEvent) {
+      return false
+    }
+
+    let parsed: KairosBuildEvent
+    try {
+      parsed = parseKairosBuildEvent({
+        ...restoreEvent,
+        buildId,
+        tenantId,
+      })
+    } catch {
+      return false
+    }
+
+    return (
+      parsed.kind === readStringField(auditEvent, 'kind') &&
+      parsed.t === readStringField(auditEvent, 't') &&
+      (parsed.auditPrevHash ?? null) ===
+        (readStringField(auditEvent, 'auditPrevHash') || null) &&
+      (parsed.auditHash ?? null) ===
+        (readStringField(auditEvent, 'auditHash') || null) &&
+      calculateKairosBuildEventAuditHash(parsed) === parsed.auditHash
+    )
+  })
+}
+
 function readKairosBuildStatus(value: unknown): KairosBuildManifest['status'] {
   switch (value) {
     case 'draft':
@@ -1191,6 +1231,8 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
       }
     }
     const events = readArrayField(audit, 'events')
+    const restore = readRecordField(build, 'restore')
+    const restoreEvents = restore ? readArrayField(restore, 'events') : []
     const auditHashMaterial = {
       version,
       buildId,
@@ -1223,9 +1265,17 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
       .filter((hash): hash is string => typeof hash === 'string')
     const merkleValid =
       audit.merkleRoot === calculateKairosBuildAuditMerkleRoot(eventHashes)
+    const restoreValid = verifyKairosTenantRestoreEvents(
+      buildId,
+      tenantId,
+      events,
+      restoreEvents,
+    )
+    const restoreStatus = restoreValid ? '' : ' restore=invalid'
     return {
-      valid: auditValid && signatureVerification.valid && merkleValid,
-      line: `- ${buildId}: audit=${auditValid ? 'valid' : 'invalid'} signature=${signatureStatus} merkle=${merkleValid ? 'valid' : 'invalid'}`,
+      valid:
+        auditValid && signatureVerification.valid && merkleValid && restoreValid,
+      line: `- ${buildId}: audit=${auditValid ? 'valid' : 'invalid'} signature=${signatureStatus} merkle=${merkleValid ? 'valid' : 'invalid'}${restoreStatus}`,
     }
   })
   const valid = archiveHashValid && buildLines.every(build => build.valid)

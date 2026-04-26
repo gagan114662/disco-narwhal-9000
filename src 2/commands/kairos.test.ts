@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { createHmac } from 'crypto'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { mkdirSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
@@ -1153,6 +1153,54 @@ describe('/kairos command', () => {
     expect(slicesOut).toContain('test:')
     expect(traceabilityOut).toContain('Traceability seeds for tenant-import-metadata-build:')
     expect(traceabilityOut).toContain('BRIEF-1')
+  })
+
+  test('import tenant rejects tampered restore events', async () => {
+    const sourceProjectDir = makeProjectDir()
+    const targetProjectDir = makeProjectDir()
+    const exportPath = join(makeTempConfigDir(), 'tenant-import-tampered.json')
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'tenant-import-tampered-build',
+      now: () => new Date('2026-04-25T20:12:00.000Z'),
+    })
+    await runKairosCommand(`build ${sourceProjectDir} tenant tamper`)
+    const tenantExport = JSON.parse(
+      await runKairosCommand(`export tenant ${sourceProjectDir}`),
+    ) as {
+      archiveHash: string
+      builds: Array<{
+        restore: {
+          events: Array<{ status?: string }>
+        }
+      }>
+    }
+    const firstRestoreEvent = tenantExport.builds[0]?.restore.events[0]
+    expect(firstRestoreEvent).toBeDefined()
+    firstRestoreEvent!.status = 'queued'
+    const { archiveHash: _archiveHash, ...archiveHashMaterial } = tenantExport
+    tenantExport.archiveHash = calculateKairosAuditExportHash(
+      archiveHashMaterial,
+    )
+    writeFileSync(exportPath, JSON.stringify(tenantExport, null, 2))
+
+    const importOut = await runKairosCommand(
+      `import tenant ${exportPath} ${targetProjectDir}`,
+    )
+
+    expect(importOut.split('\n')).toEqual([
+      'Tenant archive invalid.',
+      'archive hash: valid',
+      'builds: 1',
+      '- tenant-import-tampered-build: audit=valid signature=unsigned merkle=valid restore=invalid',
+    ])
+    expect(
+      existsSync(
+        getProjectKairosBuildManifestPath(
+          targetProjectDir,
+          'tenant-import-tampered-build',
+        ),
+      ),
+    ).toBe(false)
   })
 
   test('build-audit-export-verify validates a signed audit export file', async () => {
