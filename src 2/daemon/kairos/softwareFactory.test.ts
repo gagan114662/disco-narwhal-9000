@@ -54,6 +54,8 @@ describe('software factory build', () => {
     expect(result.buildId).toBe('sf-id1')
     expect(result.appId).toContain('leave-request-app')
     expect(existsSync(result.specPath)).toBe(true)
+    expect(existsSync(result.projectSpecPath)).toBe(true)
+    expect(existsSync(result.projectSpecMarkdownPath)).toBe(true)
     expect(existsSync(result.evalPackPath)).toBe(true)
     expect(existsSync(result.projectEvalPackPath)).toBe(true)
     expect(existsSync(join(result.appDir, 'src', 'server.ts'))).toBe(true)
@@ -89,10 +91,16 @@ describe('software factory build', () => {
     expect(auditLines).toHaveLength(7)
     const auditEvents = auditLines.map(line => JSON.parse(line)) as Array<{
       kind: string
+      details: Record<string, unknown>
       prevHash: string | null
       hash: string
     }>
     expect(auditEvents[0]?.prevHash).toBeNull()
+    expect(auditEvents[0]?.details.prompt_sha).toBeString()
+    expect(auditEvents[0]?.details.model_id).toBe(
+      'kairos-deterministic-local-v1',
+    )
+    expect(auditEvents[0]?.details.cost_usd).toBe(0)
     for (let index = 1; index < auditEvents.length; index++) {
       expect(auditEvents[index]?.prevHash).toBe(auditEvents[index - 1]?.hash)
     }
@@ -118,6 +126,7 @@ describe('software factory build', () => {
     expect(verification.checks.map(check => check.id)).toEqual([
       'artifact-build-ids',
       'eval-pack',
+      'project-spec',
       'project-eval-pack',
       'manifest-traceability',
       'code-markers',
@@ -254,6 +263,9 @@ describe('software factory build', () => {
     const spec = readJson(result.specPath) as {
       clauses: Array<{ id: string; text: string }>
     }
+    const projectSpec = readJson(result.projectSpecPath) as {
+      clauses: Array<{ id: string; text: string }>
+    }
     const evalPack = readJson(result.evalPackPath) as {
       cases: Array<{ clauseId: string }>
     }
@@ -266,6 +278,7 @@ describe('software factory build', () => {
       'CL-004',
     )
     expect(source).toContain('kairos:clause=CL-004')
+    expect(projectSpec.clauses.map(clause => clause.id)).toContain('CL-004')
 
     const verification = await verifySoftwareFactoryBuild(result.buildId)
     expect(verification.ok).toBe(true)
@@ -307,6 +320,9 @@ describe('software factory build', () => {
     const spec = readJson(result.specPath) as {
       clauses: Array<{ id: string; text: string }>
     }
+    const projectSpec = readJson(result.projectSpecPath) as {
+      clauses: Array<{ id: string; text: string }>
+    }
     const evalPack = readJson(result.evalPackPath) as {
       cases: Array<{ clauseId: string }>
     }
@@ -319,6 +335,7 @@ describe('software factory build', () => {
       'CL-004',
     )
     expect(changeSource).toContain('kairos:clause=CL-004')
+    expect(projectSpec.clauses.map(clause => clause.id)).toContain('CL-004')
 
     const verification = await verifySoftwareFactoryBuild(result.buildId)
     expect(verification.ok).toBe(true)

@@ -128,6 +128,8 @@ export type SoftwareFactoryBuildResult = {
   buildDir: string
   appDir: string
   specPath: string
+  projectSpecPath: string
+  projectSpecMarkdownPath: string
   evalPackPath: string
   projectEvalPackPath: string
   appManifestPath: string
@@ -295,6 +297,14 @@ function getProjectEvalPackPath(projectDir: string, buildId: string): string {
   return join(projectDir, 'evals', 'software-factory', buildId, 'eval-pack.json')
 }
 
+function getProjectSpecPath(projectDir: string, buildId: string): string {
+  return join(projectDir, '.kairos', 'specs', buildId, 'spec.json')
+}
+
+function getProjectSpecMarkdownPath(projectDir: string, buildId: string): string {
+  return join(projectDir, '.kairos', 'specs', buildId, 'spec.md')
+}
+
 async function readJson<T>(path: string): Promise<T> {
   const raw = await readFile(path, 'utf8')
   return JSON.parse(raw) as T
@@ -390,6 +400,11 @@ function toBuildSummary(
     buildDir: paths.buildDir,
     appDir: getKairosSoftwareFactoryTenantAppDir(spec.tenantId, spec.appId),
     specPath: paths.specPath,
+    projectSpecPath: getProjectSpecPath(spec.projectDir, spec.buildId),
+    projectSpecMarkdownPath: getProjectSpecMarkdownPath(
+      spec.projectDir,
+      spec.buildId,
+    ),
     evalPackPath: paths.evalPackPath,
     projectEvalPackPath: getProjectEvalPackPath(spec.projectDir, spec.buildId),
     appManifestPath: paths.appManifestPath,
@@ -544,8 +559,11 @@ async function rewriteSpecAndEvalPacks(
   paths: ReturnType<typeof getBuildPaths>,
   generatedAt: string,
 ): Promise<string> {
+  const specMarkdown = renderSpecMarkdown(spec)
   await writeJson(paths.specPath, spec)
-  await writeText(join(paths.buildDir, 'spec.md'), renderSpecMarkdown(spec))
+  await writeText(join(paths.buildDir, 'spec.md'), specMarkdown)
+  await writeJson(getProjectSpecPath(spec.projectDir, buildId), spec)
+  await writeText(getProjectSpecMarkdownPath(spec.projectDir, buildId), specMarkdown)
   const evalPack = createEvalPack(spec, generatedAt)
   const projectEvalPackPath = getProjectEvalPackPath(spec.projectDir, buildId)
   await writeJson(paths.evalPackPath, evalPack)
@@ -712,9 +730,20 @@ async function appendAuditEvent(
   events: SoftwareFactoryAuditEvent[],
   event: Omit<SoftwareFactoryAuditEvent, 'prevHash' | 'hash'>,
 ): Promise<SoftwareFactoryAuditEvent> {
+  const details = {
+    prompt_sha: hashJson({
+      buildId: event.buildId,
+      kind: event.kind,
+      details: event.details,
+    }),
+    model_id: 'kairos-deterministic-local-v1',
+    cost_usd: 0,
+    ...event.details,
+  }
+  const eventWithProvenance = { ...event, details }
   const prevHash = events.at(-1)?.hash ?? null
-  const hash = hashJson({ ...event, prevHash })
-  const complete = { ...event, prevHash, hash }
+  const hash = hashJson({ ...eventWithProvenance, prevHash })
+  const complete = { ...eventWithProvenance, prevHash, hash }
   events.push(complete)
   await writeText(
     auditPath,
@@ -778,7 +807,21 @@ export async function verifySoftwareFactoryBuild(
         readJson<SoftwareFactorySmokeResult>(paths.smokePath),
         readAuditEvents(paths.auditPath),
       ])
+    let projectSpec: SoftwareFactorySpec | null = null
+    let projectSpecMarkdown: string | null = null
     let projectEvalPack: SoftwareFactoryEvalPack | null = null
+    const projectSpecPath = getProjectSpecPath(spec.projectDir, spec.buildId)
+    const projectSpecMarkdownPath = getProjectSpecMarkdownPath(
+      spec.projectDir,
+      spec.buildId,
+    )
+    try {
+      projectSpec = await readJson<SoftwareFactorySpec>(projectSpecPath)
+      projectSpecMarkdown = await readFile(projectSpecMarkdownPath, 'utf8')
+    } catch {
+      projectSpec = null
+      projectSpecMarkdown = null
+    }
     try {
       projectEvalPack = await readJson<SoftwareFactoryEvalPack>(
         getProjectEvalPackPath(spec.projectDir, spec.buildId),
@@ -814,6 +857,16 @@ export async function verifySoftwareFactoryBuild(
       'eval-pack',
       allClausesHaveEval && allEvalCasesGateTraceability,
       `${evalPack.cases.length}/${spec.clauses.length} eval case(s) generated with traceability and smoke gates`,
+    )
+    addCheck(
+      'project-spec',
+      projectSpec?.buildId === spec.buildId &&
+        projectSpec.appId === spec.appId &&
+        projectSpec.clauses.length === spec.clauses.length &&
+        projectSpecMarkdown?.includes(spec.buildId) === true,
+      projectSpec
+        ? `repo-local spec at ${projectSpecPath}`
+        : 'repo-local spec missing',
     )
     addCheck(
       'project-eval-pack',
@@ -1035,16 +1088,12 @@ export async function acceptSoftwareFactoryReconciliation(
     ...spec,
     clauses: [...spec.clauses, ...acceptedClauses],
   }
-  await writeJson(paths.specPath, revisedSpec)
-  await writeText(join(paths.buildDir, 'spec.md'), renderSpecMarkdown(revisedSpec))
-
-  const evalPack = createEvalPack(
+  const projectEvalPackPath = await rewriteSpecAndEvalPacks(
     revisedSpec,
+    buildId,
+    paths,
     (options.now ?? (() => new Date()))().toISOString(),
   )
-  const projectEvalPackPath = getProjectEvalPackPath(spec.projectDir, buildId)
-  await writeJson(paths.evalPackPath, evalPack)
-  await writeJson(projectEvalPackPath, evalPack)
 
   const revisedTraceability = [...manifest.traceability]
   for (const [index, delta] of proposal.deltas.entries()) {
@@ -1491,8 +1540,16 @@ export async function runSoftwareFactoryBuild(
   }
   const specPath = join(buildDir, 'spec.json')
   const specMarkdownPath = join(buildDir, 'spec.md')
+  const projectSpecPath = getProjectSpecPath(options.projectDir, buildId)
+  const projectSpecMarkdownPath = getProjectSpecMarkdownPath(
+    options.projectDir,
+    buildId,
+  )
+  const specMarkdown = renderSpecMarkdown(spec)
   await writeJson(specPath, spec)
-  await writeText(specMarkdownPath, renderSpecMarkdown(spec))
+  await writeText(specMarkdownPath, specMarkdown)
+  await writeJson(projectSpecPath, spec)
+  await writeText(projectSpecMarkdownPath, specMarkdown)
   await appendAuditEvent(auditPath, auditEvents, {
     version: KAIROS_SOFTWARE_FACTORY_VERSION,
     buildId,
@@ -1569,6 +1626,8 @@ export async function runSoftwareFactoryBuild(
     buildDir,
     appDir,
     specPath,
+    projectSpecPath,
+    projectSpecMarkdownPath,
     evalPackPath,
     projectEvalPackPath,
     appManifestPath,

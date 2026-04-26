@@ -174,10 +174,12 @@ describe('/kairos command', () => {
 
     expect(out).toContain('Software Factory build sf-')
     expect(out).toContain('succeeded')
+    expect(out).toContain('project spec:')
     expect(out).toContain('eval pack:')
     expect(out).toContain('project eval pack:')
     expect(out).toContain('app dir:')
     expect(out).toContain(process.env.CLAUDE_CONFIG_DIR as string)
+    expect(out).toContain(join(projectDir, '.kairos', 'specs'))
     expect(out).toContain(join(projectDir, 'evals', 'software-factory'))
   })
 
@@ -198,6 +200,7 @@ describe('/kairos command', () => {
 
     const show = await runKairosCommand(`build show ${buildId}`)
     expect(show).toContain(`Software Factory build ${buildId}: succeeded`)
+    expect(show).toContain('project spec:')
     expect(show).toContain('eval pack:')
     expect(show).toContain('project eval pack:')
     expect(show).toContain('audit:')
@@ -206,6 +209,7 @@ describe('/kairos command', () => {
     expect(verify).toContain(`Software Factory build ${buildId}: verified`)
     expect(verify).toContain('PASS audit-chain')
     expect(verify).toContain('PASS code-markers')
+    expect(verify).toContain('PASS project-spec')
     expect(verify).toContain('PASS project-eval-pack')
 
     const exported = await runKairosCommand(`build export ${buildId}`)
