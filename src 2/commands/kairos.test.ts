@@ -139,6 +139,7 @@ describe('/kairos command', () => {
     expect(out).toContain('/kairos build-traceability')
     expect(out).toContain('/kairos build-prd-outline')
     expect(out).toContain('/kairos build-audit-verify')
+    expect(out).toContain('/kairos build-audit-export')
     expect(out).toContain('/kairos cloud deploy')
     expect(out).toContain('/kairos cloud-sync')
   })
@@ -548,6 +549,63 @@ describe('/kairos command', () => {
       `actual: ${zeroHash}`,
       `events command: /kairos build-events ${projectDir} tampered-audit-build`,
     ])
+  })
+
+  test('build-audit-export emits chain metadata without event payload fields', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'audit-export-build',
+      now: () => new Date('2026-04-25T20:12:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+
+    const out = await runKairosCommand(
+      `build-audit-export ${projectDir} audit-export-build`,
+    )
+    const auditExport = JSON.parse(out) as {
+      version: number
+      buildId: string
+      projectDir: string
+      tenantId: string
+      valid: boolean
+      eventCount: number
+      lastHash: string
+      events: Array<{
+        eventNumber: number
+        kind: string
+        t: string
+        auditPrevHash: string | null
+        auditHash: string
+      }>
+    }
+
+    expect(auditExport).toMatchObject({
+      version: 1,
+      buildId: 'audit-export-build',
+      projectDir,
+      tenantId: 'local',
+      valid: true,
+      eventCount: 2,
+    })
+    expect(auditExport.lastHash).toMatch(/^[a-f0-9]{64}$/)
+    expect(auditExport.events).toHaveLength(2)
+    expect(auditExport.events[0]).toMatchObject({
+      eventNumber: 1,
+      kind: 'build_created',
+      t: '2026-04-25T20:12:00.000Z',
+      auditPrevHash: null,
+    })
+    expect(auditExport.events[0]?.auditHash).toMatch(/^[a-f0-9]{64}$/)
+    expect(auditExport.events[1]).toMatchObject({
+      eventNumber: 2,
+      kind: 'spec_written',
+      t: '2026-04-25T20:12:00.000Z',
+      auditPrevHash: auditExport.events[0]?.auditHash,
+      auditHash: auditExport.lastHash,
+    })
+    expect(out).not.toContain(
+      getProjectKairosBuildSpecPath(projectDir, 'audit-export-build'),
+    )
   })
 
   test('build-slices prints selectable tracer bullets', async () => {

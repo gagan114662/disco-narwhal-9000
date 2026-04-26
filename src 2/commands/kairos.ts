@@ -17,10 +17,11 @@ import {
   type CreateDraftBuildDeps,
 } from '../daemon/kairos/draftBuild.js'
 import { verifyKairosBuildEventAuditChain } from '../daemon/kairos/buildAudit.js'
-import type {
-  KairosBuildEvent,
-  KairosBuildManifest,
-  KairosBuildTracerSlice,
+import {
+  KAIROS_BUILD_STATE_VERSION,
+  type KairosBuildEvent,
+  type KairosBuildManifest,
+  type KairosBuildTracerSlice,
 } from '../daemon/kairos/buildState.js'
 import type { Command } from '../types/command.js'
 import {
@@ -57,6 +58,7 @@ import {
 } from '../daemon/kairos/cloudSync.js'
 import { runKairosCloudLifecycleCommand } from '../daemon/kairos/cloudLifecycle.js'
 import { safeParseJSON } from '../utils/json.js'
+import { jsonStringify } from '../utils/slowOperations.js'
 import {
   createStateWriter,
   type GlobalStatus,
@@ -119,6 +121,7 @@ const HELP_TEXT = `Usage:
 /kairos build-traceability [projectDir] <buildId>
 /kairos build-prd-outline [projectDir] <buildId>
 /kairos build-audit-verify [projectDir] <buildId>
+/kairos build-audit-export [projectDir] <buildId>
 /kairos pause
 /kairos resume
 /kairos dashboard
@@ -171,6 +174,7 @@ type Subcommand =
   | 'build-traceability'
   | 'build-prd-outline'
   | 'build-audit-verify'
+  | 'build-audit-export'
   | 'pause'
   | 'resume'
   | 'dashboard'
@@ -216,6 +220,7 @@ const SUBCOMMANDS = new Set<Subcommand>([
   'build-traceability',
   'build-prd-outline',
   'build-audit-verify',
+  'build-audit-export',
   'pause',
   'resume',
   'dashboard',
@@ -703,6 +708,56 @@ async function handleBuildAuditVerify(rest: string[]): Promise<string> {
     `actual: ${verification.actual ?? 'null'}`,
     `events command: /kairos build-events ${manifest.projectDir} ${manifest.buildId}`,
   ].join('\n')
+}
+
+async function handleBuildAuditExport(rest: string[]): Promise<string> {
+  const parsed = parseBuildShowArgs(rest)
+  if (parsed === null) {
+    return 'Usage: /kairos build-audit-export [projectDir] <buildId>'
+  }
+
+  const writer = await createStateWriter()
+  const manifest = await writer.readBuildManifest(
+    parsed.projectDir,
+    parsed.buildId,
+  )
+  if (!manifest) {
+    return [
+      `No build ${parsed.buildId} found for ${parsed.projectDir}.`,
+      `builds command: /kairos builds ${parsed.projectDir}`,
+    ].join('\n')
+  }
+
+  const events = await writer.readBuildEvents(parsed.projectDir, parsed.buildId)
+  const verification = verifyKairosBuildEventAuditChain(events)
+  return jsonStringify(
+    {
+      version: KAIROS_BUILD_STATE_VERSION,
+      buildId: manifest.buildId,
+      projectDir: manifest.projectDir,
+      tenantId: manifest.tenantId,
+      valid: verification.valid,
+      eventCount: events.length,
+      lastHash: verification.valid ? verification.lastHash : null,
+      failure: verification.valid
+        ? undefined
+        : {
+            eventNumber: verification.eventNumber,
+            reason: verification.reason,
+            expected: verification.expected ?? null,
+            actual: verification.actual ?? null,
+          },
+      events: events.map((event, index) => ({
+        eventNumber: index + 1,
+        kind: event.kind,
+        t: event.t,
+        auditPrevHash: event.auditPrevHash ?? null,
+        auditHash: event.auditHash ?? null,
+      })),
+    },
+    null,
+    2,
+  )
 }
 
 async function handleBuildSlices(rest: string[]): Promise<string> {
@@ -2012,6 +2067,8 @@ export async function runKairosCommand(args: string): Promise<string> {
       return handleBuildPrdOutline(rest)
     case 'build-audit-verify':
       return handleBuildAuditVerify(rest)
+    case 'build-audit-export':
+      return handleBuildAuditExport(rest)
     case 'pause':
       return handlePause()
     case 'resume':
@@ -2053,7 +2110,7 @@ const kairos = {
   name: 'kairos',
   description: 'Inspect and control the KAIROS background daemon',
   argumentHint:
-    'status|list|opt-in|opt-out|demo|build|builds|build-show|build-events|build-slices|build-select|build-select-next|build-select-next-prompt|build-next|build-complete-slice|build-acceptance|build-questions|build-answer|build-unanswered|build-requirements|build-summary|build-progress|build-readiness|build-assumptions|build-risks|build-goals|build-non-goals|build-users|build-problem|build-traceability|build-prd-outline|build-audit-verify|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
+    'status|list|opt-in|opt-out|demo|build|builds|build-show|build-events|build-slices|build-select|build-select-next|build-select-next-prompt|build-next|build-complete-slice|build-acceptance|build-questions|build-answer|build-unanswered|build-requirements|build-summary|build-progress|build-readiness|build-assumptions|build-risks|build-goals|build-non-goals|build-users|build-problem|build-traceability|build-prd-outline|build-audit-verify|build-audit-export|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
   load: () => import('./kairos-ui.js'),
 } satisfies Command
 
