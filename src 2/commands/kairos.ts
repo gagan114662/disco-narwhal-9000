@@ -1418,6 +1418,32 @@ function verifyKairosGeneratedAppArchives(
   )
 }
 
+function buildKairosEvalCaseArchivesFromMetadata(
+  buildId: string,
+  metadata: Record<string, unknown>,
+): Record<string, unknown>[] {
+  return readStringArrayField(metadata, 'acceptanceChecks').map(
+    (assertion, index) => ({
+      id: `${buildId}-AC-${index + 1}`,
+      source: 'acceptance_check',
+      assertion,
+    }),
+  )
+}
+
+function verifyKairosEvalCaseArchives(
+  buildId: string,
+  metadata: Record<string, unknown>,
+  evalCases: Record<string, unknown>[],
+): boolean {
+  return (
+    calculateKairosAuditExportHash(evalCases) ===
+    calculateKairosAuditExportHash(
+      buildKairosEvalCaseArchivesFromMetadata(buildId, metadata),
+    )
+  )
+}
+
 function readKairosBuildStatus(value: unknown): KairosBuildManifest['status'] {
   switch (value) {
     case 'draft':
@@ -1480,6 +1506,8 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
     const restore = readRecordField(build, 'restore')
     const restoreEvents = restore ? readArrayField(restore, 'events') : []
     const generatedApps = readArrayField(build, 'generatedApps')
+    const metadata = readRecordField(build, 'metadata') ?? {}
+    const evalCases = readArrayField(build, 'evalCases')
     const auditHashMaterial = {
       version,
       buildId,
@@ -1519,16 +1547,23 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
       restoreEvents,
     )
     const appsValid = verifyKairosGeneratedAppArchives(generatedApps)
+    const evalsValid = verifyKairosEvalCaseArchives(
+      buildId,
+      metadata,
+      evalCases,
+    )
     const restoreStatus = restoreValid ? '' : ' restore=invalid'
     const appsStatus = appsValid ? '' : ' apps=invalid'
+    const evalsStatus = evalsValid ? '' : ' evals=invalid'
     return {
       valid:
         auditValid &&
         signatureVerification.valid &&
         merkleValid &&
         restoreValid &&
-        appsValid,
-      line: `- ${buildId}: audit=${auditValid ? 'valid' : 'invalid'} signature=${signatureStatus} merkle=${merkleValid ? 'valid' : 'invalid'}${restoreStatus}${appsStatus}`,
+        appsValid &&
+        evalsValid,
+      line: `- ${buildId}: audit=${auditValid ? 'valid' : 'invalid'} signature=${signatureStatus} merkle=${merkleValid ? 'valid' : 'invalid'}${restoreStatus}${appsStatus}${evalsStatus}`,
     }
   })
   const valid = archiveHashValid && buildLines.every(build => build.valid)
