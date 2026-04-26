@@ -1323,6 +1323,20 @@ function isTracerSliceArray(
   )
 }
 
+function isTraceabilitySeedArray(
+  value: unknown,
+): value is Array<Record<string, unknown>> {
+  return (
+    isRecordArray(value) &&
+    value.every(
+      seed =>
+        isNonEmptyString(seed.id) &&
+        isNonEmptyString(seed.source) &&
+        isNonEmptyString(seed.text),
+    )
+  )
+}
+
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every(item => typeof item === 'string')
 }
@@ -1686,7 +1700,9 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
       metadata.functionalRequirements,
     )
     const tracerSlicesShapeValid = isTracerSliceArray(metadata.tracerSlices)
-    const traceabilitySeedsShapeValid = isRecordArray(metadata.traceabilitySeeds)
+    const traceabilitySeedsShapeValid = isTraceabilitySeedArray(
+      metadata.traceabilitySeeds,
+    )
     const completedSliceIdsShapeValid = isNonEmptyStringArray(
       build.completedSliceIds,
     )
