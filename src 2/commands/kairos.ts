@@ -10,8 +10,8 @@
 // skip slash-command registration.
 
 import { createHash } from 'crypto'
-import { readdir, readFile, writeFile } from 'fs/promises'
-import { isAbsolute, join, relative, resolve } from 'path'
+import { mkdir, readdir, readFile, writeFile } from 'fs/promises'
+import { dirname, isAbsolute, join, relative, resolve } from 'path'
 import { getProjectRoot } from '../bootstrap/state.js'
 import {
   createDraftBuild,
@@ -56,6 +56,7 @@ import {
   getKairosStatusPath,
   getKairosStdoutLogPath,
   getProjectKairosBuildAuditAnchorPath,
+  getProjectKairosBuildDir,
   getProjectKairosBuildEventsPath,
   getProjectKairosBuildResultPath,
   getProjectKairosBuildSpecPath,
@@ -984,6 +985,63 @@ async function collectKairosGeneratedAppArchives(
   ]
 }
 
+async function restoreKairosGeneratedAppArchives(
+  writer: StateWriter,
+  projectDir: string,
+  buildId: string,
+  tenantId: string,
+  generatedApps: Record<string, unknown>[],
+): Promise<void> {
+  for (const [index, generatedApp] of generatedApps.entries()) {
+    const appDir = join(
+      getProjectKairosBuildDir(projectDir, buildId),
+      'generated-apps',
+      String(index),
+    )
+    const files = readArrayField(generatedApp, 'files')
+    for (const file of files) {
+      const relativePath = readStringField(file, 'relativePath')
+      const contentBase64 = readStringField(file, 'contentBase64')
+      if (!relativePath || !contentBase64) {
+        continue
+      }
+
+      const targetPath = resolve(appDir, relativePath)
+      if (!isPathInside(appDir, targetPath)) {
+        continue
+      }
+
+      const content = Buffer.from(contentBase64, 'base64')
+      const expectedSha256 = readStringField(file, 'sha256')
+      if (
+        expectedSha256 &&
+        createHash('sha256').update(content).digest('hex') !== expectedSha256
+      ) {
+        continue
+      }
+
+      await mkdir(dirname(targetPath), { recursive: true })
+      await writeFile(targetPath, content)
+    }
+
+    if (index === 0) {
+      await writer.writeBuildResult(projectDir, buildId, {
+        version: KAIROS_BUILD_STATE_VERSION,
+        buildId,
+        tenantId,
+        status: readKairosBuildStatus(generatedApp.status),
+        completedAt: readStringField(
+          generatedApp,
+          'completedAt',
+          new Date(0).toISOString(),
+        ),
+        summary: readStringField(generatedApp, 'summary', 'Imported app.'),
+        appDir,
+      })
+    }
+  }
+}
+
 async function handleBuildAuditExport(rest: string[]): Promise<string> {
   const parsed = parseBuildShowArgs(rest)
   if (parsed === null) {
@@ -1486,6 +1544,13 @@ async function handleImport(rest: string[]): Promise<string> {
         }),
       )
     }
+    await restoreKairosGeneratedAppArchives(
+      writer,
+      projectDir,
+      buildId,
+      tenantId,
+      readArrayField(build, 'generatedApps'),
+    )
     importedLines.push(
       `- ${buildId} [${manifest.status}] ${manifest.title ?? buildId}`,
     )

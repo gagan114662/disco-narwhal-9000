@@ -14,6 +14,7 @@ import {
 } from '../daemon/kairos/buildAudit.js'
 import {
   getProjectKairosBuildAuditAnchorPath,
+  getProjectKairosBuildDir,
   getProjectKairosBuildEventsPath,
   getProjectKairosBuildManifestPath,
   getProjectKairosBuildResultPath,
@@ -1210,6 +1211,53 @@ describe('/kairos command', () => {
     expect(slicesOut).toContain('test:')
     expect(traceabilityOut).toContain('Traceability seeds for tenant-import-metadata-build:')
     expect(traceabilityOut).toContain('BRIEF-1')
+  })
+
+  test('import tenant restores generated app files', async () => {
+    const sourceProjectDir = makeProjectDir()
+    const targetProjectDir = makeProjectDir()
+    const appDir = join(sourceProjectDir, 'generated-app')
+    const exportPath = join(makeTempConfigDir(), 'tenant-import-app.json')
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'tenant-import-app-build',
+      now: () => new Date('2026-04-25T20:12:00.000Z'),
+    })
+    await runKairosCommand(`build ${sourceProjectDir} tenant app restore`)
+    mkdirSync(join(appDir, 'src'), { recursive: true })
+    writeFileSync(join(appDir, 'src', 'index.ts'), 'export const app = true\n')
+    const writer = await createStateWriter()
+    await writer.writeBuildResult(sourceProjectDir, 'tenant-import-app-build', {
+      version: 1,
+      buildId: 'tenant-import-app-build',
+      tenantId: 'local',
+      status: 'succeeded',
+      completedAt: '2026-04-25T20:13:00.000Z',
+      summary: 'Generated app artifact ready.',
+      appDir,
+    })
+    writeFileSync(
+      exportPath,
+      await runKairosCommand(`export tenant ${sourceProjectDir}`),
+    )
+
+    await runKairosCommand(`import tenant ${exportPath} ${targetProjectDir}`)
+    const restoredAppDir = join(
+      getProjectKairosBuildDir(targetProjectDir, 'tenant-import-app-build'),
+      'generated-apps',
+      '0',
+    )
+    const result = readJson(
+      getProjectKairosBuildResultPath(
+        targetProjectDir,
+        'tenant-import-app-build',
+      ),
+    ) as { appDir: string }
+
+    expect(readFileSync(join(restoredAppDir, 'src', 'index.ts'), 'utf8')).toBe(
+      'export const app = true\n',
+    )
+    expect(result.appDir).toBe(restoredAppDir)
+    expect(result.appDir).not.toContain(sourceProjectDir)
   })
 
   test('import tenant rejects tampered restore events', async () => {
