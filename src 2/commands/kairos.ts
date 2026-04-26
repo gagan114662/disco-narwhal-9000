@@ -1620,6 +1620,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
       .filter((hash): hash is string => typeof hash === 'string')
     const merkleValid =
       audit.merkleRoot === calculateKairosBuildAuditMerkleRoot(eventHashes)
+    const eventCountValid = audit.eventCount === events.length
     const restoreValid = verifyKairosTenantRestoreEvents(
       buildId,
       tenantId,
@@ -1638,6 +1639,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
       knowledgeGraph,
     )
     const restoreStatus = restoreValid ? '' : ' restore=invalid'
+    const eventsStatus = eventCountValid ? '' : ' events=invalid'
     const appsStatus = appsValid ? '' : ' apps=invalid'
     const evalsStatus = evalsValid ? '' : ' evals=invalid'
     const graphStatus = graphValid ? '' : ' graph=invalid'
@@ -1646,11 +1648,12 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
         auditValid &&
         signatureVerification.valid &&
         merkleValid &&
+        eventCountValid &&
         restoreValid &&
         appsValid &&
         evalsValid &&
         graphValid,
-      line: `- ${buildId}: audit=${auditValid ? 'valid' : 'invalid'} signature=${signatureStatus} merkle=${merkleValid ? 'valid' : 'invalid'}${restoreStatus}${appsStatus}${evalsStatus}${graphStatus}`,
+      line: `- ${buildId}: audit=${auditValid ? 'valid' : 'invalid'} signature=${signatureStatus} merkle=${merkleValid ? 'valid' : 'invalid'}${restoreStatus}${eventsStatus}${appsStatus}${evalsStatus}${graphStatus}`,
     }
   })
   const valid = archiveHashValid && buildLines.every(build => build.valid)
