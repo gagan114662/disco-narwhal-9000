@@ -26,6 +26,7 @@ import {
   __resetKairosCloudSyncDepsForTesting,
   __setKairosBuildDepsForTesting,
   __setKairosCloudSyncDepsForTesting,
+  default as kairosCommand,
   runKairosCommand,
 } from './kairos.js'
 import { __resetKairosCloudLifecycleDepsForTesting } from '../daemon/kairos/cloudLifecycle.js'
@@ -160,6 +161,11 @@ describe('/kairos command', () => {
   test('prints help for unknown subcommands', async () => {
     const out = await runKairosCommand('bogus')
     expect(out).toContain('Usage:')
+  })
+
+  test('command metadata advertises tenant export commands', () => {
+    expect(kairosCommand.argumentHint).toContain('export tenant')
+    expect(kairosCommand.argumentHint).toContain('export tenant-verify')
   })
 
   test('opt-in and opt-out modify projects.json', async () => {
