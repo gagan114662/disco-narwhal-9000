@@ -127,6 +127,7 @@ const HELP_TEXT = `Usage:
 /kairos build-questions [projectDir] <buildId>
 /kairos build-answer [projectDir] <buildId> <questionNumber> <answer>
 /kairos build-redact-answer [projectDir] <buildId> <questionNumber>
+/kairos build-erasure-report [projectDir] <buildId>
 /kairos build-unanswered [projectDir] <buildId>
 /kairos build-requirements [projectDir] <buildId>
 /kairos build-summary [projectDir] <buildId>
@@ -184,6 +185,7 @@ type Subcommand =
   | 'build-questions'
   | 'build-answer'
   | 'build-redact-answer'
+  | 'build-erasure-report'
   | 'build-unanswered'
   | 'build-requirements'
   | 'build-summary'
@@ -234,6 +236,7 @@ const SUBCOMMANDS = new Set<Subcommand>([
   'build-questions',
   'build-answer',
   'build-redact-answer',
+  'build-erasure-report',
   'build-unanswered',
   'build-requirements',
   'build-summary',
@@ -1407,6 +1410,62 @@ async function handleBuildRedactAnswer(rest: string[]): Promise<string> {
   ].join('\n')
 }
 
+async function handleBuildErasureReport(rest: string[]): Promise<string> {
+  const parsed = parseBuildShowArgs(rest)
+  if (parsed === null) {
+    return 'Usage: /kairos build-erasure-report [projectDir] <buildId>'
+  }
+
+  const writer = await createStateWriter()
+  const manifest = await writer.readBuildManifest(
+    parsed.projectDir,
+    parsed.buildId,
+  )
+  if (!manifest) {
+    return [
+      `No build ${parsed.buildId} found for ${parsed.projectDir}.`,
+      `builds command: /kairos builds ${parsed.projectDir}`,
+    ].join('\n')
+  }
+
+  const events = await writer.readBuildEvents(parsed.projectDir, parsed.buildId)
+  const redactedQuestionNumbers = new Set(
+    events
+      .filter(event => event.kind === 'clarifying_question_answer_redacted')
+      .map(event => event.questionNumber),
+  )
+  const answers = manifest.clarifyingQuestionAnswers ?? {}
+  const questions = manifest.clarifyingQuestions ?? []
+  let answeredCount = 0
+  let redactedCount = 0
+  const questionLines = questions.map((_question, index) => {
+    const questionNumber = index + 1
+    const answer = answers[String(questionNumber)]
+    if (!answer) {
+      return `- question ${questionNumber}: unanswered`
+    }
+    answeredCount += 1
+    if (answer === '[redacted]') {
+      redactedCount += 1
+      const eventRecorded = redactedQuestionNumbers.has(questionNumber)
+        ? 'yes'
+        : 'no'
+      return `- question ${questionNumber}: redacted event=${eventRecorded}`
+    }
+    return `- question ${questionNumber}: answered`
+  })
+  const erasableCount = answeredCount - redactedCount
+
+  return [
+    `Erasure report for ${manifest.buildId}:`,
+    `clarifying answers: ${answeredCount} answered, ${redactedCount} redacted, ${erasableCount} erasable`,
+    `redaction events: ${redactedQuestionNumbers.size}`,
+    ...questionLines,
+    `redact command: /kairos build-redact-answer ${manifest.projectDir} ${manifest.buildId} <questionNumber>`,
+    `audit command: /kairos build-audit-verify ${manifest.projectDir} ${manifest.buildId}`,
+  ].join('\n')
+}
+
 async function handleBuildUnanswered(rest: string[]): Promise<string> {
   const parsed = parseBuildShowArgs(rest)
   if (parsed === null) {
@@ -2550,6 +2609,8 @@ export async function runKairosCommand(args: string): Promise<string> {
       return handleBuildAnswer(rest)
     case 'build-redact-answer':
       return handleBuildRedactAnswer(rest)
+    case 'build-erasure-report':
+      return handleBuildErasureReport(rest)
     case 'build-unanswered':
       return handleBuildUnanswered(rest)
     case 'build-requirements':
@@ -2627,7 +2688,7 @@ const kairos = {
   name: 'kairos',
   description: 'Inspect and control the KAIROS background daemon',
   argumentHint:
-    'status|list|opt-in|opt-out|demo|build|builds|build-show|build-events|build-slices|build-select|build-select-next|build-select-next-prompt|build-next|build-complete-slice|build-acceptance|build-questions|build-answer|build-redact-answer|build-unanswered|build-requirements|build-summary|build-progress|build-readiness|build-assumptions|build-risks|build-goals|build-non-goals|build-users|build-problem|build-traceability|build-prd-outline|build-audit-verify|build-audit-export|build-audit-export-verify|build-audit-anchor|build-audit-anchor-verify|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
+    'status|list|opt-in|opt-out|demo|build|builds|build-show|build-events|build-slices|build-select|build-select-next|build-select-next-prompt|build-next|build-complete-slice|build-acceptance|build-questions|build-answer|build-redact-answer|build-erasure-report|build-unanswered|build-requirements|build-summary|build-progress|build-readiness|build-assumptions|build-risks|build-goals|build-non-goals|build-users|build-problem|build-traceability|build-prd-outline|build-audit-verify|build-audit-export|build-audit-export-verify|build-audit-anchor|build-audit-anchor-verify|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
   load: () => import('./kairos-ui.js'),
 } satisfies Command
 

@@ -1087,6 +1087,40 @@ describe('/kairos command', () => {
     ).toContain('Build audit chain valid for idempotent-redact-build.')
   })
 
+  test('build-erasure-report summarizes answer tombstones without exposing raw answers', async () => {
+    const projectDir = makeProjectDir()
+    const buildId = 'erasure-report-build'
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => buildId,
+      now: () => new Date('2026-04-25T19:16:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} erasure report`)
+    await runKairosCommand(
+      `build-answer ${projectDir} ${buildId} 1 employee manager and HR approver`,
+    )
+    await runKairosCommand(
+      `build-answer ${projectDir} ${buildId} 2 dates reason and sensitive notes`,
+    )
+    await runKairosCommand(`build-redact-answer ${projectDir} ${buildId} 2`)
+
+    const out = await runKairosCommand(
+      `build-erasure-report ${projectDir} ${buildId}`,
+    )
+
+    expect(out).not.toContain('dates reason and sensitive notes')
+    expect(out.split('\n')).toEqual([
+      'Erasure report for erasure-report-build:',
+      'clarifying answers: 2 answered, 1 redacted, 1 erasable',
+      'redaction events: 1',
+      '- question 1: answered',
+      '- question 2: redacted event=yes',
+      '- question 3: unanswered',
+      '- question 4: unanswered',
+      `redact command: /kairos build-redact-answer ${projectDir} ${buildId} <questionNumber>`,
+      `audit command: /kairos build-audit-verify ${projectDir} ${buildId}`,
+    ])
+  })
+
   test('build-answer reports a missing build clearly', async () => {
     const projectDir = makeProjectDir()
     const out = await runKairosCommand(
