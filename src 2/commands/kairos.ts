@@ -1667,7 +1667,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
     const acceptanceChecksShapeValid = isNonEmptyStringArray(
       metadata.acceptanceChecks,
     )
-    const functionalRequirementsShapeValid = isStringArray(
+    const functionalRequirementsShapeValid = isNonEmptyStringArray(
       metadata.functionalRequirements,
     )
     const tracerSlicesShapeValid = isRecordArray(metadata.tracerSlices)
