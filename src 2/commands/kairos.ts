@@ -1319,7 +1319,7 @@ function isNonEmptyString(value: unknown): value is string {
 function isOptionalStringOrNull(
   value: unknown,
 ): value is string | null | undefined {
-  return value === undefined || value === null || typeof value === 'string'
+  return value === undefined || value === null || isNonEmptyString(value)
 }
 
 function isOptionalString(value: unknown): value is string | undefined {
