@@ -632,6 +632,14 @@ function formatBuildEventAuditSuffix(event: KairosBuildEvent): string {
   return ` audit=${event.auditHash} prev=${event.auditPrevHash ?? 'genesis'}`
 }
 
+function formatBuildAuditSummary(events: KairosBuildEvent[]): string {
+  const verification = verifyKairosBuildEventAuditChain(events)
+  if (verification.valid) {
+    return `audit: valid events=${verification.eventCount} last=${verification.lastHash ?? 'none'}`
+  }
+  return `audit: invalid event=${verification.eventNumber} reason=${verification.reason}`
+}
+
 async function handleBuildEvents(rest: string[]): Promise<string> {
   const parsed = parseBuildEventsArgs(rest)
   if (parsed === null) {
@@ -1023,6 +1031,7 @@ async function handleBuildSummary(rest: string[]): Promise<string> {
     `completed slices: ${manifest.completedSliceIds?.length ?? 0}`,
     `traceability seeds: ${manifest.traceabilitySeeds?.length ?? 0}`,
     `last event: ${latestEventLabel}`,
+    formatBuildAuditSummary(events),
     `progress command: /kairos build-progress ${manifest.projectDir} ${manifest.buildId}`,
     `readiness command: /kairos build-readiness ${manifest.projectDir} ${manifest.buildId}`,
     `brief: ${formatOptionalValue(manifest.brief)}`,

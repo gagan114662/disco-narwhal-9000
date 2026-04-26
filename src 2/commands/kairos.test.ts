@@ -1076,7 +1076,7 @@ describe('/kairos command', () => {
       `build-summary ${projectDir} summary-build`,
     )
     const lines = out.split('\n')
-    expect(lines.slice(0, -4)).toEqual([
+    expect(lines.slice(0, -5)).toEqual([
       'Build summary for summary-build:',
       'title: Leave Request App',
       'status: draft',
@@ -1095,8 +1095,11 @@ describe('/kairos command', () => {
       'completed slices: 0',
       'traceability seeds: 1',
     ])
-    expect(lines.at(-4)?.startsWith('last event: slice_selected at ')).toBe(
+    expect(lines.at(-5)?.startsWith('last event: slice_selected at ')).toBe(
       true,
+    )
+    expect(lines.at(-4)).toMatch(
+      /^audit: valid events=3 last=[a-f0-9]{64}$/,
     )
     expect(lines.at(-3)).toBe(
       `progress command: /kairos build-progress ${projectDir} summary-build`,
