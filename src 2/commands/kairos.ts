@@ -1102,6 +1102,11 @@ type BuildAuditAnchorReadinessStatus = {
   blocker?: string
 }
 
+type BuildErasureReadinessStatus = {
+  line: string
+  blocker?: string
+}
+
 function summarizeKairosAnswerErasure(
   manifest: KairosBuildManifest,
   events: KairosBuildEvent[],
@@ -1138,6 +1143,31 @@ function summarizeKairosAnswerErasure(
     },
     redactionEvents: redactedQuestionNumbers.size,
   }
+}
+
+function readBuildErasureReadinessStatus(
+  manifest: KairosBuildManifest,
+  events: KairosBuildEvent[],
+): BuildErasureReadinessStatus | null {
+  const redactedQuestionNumbers = new Set(
+    events
+      .filter(event => event.kind === 'clarifying_question_answer_redacted')
+      .map(event => event.questionNumber),
+  )
+  const answers = manifest.clarifyingQuestionAnswers ?? {}
+  for (const [questionNumber, answer] of Object.entries(answers)) {
+    if (
+      answer === '[redacted]' &&
+      !redactedQuestionNumbers.has(Number(questionNumber))
+    ) {
+      return {
+        line: 'erasure: invalid reason=redacted answer missing redaction event',
+        blocker:
+          'Build erasure evidence is invalid: redacted answer missing redaction event.',
+      }
+    }
+  }
+  return null
 }
 
 async function readBuildAuditAnchorReadinessStatus(
@@ -1744,6 +1774,7 @@ async function handleBuildReadiness(rest: string[]): Promise<string> {
     events,
     auditVerification,
   )
+  const erasureStatus = readBuildErasureReadinessStatus(manifest, events)
   const latestEvent = events.at(-1)
   const latestEventLabel = latestEvent
     ? `${latestEvent.kind} at ${latestEvent.t}`
@@ -1778,6 +1809,7 @@ async function handleBuildReadiness(rest: string[]): Promise<string> {
         `Build audit chain is invalid at event ${auditVerification.eventNumber}: ${auditVerification.reason}.`,
       ]
   const anchorBlockers = anchorStatus?.blocker ? [anchorStatus.blocker] : []
+  const erasureBlockers = erasureStatus?.blocker ? [erasureStatus.blocker] : []
   const blockers = [
     ...(hasIncompleteSlice && !selectedSliceIsIncomplete
       ? ['Select an incomplete tracer slice before running build-next.']
@@ -1785,6 +1817,7 @@ async function handleBuildReadiness(rest: string[]): Promise<string> {
     ...unansweredQuestions,
     ...auditBlockers,
     ...anchorBlockers,
+    ...erasureBlockers,
   ]
   const blockerLines =
     blockers.length > 0
@@ -1808,6 +1841,7 @@ async function handleBuildReadiness(rest: string[]): Promise<string> {
     `last event: ${latestEventLabel}`,
     formatBuildAuditSummary(events),
     ...(anchorStatus ? [anchorStatus.line] : []),
+    ...(erasureStatus ? [erasureStatus.line] : []),
     `next command: ${nextCommand}`,
     ...questionCommandLines,
     ...blockerLines,

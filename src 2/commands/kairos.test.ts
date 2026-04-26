@@ -1850,6 +1850,45 @@ describe('/kairos command', () => {
     )
   })
 
+  test('build-readiness blocks when a redacted answer has no redaction audit event', async () => {
+    const projectDir = makeProjectDir()
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'readiness-erasure-build',
+      now: () => new Date('2026-04-25T20:48:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} erasure readiness`)
+    await runKairosCommand(
+      `build-answer ${projectDir} readiness-erasure-build 2 sensitive answer`,
+    )
+    const manifestPath = getProjectKairosBuildManifestPath(
+      projectDir,
+      'readiness-erasure-build',
+    )
+    const manifest = readJson(manifestPath)
+    writeFileSync(
+      manifestPath,
+      JSON.stringify({
+        ...manifest,
+        clarifyingQuestionAnswers: {
+          ...((manifest as { clarifyingQuestionAnswers?: object })
+            .clarifyingQuestionAnswers ?? {}),
+          2: '[redacted]',
+        },
+      }),
+    )
+
+    const out = await runKairosCommand(
+      `build-readiness ${projectDir} readiness-erasure-build`,
+    )
+
+    expect(out).toContain(
+      'erasure: invalid reason=redacted answer missing redaction event',
+    )
+    expect(out).toContain(
+      '- Build erasure evidence is invalid: redacted answer missing redaction event.',
+    )
+  })
+
   test('build-readiness reports a missing build clearly', async () => {
     const projectDir = makeProjectDir()
     const out = await runKairosCommand(
