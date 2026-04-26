@@ -1674,6 +1674,12 @@ function verifyKairosGeneratedAppArchives(
     'appDirHash',
     'files',
   ]
+  const expectedGeneratedAppFileKeys = [
+    'relativePath',
+    'sha256',
+    'sizeBytes',
+    'contentBase64',
+  ]
   return generatedApps.every(generatedApp => {
     if (!hasExactKeys(generatedApp, expectedGeneratedAppKeys)) {
       return false
@@ -1695,6 +1701,9 @@ function verifyKairosGeneratedAppArchives(
     }
     const seenRelativePaths = new Set<string>()
     return readArrayField(generatedApp, 'files').every(file => {
+      if (!hasExactKeys(file, expectedGeneratedAppFileKeys)) {
+        return false
+      }
       const relativePath = readStringField(file, 'relativePath')
       const contentBase64 =
         typeof file.contentBase64 === 'string' ? file.contentBase64 : null
