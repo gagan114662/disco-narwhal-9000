@@ -218,6 +218,30 @@ describe('software factory build', () => {
     ).toBe(false)
   })
 
+  test('generated app shell escapes user-provided spec text', async () => {
+    const configDir = makeTempDir('kairos-sf-config-')
+    const projectDir = makeTempDir('kairos-sf-project-')
+    process.env.CLAUDE_CONFIG_DIR = configDir
+    const scriptPayload = ['<', 'script', '>alert("x")</', 'script', '>'].join('')
+    const imagePayload = '<img src=x onerror=alert(1)>'
+
+    const result = await runSoftwareFactoryBuild({
+      projectDir,
+      brief:
+        `Build ${scriptPayload} app. Show vendor notes ${imagePayload}.`,
+      now: () => new Date('2026-04-26T12:00:00.000Z'),
+      generateId: () => 'html',
+    })
+
+    const appSource = readFileSync(join(result.appDir, 'src', 'app.ts'), 'utf8')
+    expect(appSource).toContain('&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;')
+    expect(appSource).toContain(
+      '&lt;img src=x onerror=alert(1)&gt;',
+    )
+    expect(appSource).not.toContain(scriptPayload)
+    expect(appSource).not.toContain(imagePayload)
+  })
+
   test('traceability scan records untraceable code drift in the audit chain', async () => {
     const configDir = makeTempDir('kairos-sf-config-')
     const projectDir = makeTempDir('kairos-sf-project-')

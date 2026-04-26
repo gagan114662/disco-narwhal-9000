@@ -553,6 +553,25 @@ function changeFilePath(clause: SoftwareFactoryClause, changeText: string): stri
   )
 }
 
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, char => {
+    switch (char) {
+      case '&':
+        return '&amp;'
+      case '<':
+        return '&lt;'
+      case '>':
+        return '&gt;'
+      case '"':
+        return '&quot;'
+      case "'":
+        return '&#39;'
+      default:
+        return char
+    }
+  })
+}
+
 async function rewriteSpecAndEvalPacks(
   spec: SoftwareFactorySpec,
   buildId: string,
@@ -638,8 +657,12 @@ if (process.argv.includes('--smoke')) {
 
 function renderApp(spec: SoftwareFactorySpec): string {
   const clauseList = spec.clauses
-    .map(clause => `      <li><code>${clause.id}</code> ${clause.text}</li>`)
+    .map(
+      clause =>
+        `      <li><code>${escapeHtml(clause.id)}</code> ${escapeHtml(clause.text)}</li>`,
+    )
     .join('\n')
+  const escapedTitle = escapeHtml(spec.title)
   return `// kairos:clause=${spec.clauses[0]?.id ?? 'CL-001'} primary app shell
 
 type RecordState = {
@@ -653,11 +676,11 @@ export function renderAppShell(records: RecordState[]): string {
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>${spec.title}</title>
+    <title>${escapedTitle}</title>
   </head>
   <body>
     <main>
-      <h1>${spec.title}</h1>
+      <h1>${escapedTitle}</h1>
       <section aria-label="Traceability clauses">
         <h2>Spec Clauses</h2>
         <ul>
