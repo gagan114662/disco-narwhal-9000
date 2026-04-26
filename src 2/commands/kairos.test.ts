@@ -1313,6 +1313,56 @@ describe('/kairos command', () => {
     ])
   })
 
+  test('import tenant rejects unknown clarifying answer keys', async () => {
+    const sourceProjectDir = makeProjectDir()
+    const targetProjectDir = makeProjectDir()
+    const exportPath = join(
+      makeTempConfigDir(),
+      'tenant-import-unknown-answer-key-tampered.json',
+    )
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'tenant-import-unknown-answer-key-tampered-build',
+      now: () => new Date('2026-04-25T20:48:00.000Z'),
+    })
+    await runKairosCommand(`build ${sourceProjectDir} unknown answer key tamper`)
+    const tenantExport = JSON.parse(
+      await runKairosCommand(`export tenant ${sourceProjectDir}`),
+    ) as {
+      archiveHash: string
+      builds: Array<{
+        metadata: {
+          clarifyingQuestionAnswers: Record<string, string>
+        }
+      }>
+    }
+    tenantExport.builds[0]!.metadata.clarifyingQuestionAnswers['99'] =
+      'answer for a missing question'
+    const { archiveHash: _archiveHash, ...archiveHashMaterial } = tenantExport
+    tenantExport.archiveHash = calculateKairosAuditExportHash(
+      archiveHashMaterial,
+    )
+    writeFileSync(exportPath, JSON.stringify(tenantExport, null, 2))
+
+    const importOut = await runKairosCommand(
+      `import tenant ${exportPath} ${targetProjectDir}`,
+    )
+
+    expect(importOut.split('\n')).toEqual([
+      'Tenant archive invalid.',
+      'archive hash: valid',
+      'builds: 1',
+      '- tenant-import-unknown-answer-key-tampered-build: audit=valid signature=unsigned merkle=valid manifest=invalid',
+    ])
+    expect(
+      existsSync(
+        getProjectKairosBuildManifestPath(
+          targetProjectDir,
+          'tenant-import-unknown-answer-key-tampered-build',
+        ),
+      ),
+    ).toBe(false)
+  })
+
   test('import tenant restores generated app files', async () => {
     const sourceProjectDir = makeProjectDir()
     const targetProjectDir = makeProjectDir()

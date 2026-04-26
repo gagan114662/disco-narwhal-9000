@@ -1415,6 +1415,31 @@ function isNonEmptyStringRecord(
   )
 }
 
+function isClarifyingQuestionAnswerRecord(
+  value: unknown,
+  clarifyingQuestions: unknown,
+): value is Record<string, string> {
+  if (!isNonEmptyStringRecord(value)) {
+    return false
+  }
+  if (Object.keys(value).length === 0) {
+    return true
+  }
+  if (!isNonEmptyStringArray(clarifyingQuestions)) {
+    return false
+  }
+  const questionCount = clarifyingQuestions.length
+  return Object.keys(value).every(key => {
+    const questionNumber = Number(key)
+    return (
+      Number.isInteger(questionNumber) &&
+      String(questionNumber) === key &&
+      questionNumber >= 1 &&
+      questionNumber <= questionCount
+    )
+  })
+}
+
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0
 }
@@ -1799,9 +1824,11 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
     const clarifyingQuestionsShapeValid = isNonEmptyStringArray(
       metadata.clarifyingQuestions,
     )
-    const clarifyingQuestionAnswersShapeValid = isNonEmptyStringRecord(
-      metadata.clarifyingQuestionAnswers,
-    )
+    const clarifyingQuestionAnswersShapeValid =
+      isClarifyingQuestionAnswerRecord(
+        metadata.clarifyingQuestionAnswers,
+        metadata.clarifyingQuestions,
+      )
     const assumptionsShapeValid = isNonEmptyStringArray(metadata.assumptions)
     const risksShapeValid = isNonEmptyStringArray(metadata.risks)
     const knowledgeGraph = readRecordField(build, 'knowledgeGraph')
