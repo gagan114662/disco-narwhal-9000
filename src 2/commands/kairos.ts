@@ -1664,7 +1664,9 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
     const spec = readRecordField(build, 'spec')
     const evalCasesShapeValid = isRecordArray(build.evalCases)
     const evalCases = readArrayField(build, 'evalCases')
-    const acceptanceChecksShapeValid = isStringArray(metadata.acceptanceChecks)
+    const acceptanceChecksShapeValid = isNonEmptyStringArray(
+      metadata.acceptanceChecks,
+    )
     const functionalRequirementsShapeValid = isStringArray(
       metadata.functionalRequirements,
     )

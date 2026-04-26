@@ -2123,6 +2123,56 @@ describe('/kairos command', () => {
     ).toBe(false)
   })
 
+  test('import tenant rejects empty acceptance check metadata entries', async () => {
+    const sourceProjectDir = makeProjectDir()
+    const targetProjectDir = makeProjectDir()
+    const exportPath = join(makeTempConfigDir(), 'tenant-import-empty-acceptance-tampered.json')
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'tenant-import-empty-acceptance-tampered-build',
+      now: () => new Date('2026-04-25T20:36:00.000Z'),
+    })
+    await runKairosCommand(`build ${sourceProjectDir} tenant empty acceptance tamper`)
+    const tenantExport = JSON.parse(
+      await runKairosCommand(`export tenant ${sourceProjectDir}`),
+    ) as {
+      archiveHash: string
+      builds: Array<{
+        evalCases: Array<{
+          assertion: string
+        }>
+        metadata: {
+          acceptanceChecks: string[]
+        }
+      }>
+    }
+    tenantExport.builds[0]!.metadata.acceptanceChecks[0] = ''
+    tenantExport.builds[0]!.evalCases[0]!.assertion = ''
+    const { archiveHash: _archiveHash, ...archiveHashMaterial } = tenantExport
+    tenantExport.archiveHash = calculateKairosAuditExportHash(
+      archiveHashMaterial,
+    )
+    writeFileSync(exportPath, JSON.stringify(tenantExport, null, 2))
+
+    const importOut = await runKairosCommand(
+      `import tenant ${exportPath} ${targetProjectDir}`,
+    )
+
+    expect(importOut.split('\n')).toEqual([
+      'Tenant archive invalid.',
+      'archive hash: valid',
+      'builds: 1',
+      '- tenant-import-empty-acceptance-tampered-build: audit=valid signature=unsigned merkle=valid evals=invalid',
+    ])
+    expect(
+      existsSync(
+        getProjectKairosBuildManifestPath(
+          targetProjectDir,
+          'tenant-import-empty-acceptance-tampered-build',
+        ),
+      ),
+    ).toBe(false)
+  })
+
   test('import tenant rejects tampered knowledge graphs', async () => {
     const sourceProjectDir = makeProjectDir()
     const targetProjectDir = makeProjectDir()
