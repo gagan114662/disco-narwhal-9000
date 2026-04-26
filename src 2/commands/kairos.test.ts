@@ -5112,6 +5112,55 @@ describe('/kairos command', () => {
     ).toBe(false)
   })
 
+  test('import tenant rejects audit signatures with extra metadata', async () => {
+    const sourceProjectDir = makeProjectDir()
+    const targetProjectDir = makeProjectDir()
+    const exportPath = join(
+      makeTempConfigDir(),
+      'tenant-import-audit-signature-extra-tampered.json',
+    )
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'tenant-import-audit-signature-extra-tampered-build',
+      now: () => new Date('2026-04-25T20:21:00.000Z'),
+    })
+    await runKairosCommand(`build ${sourceProjectDir} tenant audit signature extra`)
+    const tenantExport = JSON.parse(
+      await runKairosCommand(`export tenant ${sourceProjectDir}`),
+    ) as {
+      archiveHash: string
+      builds: Array<{
+        audit: {
+          auditSignature: Record<string, unknown>
+        }
+      }>
+    }
+    tenantExport.builds[0]!.audit.auditSignature.signature = 'not-applicable'
+    const { archiveHash: _archiveHash, ...archiveHashMaterial } = tenantExport
+    tenantExport.archiveHash = calculateKairosAuditExportHash(
+      archiveHashMaterial,
+    )
+    writeFileSync(exportPath, JSON.stringify(tenantExport, null, 2))
+
+    const importOut = await runKairosCommand(
+      `import tenant ${exportPath} ${targetProjectDir}`,
+    )
+
+    expect(importOut.split('\n')).toEqual([
+      'Tenant archive invalid.',
+      'archive hash: valid',
+      'builds: 1',
+      '- tenant-import-audit-signature-extra-tampered-build: audit=valid signature=invalid merkle=valid',
+    ])
+    expect(
+      existsSync(
+        getProjectKairosBuildManifestPath(
+          targetProjectDir,
+          'tenant-import-audit-signature-extra-tampered-build',
+        ),
+      ),
+    ).toBe(false)
+  })
+
   test('import tenant rejects signed audit signature key relabeling', async () => {
     const sourceProjectDir = makeProjectDir()
     const targetProjectDir = makeProjectDir()

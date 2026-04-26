@@ -1444,6 +1444,19 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0
 }
 
+function hasExactKeys(
+  value: Record<string, unknown>,
+  expectedKeys: string[],
+): boolean {
+  const actualKeys = Object.keys(value)
+  return (
+    actualKeys.length === expectedKeys.length &&
+    expectedKeys.every(key =>
+      Object.prototype.hasOwnProperty.call(value, key),
+    )
+  )
+}
+
 function isKairosBuildAuditRedactionPolicy(value: unknown): boolean {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     return false
@@ -1510,11 +1523,19 @@ function isKairosAuditSignatureMetadata(value: unknown): boolean {
   const signature = value as Record<string, unknown>
   if (signature.status === 'unsigned') {
     return (
+      hasExactKeys(signature, ['version', 'status', 'reason']) &&
       signature.version === 1 &&
       signature.reason === 'KAIROS_AUDIT_SIGNING_KEY not configured'
     )
   }
   return (
+    hasExactKeys(signature, [
+      'version',
+      'status',
+      'algorithm',
+      'keyId',
+      'signature',
+    ]) &&
     signature.version === 1 &&
     signature.status === 'signed' &&
     signature.algorithm === 'hmac-sha256' &&
