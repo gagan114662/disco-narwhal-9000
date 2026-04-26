@@ -1638,6 +1638,47 @@ describe('/kairos command', () => {
     ).toBe(false)
   })
 
+  test('import tenant rejects duplicate archive build ids', async () => {
+    const sourceProjectDir = makeProjectDir()
+    const targetProjectDir = makeProjectDir()
+    const exportPath = join(makeTempConfigDir(), 'tenant-import-duplicate-build.json')
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'tenant-import-duplicate-build',
+      now: () => new Date('2026-04-25T20:12:00.000Z'),
+    })
+    await runKairosCommand(`build ${sourceProjectDir} tenant duplicate build`)
+    const tenantExport = JSON.parse(
+      await runKairosCommand(`export tenant ${sourceProjectDir}`),
+    ) as {
+      archiveHash: string
+      buildCount: number
+      builds: Array<Record<string, unknown>>
+    }
+    tenantExport.builds.push(tenantExport.builds[0]!)
+    tenantExport.buildCount = tenantExport.builds.length
+    const { archiveHash: _archiveHash, ...archiveHashMaterial } = tenantExport
+    tenantExport.archiveHash = calculateKairosAuditExportHash(
+      archiveHashMaterial,
+    )
+    writeFileSync(exportPath, JSON.stringify(tenantExport, null, 2))
+
+    const importOut = await runKairosCommand(
+      `import tenant ${exportPath} ${targetProjectDir}`,
+    )
+
+    expect(importOut).toBe(
+      'Tenant archive invalid: duplicate buildId tenant-import-duplicate-build.',
+    )
+    expect(
+      existsSync(
+        getProjectKairosBuildManifestPath(
+          targetProjectDir,
+          'tenant-import-duplicate-build',
+        ),
+      ),
+    ).toBe(false)
+  })
+
   test('import tenant rejects tampered restore events', async () => {
     const sourceProjectDir = makeProjectDir()
     const targetProjectDir = makeProjectDir()

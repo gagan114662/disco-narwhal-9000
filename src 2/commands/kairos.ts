@@ -1556,6 +1556,14 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
   if (buildTenantId && archive.tenantId !== buildTenantId) {
     return `Tenant archive invalid: tenantId mismatch ${String(archive.tenantId ?? 'missing')} != ${buildTenantId}.`
   }
+  const seenBuildIds = new Set<string>()
+  for (const build of builds) {
+    const buildId = readStringField(build, 'buildId')
+    if (buildId && seenBuildIds.has(buildId)) {
+      return `Tenant archive invalid: duplicate buildId ${buildId}.`
+    }
+    seenBuildIds.add(buildId)
+  }
   const projectDirHash =
     typeof archive.projectDirHash === 'string' ? archive.projectDirHash : null
   const version = archive.version
