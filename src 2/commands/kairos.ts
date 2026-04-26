@@ -9,7 +9,7 @@
 // production `claude kairos ...` works even when upstream feature flags would
 // skip slash-command registration.
 
-import { readFile } from 'fs/promises'
+import { readFile, writeFile } from 'fs/promises'
 import { resolve } from 'path'
 import { getProjectRoot } from '../bootstrap/state.js'
 import {
@@ -45,6 +45,7 @@ import {
   getKairosPausePath,
   getKairosStatusPath,
   getKairosStdoutLogPath,
+  getProjectKairosBuildEventsPath,
   getProjectKairosLogPath,
 } from '../daemon/kairos/paths.js'
 import {
@@ -81,6 +82,7 @@ const KAIROS_BUILD_EVENT_KIND_LIST: KairosBuildEventKind[] = [
   'next_slice_prompt_rendered',
   'slice_completed',
   'clarifying_question_answered',
+  'clarifying_question_answer_redacted',
   'agent_event_recorded',
   'build_result_written',
   'build_failed',
@@ -110,6 +112,7 @@ const HELP_TEXT = `Usage:
 /kairos build-acceptance [projectDir] <buildId>
 /kairos build-questions [projectDir] <buildId>
 /kairos build-answer [projectDir] <buildId> <questionNumber> <answer>
+/kairos build-redact-answer [projectDir] <buildId> <questionNumber>
 /kairos build-unanswered [projectDir] <buildId>
 /kairos build-requirements [projectDir] <buildId>
 /kairos build-summary [projectDir] <buildId>
@@ -163,6 +166,7 @@ type Subcommand =
   | 'build-acceptance'
   | 'build-questions'
   | 'build-answer'
+  | 'build-redact-answer'
   | 'build-unanswered'
   | 'build-requirements'
   | 'build-summary'
@@ -209,6 +213,7 @@ const SUBCOMMANDS = new Set<Subcommand>([
   'build-acceptance',
   'build-questions',
   'build-answer',
+  'build-redact-answer',
   'build-unanswered',
   'build-requirements',
   'build-summary',
@@ -522,6 +527,31 @@ function parseBuildAnswerArgs(
   }
 }
 
+function parseBuildQuestionNumberArgs(
+  rest: string[],
+): { projectDir: string; buildId: string; questionNumber: number } | null {
+  if (rest.length === 0) return null
+  const [first, second, third] = rest
+  if (isPathLike(first)) {
+    if (!second || !third) return null
+    const questionNumber = Number(third)
+    if (!Number.isInteger(questionNumber) || questionNumber < 1) return null
+    return {
+      projectDir: resolveProjectDir(first),
+      buildId: second,
+      questionNumber,
+    }
+  }
+  if (!second) return null
+  const questionNumber = Number(second)
+  if (!Number.isInteger(questionNumber) || questionNumber < 1) return null
+  return {
+    projectDir: resolveProjectDir(undefined),
+    buildId: first,
+    questionNumber,
+  }
+}
+
 async function handleBuild(rest: string[]): Promise<string> {
   const parsed = parseBuildArgs(rest)
   if (parsed === null) {
@@ -621,6 +651,8 @@ function formatBuildEvent(event: KairosBuildEvent): string {
       return `${event.t} slice_completed slice=${event.sliceId} title=${event.title}${auditSuffix}`
     case 'clarifying_question_answered':
       return `${event.t} clarifying_question_answered question=${event.questionNumber} answer=[redacted]${auditSuffix}`
+    case 'clarifying_question_answer_redacted':
+      return `${event.t} clarifying_question_answer_redacted question=${event.questionNumber}${auditSuffix}`
     case 'agent_event_recorded':
       return `${event.t} agent_event_recorded run=${event.runId} event=${event.eventKind}${auditSuffix}`
     case 'build_result_written':
@@ -930,6 +962,83 @@ async function handleBuildAnswer(rest: string[]): Promise<string> {
     `Answered question ${parsed.questionNumber} for ${parsed.buildId}: ${parsed.answer}`,
     `unanswered clarifying questions remaining: ${remainingQuestions}`,
     `next command: ${nextCommand}`,
+  ].join('\n')
+}
+
+async function handleBuildRedactAnswer(rest: string[]): Promise<string> {
+  const parsed = parseBuildQuestionNumberArgs(rest)
+  if (parsed === null) {
+    return 'Usage: /kairos build-redact-answer [projectDir] <buildId> <questionNumber>'
+  }
+
+  const writer = await createStateWriter()
+  const manifest = await writer.readBuildManifest(
+    parsed.projectDir,
+    parsed.buildId,
+  )
+  if (!manifest) {
+    return [
+      `No build ${parsed.buildId} found for ${parsed.projectDir}.`,
+      `builds command: /kairos builds ${parsed.projectDir}`,
+    ].join('\n')
+  }
+  const questions = manifest.clarifyingQuestions ?? []
+  if (!questions[parsed.questionNumber - 1]) {
+    const validRange =
+      questions.length > 0 ? `1-${questions.length}` : 'none'
+    return `No clarifying question ${parsed.questionNumber} found for ${parsed.buildId}. Valid question numbers are ${validRange}. Run \`/kairos build-questions ${parsed.projectDir} ${parsed.buildId}\` to inspect them.`
+  }
+
+  const answerKey = String(parsed.questionNumber)
+  const existingAnswer = manifest.clarifyingQuestionAnswers?.[answerKey]
+  if (!existingAnswer) {
+    return [
+      `No answer recorded for question ${parsed.questionNumber} in ${parsed.buildId}.`,
+      `questions command: /kairos build-questions ${parsed.projectDir} ${parsed.buildId}`,
+    ].join('\n')
+  }
+
+  const updatedManifest = {
+    ...manifest,
+    clarifyingQuestionAnswers: {
+      ...(manifest.clarifyingQuestionAnswers ?? {}),
+      [answerKey]: '[redacted]',
+    },
+    updatedAt: new Date().toISOString(),
+  }
+  await writer.writeBuildManifest(parsed.projectDir, updatedManifest)
+
+  const events = await writer.readBuildEvents(parsed.projectDir, parsed.buildId)
+  const redactedEvents = events.map(event => {
+    if (
+      event.kind === 'clarifying_question_answered' &&
+      event.questionNumber === parsed.questionNumber
+    ) {
+      return {
+        ...event,
+        answer: '[redacted]',
+      }
+    }
+    return event
+  })
+  await writeFile(
+    getProjectKairosBuildEventsPath(parsed.projectDir, parsed.buildId),
+    `${redactedEvents.map(event => jsonStringify(event)).join('\n')}\n`,
+    'utf8',
+  )
+  await writer.appendBuildEvent(parsed.projectDir, parsed.buildId, {
+    version: KAIROS_BUILD_STATE_VERSION,
+    kind: 'clarifying_question_answer_redacted',
+    buildId: parsed.buildId,
+    tenantId: manifest.tenantId,
+    t: new Date().toISOString(),
+    questionNumber: parsed.questionNumber,
+  })
+
+  return [
+    `Redacted answer for question ${parsed.questionNumber} in ${parsed.buildId}.`,
+    `audit command: /kairos build-audit-verify ${parsed.projectDir} ${parsed.buildId}`,
+    `events command: /kairos build-events ${parsed.projectDir} ${parsed.buildId} --kind clarifying_question_answer_redacted`,
   ].join('\n')
 }
 
@@ -2066,6 +2175,8 @@ export async function runKairosCommand(args: string): Promise<string> {
       return handleBuildQuestions(rest)
     case 'build-answer':
       return handleBuildAnswer(rest)
+    case 'build-redact-answer':
+      return handleBuildRedactAnswer(rest)
     case 'build-unanswered':
       return handleBuildUnanswered(rest)
     case 'build-requirements':
@@ -2137,7 +2248,7 @@ const kairos = {
   name: 'kairos',
   description: 'Inspect and control the KAIROS background daemon',
   argumentHint:
-    'status|list|opt-in|opt-out|demo|build|builds|build-show|build-events|build-slices|build-select|build-select-next|build-select-next-prompt|build-next|build-complete-slice|build-acceptance|build-questions|build-answer|build-unanswered|build-requirements|build-summary|build-progress|build-readiness|build-assumptions|build-risks|build-goals|build-non-goals|build-users|build-problem|build-traceability|build-prd-outline|build-audit-verify|build-audit-export|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
+    'status|list|opt-in|opt-out|demo|build|builds|build-show|build-events|build-slices|build-select|build-select-next|build-select-next-prompt|build-next|build-complete-slice|build-acceptance|build-questions|build-answer|build-redact-answer|build-unanswered|build-requirements|build-summary|build-progress|build-readiness|build-assumptions|build-risks|build-goals|build-non-goals|build-users|build-problem|build-traceability|build-prd-outline|build-audit-verify|build-audit-export|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
   load: () => import('./kairos-ui.js'),
 } satisfies Command
 

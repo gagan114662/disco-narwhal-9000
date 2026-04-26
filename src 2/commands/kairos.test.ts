@@ -129,6 +129,7 @@ describe('/kairos command', () => {
     expect(out).toContain('/kairos build-complete-slice')
     expect(out).toContain('/kairos build-acceptance')
     expect(out).toContain('/kairos build-questions')
+    expect(out).toContain('/kairos build-redact-answer')
     expect(out).toContain('/kairos build-requirements')
     expect(out).toContain('/kairos build-summary')
     expect(out).toContain('/kairos build-progress')
@@ -520,7 +521,7 @@ describe('/kairos command', () => {
     const out = await runKairosCommand('build-events events-build --kind nope')
     expect(out.split('\n')).toEqual([
       'Unknown build event kind: nope',
-      'Supported kinds: build_created, build_status_changed, spec_written, slice_selected, next_slice_prompt_rendered, slice_completed, clarifying_question_answered, agent_event_recorded, build_result_written, build_failed',
+      'Supported kinds: build_created, build_status_changed, spec_written, slice_selected, next_slice_prompt_rendered, slice_completed, clarifying_question_answered, clarifying_question_answer_redacted, agent_event_recorded, build_result_written, build_failed',
       'Usage: /kairos build-events [projectDir] <buildId> [lines] [--kind <kind>]',
     ])
   })
@@ -799,6 +800,48 @@ describe('/kairos command', () => {
     expect(nextOut).toContain('Clarifying questions answered: 1/4')
     expect(nextOut).toContain('1. Who are the exact user roles and approvers?')
     expect(nextOut).toContain('   answer: employee manager and HR approver')
+  })
+
+  test('build-redact-answer tombstones a persisted clarifying answer without breaking the audit chain', async () => {
+    const projectDir = makeProjectDir()
+    const buildId = 'redact-answer-build'
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => buildId,
+      now: () => new Date('2026-04-25T19:12:00.000Z'),
+    })
+    await runKairosCommand(`build ${projectDir} leave request app`)
+    await runKairosCommand(
+      `build-answer ${projectDir} ${buildId} 2 ssn 123-45-6789`,
+    )
+    const eventsPath = getProjectKairosBuildEventsPath(projectDir, buildId)
+    expect(readFileSync(eventsPath, 'utf8')).toContain('ssn 123-45-6789')
+
+    const out = await runKairosCommand(
+      `build-redact-answer ${projectDir} ${buildId} 2`,
+    )
+
+    expect(out.split('\n')).toEqual([
+      'Redacted answer for question 2 in redact-answer-build.',
+      `audit command: /kairos build-audit-verify ${projectDir} ${buildId}`,
+      `events command: /kairos build-events ${projectDir} ${buildId} --kind clarifying_question_answer_redacted`,
+    ])
+    const questionsOut = await runKairosCommand(
+      `build-questions ${projectDir} ${buildId}`,
+    )
+    expect(questionsOut).toContain(
+      '2. What fields are required, optional, or sensitive?',
+    )
+    expect(questionsOut).toContain('   answer: [redacted]')
+    expect(questionsOut).not.toContain('ssn 123-45-6789')
+    expect(readFileSync(eventsPath, 'utf8')).not.toContain('ssn 123-45-6789')
+    expect(
+      await runKairosCommand(`build-audit-verify ${projectDir} ${buildId}`),
+    ).toContain('Build audit chain valid for redact-answer-build.')
+    expect(
+      await runKairosCommand(
+        `build-events ${projectDir} ${buildId} --kind clarifying_question_answer_redacted`,
+      ),
+    ).toContain('clarifying_question_answer_redacted question=2')
   })
 
   test('build-answer reports a missing build clearly', async () => {

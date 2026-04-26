@@ -109,6 +109,11 @@ export const kairosBuildEventSchema = z.discriminatedUnion('kind', [
   }),
   z.object({
     ...kairosBuildEventBaseSchema,
+    kind: z.literal('clarifying_question_answer_redacted'),
+    questionNumber: z.number().int().min(1),
+  }),
+  z.object({
+    ...kairosBuildEventBaseSchema,
     kind: z.literal('agent_event_recorded'),
     runId: z.string().min(1),
     eventKind: z.string().min(1),
