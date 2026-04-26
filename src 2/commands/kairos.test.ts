@@ -103,6 +103,7 @@ describe('/kairos command', () => {
     expect(out).toContain('/kairos status')
     expect(out).toContain('/kairos opt-in')
     expect(out).toContain('/kairos demo')
+    expect(out).toContain('/kairos build run')
     expect(out).toContain('/kairos cloud deploy')
     expect(out).toContain('/kairos cloud-sync')
   })
@@ -161,6 +162,184 @@ describe('/kairos command', () => {
     expect(task.prompt).toContain('KAIROS dashboard demo')
     // Cron must be a valid 5-field expression targeting a specific minute.
     expect(task.cron.split(/\s+/)).toHaveLength(5)
+  })
+
+  test('build run creates a Software Factory scaffold with audit and eval paths', async () => {
+    const projectDir = makeProjectDir()
+    setProjectRoot(projectDir)
+
+    const out = await runKairosCommand(
+      'build run Build a vendor onboarding form with reviewer approval and audit trail',
+    )
+
+    expect(out).toContain('Software Factory build sf-')
+    expect(out).toContain('succeeded')
+    expect(out).toContain('eval pack:')
+    expect(out).toContain('project eval pack:')
+    expect(out).toContain('app dir:')
+    expect(out).toContain(process.env.CLAUDE_CONFIG_DIR as string)
+    expect(out).toContain(join(projectDir, 'evals', 'software-factory'))
+  })
+
+  test('build list, show, and verify inspect persisted Software Factory builds', async () => {
+    const projectDir = makeProjectDir()
+    setProjectRoot(projectDir)
+
+    const created = await runKairosCommand(
+      'build run Build an invoice approval app with reviewer audit trail',
+    )
+    const buildId = created.match(/Software Factory build (sf-[^:]+):/)?.[1]
+    expect(buildId).toBeString()
+
+    const list = await runKairosCommand('build list')
+    expect(list).toContain(buildId as string)
+    expect(list).toContain('succeeded')
+    expect(list).toContain('Invoice Approval App')
+
+    const show = await runKairosCommand(`build show ${buildId}`)
+    expect(show).toContain(`Software Factory build ${buildId}: succeeded`)
+    expect(show).toContain('eval pack:')
+    expect(show).toContain('project eval pack:')
+    expect(show).toContain('audit:')
+
+    const verify = await runKairosCommand(`build verify ${buildId}`)
+    expect(verify).toContain(`Software Factory build ${buildId}: verified`)
+    expect(verify).toContain('PASS audit-chain')
+    expect(verify).toContain('PASS code-markers')
+    expect(verify).toContain('PASS project-eval-pack')
+
+    const exported = await runKairosCommand(`build export ${buildId}`)
+    expect(exported).toContain(
+      `Software Factory build ${buildId}: compliance pack exported`,
+    )
+    expect(exported).toContain('verified: yes')
+    expect(exported).toContain('generated files: 5')
+    const exportPath = exported.match(/^export: (.+)$/m)?.[1]
+    expect(exportPath).toBeString()
+    const pack = readJson(exportPath as string) as {
+      buildId: string
+      verification: { ok: boolean }
+      generatedFiles: unknown[]
+    }
+    expect(pack.buildId).toBe(buildId)
+    expect(pack.verification.ok).toBe(true)
+    expect(pack.generatedFiles).toHaveLength(5)
+  })
+
+  test('build scan reports untraceable generated app files', async () => {
+    const projectDir = makeProjectDir()
+    setProjectRoot(projectDir)
+
+    const created = await runKairosCommand(
+      'build run Build an expense approval app with reviewer audit trail',
+    )
+    const buildId = created.match(/Software Factory build (sf-[^:]+):/)?.[1]
+    const appDir = created.match(/^app dir: (.+)$/m)?.[1]
+    expect(buildId).toBeString()
+    expect(appDir).toBeString()
+    writeFileSync(
+      join(appDir as string, 'src', 'unreviewed.ts'),
+      'export const bypass = true\n',
+    )
+
+    const scan = await runKairosCommand(`build scan ${buildId}`)
+    expect(scan).toContain(`Software Factory build ${buildId}: drift detected`)
+    expect(scan).toContain('untraceable files: 1')
+    expect(scan).toContain('- src/unreviewed.ts')
+    expect(scan).toContain('audit event appended: yes')
+  })
+
+  test('build reconcile writes a proposed spec delta for untraceable code', async () => {
+    const projectDir = makeProjectDir()
+    setProjectRoot(projectDir)
+
+    const created = await runKairosCommand(
+      'build run Build a vendor risk app with reviewer audit trail',
+    )
+    const buildId = created.match(/Software Factory build (sf-[^:]+):/)?.[1]
+    const appDir = created.match(/^app dir: (.+)$/m)?.[1]
+    expect(buildId).toBeString()
+    expect(appDir).toBeString()
+    writeFileSync(
+      join(appDir as string, 'src', 'vendor-risk-score.ts'),
+      'export const score = 100\n',
+    )
+
+    const reconcile = await runKairosCommand(`build reconcile ${buildId}`)
+    expect(reconcile).toContain(
+      `Software Factory build ${buildId}: reconciliation proposed`,
+    )
+    expect(reconcile).toContain('deltas: 1')
+    expect(reconcile).toContain('audit event appended: yes')
+    const proposalPath = reconcile.match(/^proposal: (.+)$/m)?.[1]
+    expect(proposalPath).toBeString()
+    const proposal = readJson(proposalPath as string) as {
+      deltas: Array<{ sourceFile: string }>
+    }
+    expect(proposal.deltas[0]?.sourceFile).toBe('src/vendor-risk-score.ts')
+  })
+
+  test('build accept-reconciliation restores traceability for proposed drift', async () => {
+    const projectDir = makeProjectDir()
+    setProjectRoot(projectDir)
+
+    const created = await runKairosCommand(
+      'build run Build a supplier review app with reviewer audit trail',
+    )
+    const buildId = created.match(/Software Factory build (sf-[^:]+):/)?.[1]
+    const appDir = created.match(/^app dir: (.+)$/m)?.[1]
+    expect(buildId).toBeString()
+    expect(appDir).toBeString()
+    writeFileSync(
+      join(appDir as string, 'src', 'supplier-score.ts'),
+      'export const supplierScore = 99\n',
+    )
+
+    await runKairosCommand(`build reconcile ${buildId}`)
+    const accepted = await runKairosCommand(
+      `build accept-reconciliation ${buildId}`,
+    )
+    expect(accepted).toContain(
+      `Software Factory build ${buildId}: reconciliation accepted`,
+    )
+    expect(accepted).toContain('accepted clauses: CL-004')
+    expect(accepted).toContain('audit event appended: yes')
+
+    const verify = await runKairosCommand(`build verify ${buildId}`)
+    expect(verify).toContain(`Software Factory build ${buildId}: verified`)
+    expect(verify).toContain('PASS untraceable-code')
+  })
+
+  test('build change and accept-change apply traceable spec-driven changes', async () => {
+    const projectDir = makeProjectDir()
+    setProjectRoot(projectDir)
+
+    const created = await runKairosCommand(
+      'build run Build an invoice review app with reviewer audit trail',
+    )
+    const buildId = created.match(/Software Factory build (sf-[^:]+):/)?.[1]
+    expect(buildId).toBeString()
+
+    const change = await runKairosCommand(
+      `build change ${buildId} Add CSV export for approved invoices`,
+    )
+    expect(change).toContain(
+      `Software Factory build ${buildId}: change proposed`,
+    )
+    expect(change).toContain('proposed clause: CL-004')
+    expect(change).toContain('audit event appended: yes')
+
+    const accepted = await runKairosCommand(`build accept-change ${buildId}`)
+    expect(accepted).toContain(
+      `Software Factory build ${buildId}: change accepted`,
+    )
+    expect(accepted).toContain('accepted clause: CL-004')
+    expect(accepted).toContain('audit event appended: yes')
+
+    const verify = await runKairosCommand(`build verify ${buildId}`)
+    expect(verify).toContain(`Software Factory build ${buildId}: verified`)
+    expect(verify).toContain('PASS eval-pack: 4/4')
+    expect(verify).toContain('PASS code-markers: 4/4')
   })
 
   test('pause writes pause.json and resume clears it', async () => {
