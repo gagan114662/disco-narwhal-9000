@@ -1312,6 +1312,10 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every(item => typeof item === 'string')
 }
 
+function isNonEmptyStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every(isNonEmptyString)
+}
+
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0
 }
@@ -1680,7 +1684,7 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
       typeof spec.body === 'string'
     const briefShapeValid = isOptionalNonEmptyString(metadata.brief)
     const problemShapeValid = isOptionalNonEmptyString(metadata.problem)
-    const usersShapeValid = isStringArray(metadata.users)
+    const usersShapeValid = isNonEmptyStringArray(metadata.users)
     const goalsShapeValid = isStringArray(metadata.goals)
     const nonGoalsShapeValid = isStringArray(metadata.nonGoals)
     const clarifyingQuestionsShapeValid = isStringArray(
