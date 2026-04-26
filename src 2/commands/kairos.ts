@@ -1846,6 +1846,19 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
   if (typeof archive.archiveHash !== 'string') {
     return 'Tenant archive invalid: missing archiveHash.'
   }
+  if (
+    !hasExactKeys(archive, [
+      'version',
+      'exportType',
+      'tenantId',
+      'projectDirHash',
+      'buildCount',
+      'builds',
+      'archiveHash',
+    ])
+  ) {
+    return 'Tenant archive invalid: unexpected archive envelope fields.'
+  }
   const { archiveHash: _archiveHash, ...archiveHashMaterial } = archive
   const expectedArchiveHash =
     calculateKairosAuditExportHash(archiveHashMaterial)
