@@ -24,6 +24,7 @@ import {
   readSoftwareFactoryBuild,
   runSoftwareFactoryBuild,
   scanSoftwareFactoryTraceability,
+  verifySoftwareFactoryAudit,
   verifySoftwareFactoryBuild,
 } from '../daemon/kairos/softwareFactory.js'
 import {
@@ -82,6 +83,7 @@ const HELP_TEXT = `Usage:
 /kairos build reconcile <buildId>
 /kairos build accept-reconciliation <buildId>
 /kairos build export <buildId>
+/kairos audit verify <buildId> [--anchor]
 /kairos pause
 /kairos resume
 /kairos dashboard
@@ -108,6 +110,7 @@ type Subcommand =
   | 'opt-out'
   | 'demo'
   | 'build'
+  | 'audit'
   | 'pause'
   | 'resume'
   | 'dashboard'
@@ -127,6 +130,7 @@ const SUBCOMMANDS = new Set<Subcommand>([
   'opt-out',
   'demo',
   'build',
+  'audit',
   'pause',
   'resume',
   'dashboard',
@@ -537,6 +541,45 @@ async function handleBuild(rest: string[]): Promise<string> {
   }
 }
 
+async function handleAudit(rest: string[]): Promise<string> {
+  const [action, ...args] = rest
+  try {
+    switch (action) {
+      case 'verify': {
+        const usage = requireBuildId('audit verify', args[0])
+        if (usage) return 'Usage: /kairos audit verify <buildId> [--anchor]'
+        const buildId = args[0] as string
+        const writeAnchor = args.includes('--anchor')
+        const verification = await verifySoftwareFactoryAudit(buildId, {
+          writeAnchor,
+        })
+        return [
+          `Software Factory audit ${verification.buildId}: ${verification.ok ? 'verified' : 'failed'}`,
+          `tenant: ${verification.tenantId}`,
+          `events: ${verification.eventCount}`,
+          `head hash: ${verification.headHash ?? 'none'}`,
+          `merkle root: ${verification.merkleRoot ?? 'none'}`,
+          `audit: ${verification.auditPath}`,
+          ...(verification.anchorPath
+            ? [`anchor: ${verification.anchorPath}`]
+            : []),
+          ...(verification.projectAnchorPath
+            ? [`project anchor: ${verification.projectAnchorPath}`]
+            : []),
+          ...verification.checks.map(
+            check => `${check.ok ? 'PASS' : 'FAIL'} ${check.id}: ${check.detail}`,
+          ),
+        ].join('\n')
+      }
+      default:
+        return 'Usage: /kairos audit verify <buildId> [--anchor]'
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    return `Software Factory audit command failed: ${message}`
+  }
+}
+
 async function handlePause(): Promise<string> {
   await setPauseState(true)
   return 'Paused KAIROS daemon. Fired tasks will be skipped until resume.'
@@ -720,6 +763,8 @@ export async function runKairosCommand(args: string): Promise<string> {
       return handleDemo(resolveProjectDir(rest[0]))
     case 'build':
       return handleBuild(rest)
+    case 'audit':
+      return handleAudit(rest)
     case 'pause':
       return handlePause()
     case 'resume':
@@ -761,7 +806,7 @@ const kairos = {
   name: 'kairos',
   description: 'Inspect and control the KAIROS background daemon',
   argumentHint:
-    'status|list|opt-in|opt-out|demo|build|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
+    'status|list|opt-in|opt-out|demo|build|audit|pause|resume|dashboard|logs|cloud|cloud-sync|gateway|skills|skill-improvements|memory-proposals|memory',
   load: () => import('./kairos-ui.js'),
 } satisfies Command
 

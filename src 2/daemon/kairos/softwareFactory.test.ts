@@ -14,6 +14,7 @@ import {
   readSoftwareFactoryBuild,
   runSoftwareFactoryBuild,
   scanSoftwareFactoryTraceability,
+  verifySoftwareFactoryAudit,
   verifySoftwareFactoryBuild,
 } from './softwareFactory.js'
 
@@ -712,5 +713,44 @@ describe('software factory build', () => {
     expect(
       verification.checks.find(check => check.id === 'audit-chain')?.detail,
     ).toContain('hash mismatch')
+  })
+
+  test('audit verification emits Merkle anchor artifacts', async () => {
+    const configDir = makeTempDir('kairos-sf-config-')
+    const projectDir = makeTempDir('kairos-sf-project-')
+    process.env.CLAUDE_CONFIG_DIR = configDir
+
+    const result = await runSoftwareFactoryBuild({
+      projectDir,
+      ipTermsAccepted: true,
+      brief: 'Build a procurement approval app with manager review.',
+      now: () => new Date('2026-04-26T12:00:00.000Z'),
+      generateId: () => 'audit-anchor',
+    })
+
+    const verification = await verifySoftwareFactoryAudit(result.buildId, {
+      writeAnchor: true,
+      now: () => new Date('2026-04-26T12:05:00.000Z'),
+    })
+
+    expect(verification.ok).toBe(true)
+    expect(verification.eventCount).toBe(7)
+    expect(verification.headHash).toBeString()
+    expect(verification.merkleRoot).toBeString()
+    expect(verification.anchorPath).toBeString()
+    expect(verification.projectAnchorPath).toBeString()
+    expect(existsSync(verification.anchorPath as string)).toBe(true)
+    expect(existsSync(verification.projectAnchorPath as string)).toBe(true)
+
+    const anchor = readJson(verification.anchorPath as string) as {
+      buildId: string
+      eventCount: number
+      headHash: string
+      merkleRoot: string
+    }
+    expect(anchor.buildId).toBe(result.buildId)
+    expect(anchor.eventCount).toBe(7)
+    expect(anchor.headHash).toBe(verification.headHash)
+    expect(anchor.merkleRoot).toBe(verification.merkleRoot)
   })
 })

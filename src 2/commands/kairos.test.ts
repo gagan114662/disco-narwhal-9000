@@ -105,6 +105,7 @@ describe('/kairos command', () => {
     expect(out).toContain('/kairos demo')
     expect(out).toContain('/kairos build templates')
     expect(out).toContain('/kairos build run')
+    expect(out).toContain('/kairos audit verify')
     expect(out).toContain('/kairos cloud deploy')
     expect(out).toContain('/kairos cloud-sync')
   })
@@ -291,6 +292,35 @@ describe('/kairos command', () => {
     expect(pack.buildId).toBe(buildId)
     expect(pack.verification.ok).toBe(true)
     expect(pack.generatedFiles).toHaveLength(5)
+  })
+
+  test('audit verify checks and anchors a Software Factory audit chain', async () => {
+    const projectDir = makeProjectDir()
+    setProjectRoot(projectDir)
+
+    const created = await runKairosCommand(
+      'build run --accept-ip-terms Build a procurement approval app with reviewer audit trail',
+    )
+    const buildId = created.match(/Software Factory build (sf-[^:]+):/)?.[1]
+    expect(buildId).toBeString()
+
+    const out = await runKairosCommand(`audit verify ${buildId} --anchor`)
+
+    expect(out).toContain(`Software Factory audit ${buildId}: verified`)
+    expect(out).toContain('PASS audit-chain')
+    expect(out).toContain('PASS audit-merkle-root')
+    expect(out).toContain('anchor:')
+    expect(out).toContain('project anchor:')
+    const anchorPath = out.match(/^anchor: (.+)$/m)?.[1]
+    const projectAnchorPath = out.match(/^project anchor: (.+)$/m)?.[1]
+    expect(anchorPath).toBeString()
+    expect(projectAnchorPath).toBeString()
+    const anchor = readJson(anchorPath as string) as {
+      buildId: string
+      merkleRoot: string
+    }
+    expect(anchor.buildId).toBe(buildId)
+    expect(anchor.merkleRoot).toBeString()
   })
 
   test('build commands reject path-like build IDs', async () => {

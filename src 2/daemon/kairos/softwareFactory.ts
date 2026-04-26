@@ -219,6 +219,35 @@ export type SoftwareFactoryBuildVerification = {
   }>
 }
 
+export type SoftwareFactoryAuditAnchor = {
+  version: 1
+  buildId: string
+  tenantId: string
+  anchorDate: string
+  createdAt: string
+  eventCount: number
+  headHash: string
+  merkleRoot: string
+  auditPath: string
+}
+
+export type SoftwareFactoryAuditVerification = {
+  buildId: string
+  tenantId: string
+  ok: boolean
+  eventCount: number
+  headHash: string | null
+  merkleRoot: string | null
+  auditPath: string
+  anchorPath: string | null
+  projectAnchorPath: string | null
+  checks: Array<{
+    id: string
+    ok: boolean
+    detail: string
+  }>
+}
+
 export type SoftwareFactoryTraceabilityScan = {
   buildId: string
   ok: boolean
@@ -387,6 +416,26 @@ function getProjectIpTermsPath(projectDir: string, buildId: string): string {
   return join(projectDir, '.kairos', 'specs', buildId, 'ip-terms.json')
 }
 
+function getAuditAnchorPath(buildDir: string): string {
+  return join(buildDir, 'audit-root.json')
+}
+
+function getProjectAuditAnchorPath(
+  projectDir: string,
+  tenantId: string,
+  anchorDate: string,
+  buildId: string,
+): string {
+  return join(
+    projectDir,
+    '.kairos',
+    'audit',
+    tenantId,
+    anchorDate,
+    `${buildId}-audit-root.json`,
+  )
+}
+
 async function readJson<T>(path: string): Promise<T> {
   const raw = await readFile(path, 'utf8')
   return JSON.parse(raw) as T
@@ -470,6 +519,21 @@ function verifyAuditChain(events: SoftwareFactoryAuditEvent[]): {
     ok: events.length > 0,
     detail: `${events.length} audit event(s) verified`,
   }
+}
+
+function computeAuditMerkleRoot(events: SoftwareFactoryAuditEvent[]): string | null {
+  if (events.length === 0) return null
+  let level = events.map(event => event.hash)
+  while (level.length > 1) {
+    const nextLevel: string[] = []
+    for (let index = 0; index < level.length; index += 2) {
+      const left = level[index] as string
+      const right = level[index + 1] ?? left
+      nextLevel.push(hashJson({ left, right }))
+    }
+    level = nextLevel
+  }
+  return level[0] ?? null
 }
 
 function toBuildSummary(
@@ -1171,6 +1235,121 @@ export async function verifySoftwareFactoryBuild(
   return {
     buildId,
     ok: checks.length > 0 && checks.every(check => check.ok),
+    checks,
+  }
+}
+
+export async function verifySoftwareFactoryAudit(
+  buildId: string,
+  options: { writeAnchor?: boolean; now?: () => Date } = {},
+): Promise<SoftwareFactoryAuditVerification> {
+  const paths = getBuildPaths(buildId)
+  const checks: SoftwareFactoryAuditVerification['checks'] = []
+  const addCheck = (id: string, ok: boolean, detail: string): void => {
+    checks.push({ id, ok, detail })
+  }
+
+  let spec: SoftwareFactorySpec | null = null
+  let auditEvents: SoftwareFactoryAuditEvent[] = []
+  try {
+    spec = await readJson<SoftwareFactorySpec>(paths.specPath)
+    auditEvents = await readAuditEvents(paths.auditPath)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'unknown error'
+    addCheck('artifacts-readable', false, message)
+    return {
+      buildId,
+      tenantId: 'unknown',
+      ok: false,
+      eventCount: 0,
+      headHash: null,
+      merkleRoot: null,
+      auditPath: paths.auditPath,
+      anchorPath: null,
+      projectAnchorPath: null,
+      checks,
+    }
+  }
+  if (spec === null) {
+    addCheck('spec-readable', false, 'spec missing')
+    return {
+      buildId,
+      tenantId: 'unknown',
+      ok: false,
+      eventCount: auditEvents.length,
+      headHash: null,
+      merkleRoot: null,
+      auditPath: paths.auditPath,
+      anchorPath: null,
+      projectAnchorPath: null,
+      checks,
+    }
+  }
+
+  const audit = verifyAuditChain(auditEvents)
+  addCheck('audit-chain', audit.ok, audit.detail)
+  const buildIdsMatch = auditEvents.every(event => event.buildId === buildId)
+  addCheck(
+    'audit-build-ids',
+    buildIdsMatch,
+    `${auditEvents.filter(event => event.buildId === buildId).length}/${auditEvents.length} event(s) match ${buildId}`,
+  )
+  const tenantIdsMatch = auditEvents.every(
+    event => event.tenantId === spec?.tenantId,
+  )
+  addCheck(
+    'audit-tenant-ids',
+    tenantIdsMatch,
+    `${auditEvents.filter(event => event.tenantId === spec?.tenantId).length}/${auditEvents.length} event(s) match tenant ${spec.tenantId}`,
+  )
+
+  const headHash = auditEvents.at(-1)?.hash ?? null
+  const merkleRoot = computeAuditMerkleRoot(auditEvents)
+  addCheck(
+    'audit-merkle-root',
+    merkleRoot !== null,
+    merkleRoot ?? 'no audit events to anchor',
+  )
+
+  let anchorPath: string | null = null
+  let projectAnchorPath: string | null = null
+  const ok = checks.every(check => check.ok)
+  if (options.writeAnchor === true && ok && headHash && merkleRoot) {
+    const anchorDate =
+      auditEvents[0]?.t.slice(0, 10) ??
+      (options.now ?? (() => new Date()))().toISOString().slice(0, 10)
+    const anchor: SoftwareFactoryAuditAnchor = {
+      version: KAIROS_SOFTWARE_FACTORY_VERSION,
+      buildId,
+      tenantId: spec.tenantId,
+      anchorDate,
+      createdAt: (options.now ?? (() => new Date()))().toISOString(),
+      eventCount: auditEvents.length,
+      headHash,
+      merkleRoot,
+      auditPath: paths.auditPath,
+    }
+    anchorPath = getAuditAnchorPath(paths.buildDir)
+    projectAnchorPath = getProjectAuditAnchorPath(
+      spec.projectDir,
+      spec.tenantId,
+      anchorDate,
+      buildId,
+    )
+    await writeJson(anchorPath, anchor)
+    await writeJson(projectAnchorPath, anchor)
+  }
+
+  return {
+    buildId,
+    tenantId: spec.tenantId,
+    ok,
+    eventCount: auditEvents.length,
+    headHash,
+    merkleRoot,
+    auditPath: paths.auditPath,
+    anchorPath,
+    projectAnchorPath,
     checks,
   }
 }
