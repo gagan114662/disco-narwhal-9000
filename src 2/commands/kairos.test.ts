@@ -2784,6 +2784,52 @@ describe('/kairos command', () => {
     ).toBe(false)
   })
 
+  test('import tenant rejects malformed build creation times', async () => {
+    const sourceProjectDir = makeProjectDir()
+    const targetProjectDir = makeProjectDir()
+    const exportPath = join(makeTempConfigDir(), 'tenant-import-created-at-shape-tampered.json')
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'tenant-import-created-at-shape-tampered-build',
+      now: () => new Date('2026-04-25T20:19:00.000Z'),
+    })
+    await runKairosCommand(`build ${sourceProjectDir} tenant created at shape tamper`)
+    const tenantExport = JSON.parse(
+      await runKairosCommand(`export tenant ${sourceProjectDir}`),
+    ) as {
+      archiveHash: string
+      builds: Array<{
+        createdAt: unknown
+      }>
+    }
+    tenantExport.builds[0]!.createdAt = {
+      createdAt: 'not-a-string-created-at',
+    }
+    const { archiveHash: _archiveHash, ...archiveHashMaterial } = tenantExport
+    tenantExport.archiveHash = calculateKairosAuditExportHash(
+      archiveHashMaterial,
+    )
+    writeFileSync(exportPath, JSON.stringify(tenantExport, null, 2))
+
+    const importOut = await runKairosCommand(
+      `import tenant ${exportPath} ${targetProjectDir}`,
+    )
+
+    expect(importOut.split('\n')).toEqual([
+      'Tenant archive invalid.',
+      'archive hash: valid',
+      'builds: 1',
+      '- tenant-import-created-at-shape-tampered-build: audit=valid signature=unsigned merkle=valid manifest=invalid',
+    ])
+    expect(
+      existsSync(
+        getProjectKairosBuildManifestPath(
+          targetProjectDir,
+          'tenant-import-created-at-shape-tampered-build',
+        ),
+      ),
+    ).toBe(false)
+  })
+
   test('import tenant rejects unsupported archive export types', async () => {
     const sourceProjectDir = makeProjectDir()
     const targetProjectDir = makeProjectDir()
