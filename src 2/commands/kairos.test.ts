@@ -4305,6 +4305,35 @@ describe('/kairos command', () => {
     ).toBe(false)
   })
 
+  test('import tenant rejects empty archive tenant ids', async () => {
+    const sourceProjectDir = makeProjectDir()
+    const targetProjectDir = makeProjectDir()
+    const exportPath = join(
+      makeTempConfigDir(),
+      'tenant-import-empty-tenant-id-tampered.json',
+    )
+    const tenantExport = JSON.parse(
+      await runKairosCommand(`export tenant ${sourceProjectDir}`),
+    ) as {
+      archiveHash: string
+      tenantId: string
+    }
+    tenantExport.tenantId = ''
+    const { archiveHash: _archiveHash, ...archiveHashMaterial } = tenantExport
+    tenantExport.archiveHash = calculateKairosAuditExportHash(
+      archiveHashMaterial,
+    )
+    writeFileSync(exportPath, JSON.stringify(tenantExport, null, 2))
+
+    const importOut = await runKairosCommand(
+      `import tenant ${exportPath} ${targetProjectDir}`,
+    )
+
+    expect(importOut).toBe(
+      'Tenant archive invalid: tenantId must be a non-empty string.',
+    )
+  })
+
   test('import tenant rejects mismatched archive build counts', async () => {
     const sourceProjectDir = makeProjectDir()
     const targetProjectDir = makeProjectDir()

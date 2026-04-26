@@ -1737,6 +1737,9 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
   if (archive.version !== KAIROS_BUILD_STATE_VERSION) {
     return `Tenant archive invalid: unsupported version ${String(archive.version ?? 'missing')}.`
   }
+  if (!isNonEmptyString(archive.tenantId)) {
+    return 'Tenant archive invalid: tenantId must be a non-empty string.'
+  }
   if (typeof archive.archiveHash !== 'string') {
     return 'Tenant archive invalid: missing archiveHash.'
   }
