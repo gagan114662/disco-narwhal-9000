@@ -1594,6 +1594,7 @@ async function handleBuildSummary(rest: string[]): Promise<string> {
     ? `${latestEvent.kind} at ${latestEvent.t}`
     : '—'
   const questionReadiness = countAnsweredClarifyingQuestions(manifest)
+  const erasureSummary = summarizeKairosAnswerErasure(manifest, events)
 
   return [
     `Build summary for ${parsed.buildId}:`,
@@ -1608,6 +1609,7 @@ async function handleBuildSummary(rest: string[]): Promise<string> {
     `acceptance checks: ${manifest.acceptanceChecks?.length ?? 0}`,
     `clarifying questions: ${questionReadiness.total}`,
     `answered questions: ${questionReadiness.answered}/${questionReadiness.total}`,
+    `erasure: ${erasureSummary.clarifyingAnswers.redacted} redacted, ${erasureSummary.clarifyingAnswers.erasable} erasable`,
     `assumptions: ${manifest.assumptions?.length ?? 0}`,
     `risks: ${manifest.risks?.length ?? 0}`,
     `tracer slices: ${manifest.tracerSlices?.length ?? 0}`,

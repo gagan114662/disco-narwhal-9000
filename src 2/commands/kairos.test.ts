@@ -1502,6 +1502,7 @@ describe('/kairos command', () => {
       'acceptance checks: 4',
       'clarifying questions: 4',
       'answered questions: 0/4',
+      'erasure: 0 redacted, 0 erasable',
       'assumptions: 4',
       'risks: 4',
       'tracer slices: 3',
