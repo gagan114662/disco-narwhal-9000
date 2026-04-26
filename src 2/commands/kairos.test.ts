@@ -5954,6 +5954,58 @@ describe('/kairos command', () => {
     ).toBe(false)
   })
 
+  test('import tenant rejects unexpected restore event fields', async () => {
+    const sourceProjectDir = makeProjectDir()
+    const targetProjectDir = makeProjectDir()
+    const exportPath = join(
+      makeTempConfigDir(),
+      'tenant-import-restore-event-extra-field-tampered.json',
+    )
+    __setKairosBuildDepsForTesting({
+      generateBuildId: () => 'tenant-import-restore-event-extra-field-build',
+      now: () => new Date('2026-04-25T20:24:00.000Z'),
+    })
+    await runKairosCommand(
+      `build ${sourceProjectDir} tenant restore event field`,
+    )
+    const tenantExport = JSON.parse(
+      await runKairosCommand(`export tenant ${sourceProjectDir}`),
+    ) as {
+      archiveHash: string
+      builds: Array<{
+        restore: {
+          events: Array<Record<string, unknown>>
+        }
+      }>
+    }
+    tenantExport.builds[0]!.restore.events[0]!.unexpectedField =
+      'not part of restore event'
+    const { archiveHash: _archiveHash, ...archiveHashMaterial } = tenantExport
+    tenantExport.archiveHash = calculateKairosAuditExportHash(
+      archiveHashMaterial,
+    )
+    writeFileSync(exportPath, JSON.stringify(tenantExport, null, 2))
+
+    const importOut = await runKairosCommand(
+      `import tenant ${exportPath} ${targetProjectDir}`,
+    )
+
+    expect(importOut.split('\n')).toEqual([
+      'Tenant archive invalid.',
+      'archive hash: valid',
+      'builds: 1',
+      '- tenant-import-restore-event-extra-field-build: audit=valid signature=unsigned merkle=valid restore=invalid',
+    ])
+    expect(
+      existsSync(
+        getProjectKairosBuildManifestPath(
+          targetProjectDir,
+          'tenant-import-restore-event-extra-field-build',
+        ),
+      ),
+    ).toBe(false)
+  })
+
   test('build-audit-export-verify validates a signed audit export file', async () => {
     const projectDir = makeProjectDir()
     const exportPath = join(makeTempConfigDir(), 'audit-export.json')

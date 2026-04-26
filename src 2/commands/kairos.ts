@@ -1638,6 +1638,12 @@ function verifyKairosTenantRestoreEvents(
     } catch {
       return false
     }
+    const expectedRestoreEventKeys = Object.keys(
+      buildKairosTenantRestoreEvent(parsed),
+    )
+    if (!hasExactKeys(restoreEvent, expectedRestoreEventKeys)) {
+      return false
+    }
 
     const auditEventNumber =
       typeof auditEvent.eventNumber === 'number' ? auditEvent.eventNumber : null
