@@ -1833,6 +1833,9 @@ async function handleTenantArchiveVerify(rest: string[]): Promise<string> {
     return 'Tenant archive invalid: builds contains non-object entries.'
   }
   const builds = readArrayField(archive, 'builds')
+  if (builds.some(build => !isNonEmptyString(build.tenantId))) {
+    return 'Tenant archive invalid: build tenantId must be a non-empty string.'
+  }
   if (archive.buildCount !== builds.length) {
     return `Tenant archive invalid: buildCount mismatch ${String(archive.buildCount ?? 'missing')} != ${builds.length}.`
   }
